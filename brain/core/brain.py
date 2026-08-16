@@ -15,6 +15,7 @@ from brain.core.cycle import CognitiveCycle, CognitivePhase, CycleResult
 from brain.core.state import BrainState
 from brain.dialogue.context import DialogueContext
 from brain.emotion.state import EmotionalState
+from brain.goals.manager import GoalManager
 from brain.graph.activation import SpreadingActivation
 from brain.graph.concepts import ConceptGraph
 from brain.graph.hebbian import HebbianLearner
@@ -92,6 +93,8 @@ class Brain:
         self.curiosity = CuriosityExplorer()
         # Phase 5: world model (entity registry + intent prediction)
         self.world = WorldModel()
+        # Phase 6: goal-driven behavior (hierarchical decomposition)
+        self.goal_manager = GoalManager()
 
         # Meta-cognition
         self.reflection = ReflectionEngine()
@@ -613,15 +616,38 @@ class Brain:
         )
 
     def _phase_plan(self, parse_result: ParseResult | None) -> CycleResult:
-        """PLAN phase: Decide what to do."""
-        self.state.current_phase = "plan"
+        """PLAN phase: Decide what to do.
 
+        Phase 6: the current intent is decomposed into a hierarchical goal
+        with ordered plan steps so the next cycles can drive progress
+        tracking step by step.
+        """
+        self.state.current_phase = "plan"
         if not parse_result:
             return CycleResult(
                 phase=CognitivePhase.PLAN,
                 data={"plan": "acknowledge"},
                 success=True,
             )
+        intent = parse_result.intent.value
+        # Priority: corrections and queries matter more than greetings.
+        priority = {
+            "correction": 0.9,
+            "teach": 0.8,
+            "query_who": 0.85,
+            "query_what": 0.85,
+            "relation_declaration": 0.7,
+            "name_declaration": 0.7,
+            "statement": 0.6,
+            "continuation": 0.5,
+            "greeting": 0.4,
+        }.get(intent, 0.5)
+        goal = self.goal_manager.decompose_hierarchy(
+            intent=intent,
+            description=f"handle {intent}: {parse_result.raw_text[:60]}",
+            priority=priority,
+        )
+        self.state.context["active_goal"] = goal.goal_id
 
         if parse_result.intent == IntentType.NAME_DECLARATION:
             plan = "store_identity"
@@ -637,10 +663,9 @@ class Brain:
             plan = "continue_topic"
         else:
             plan = "acknowledge"
-
         return CycleResult(
             phase=CognitivePhase.PLAN,
-            data={"plan": plan},
+            data={"plan": plan, "active_goal": goal.goal_id},
             success=True,
         )
 
@@ -1046,10 +1071,22 @@ class Brain:
             emotional_valence=reward,
             importance=confidence,
         )
-
+        # Phase 6: advance the active goal's plan progress. Root goals
+        # only achieve once their children are done, so drive progress on
+        # the deepest (leaf) active goal each cycle.
+        leaf = self.goal_manager.leaf_active_goal()
+        goal_update: Dict[str, Any] = {}
+        if leaf is not None:
+            goal_update = self.goal_manager.advance_goal(leaf.goal_id)
+            # Reward shaping: reward proportional to goal progress.
+            self.learner.update(
+                f"goal_{leaf.intent}",
+                action_key,
+                reward + 0.1 * goal_update.get("progress", 0.0),
+            )
         return CycleResult(
             phase=CognitivePhase.LEARN,
-            data={"reward": reward},
+            data={"reward": reward, "goal_update": goal_update},
             success=True,
         )
 
@@ -1072,9 +1109,18 @@ class Brain:
             self.working_memory.store("hebbian_decay", len(decayed))
         # Phase 4: tick curiosity cooldowns once per cycle.
         self.curiosity.step_cooldowns()
+        # Phase 6: prune terminal goals once the registry exceeds
+        # capacity so the goal history stays bounded.
+        goal_stats = self.goal_manager.stats()
+        pruned = goal_stats.get("achieved", 0) + goal_stats.get("abandoned", 0)
         return CycleResult(
             phase=CognitivePhase.CONSOLIDATE,
-            data={"consolidated_keys": consolidated, "hebbian_decayed": len(decayed)},
+            data={
+                "consolidated_keys": consolidated,
+                "hebbian_decayed": len(decayed),
+                "goal_stats": goal_stats,
+                "pruned_terminal_goals": pruned,
+            },
             success=True,
         )
 
@@ -1108,6 +1154,13 @@ class Brain:
             # Phase 5: structured world state and last prediction error.
             "world_entities": list(self.world.entities.keys()),
             "last_prediction_error": self.state.last_prediction_error,
+            # Phase 6: goal-driven behavior snapshot.
+            "active_goal": (
+                {"goal_id": g.goal_id, "description": g.description, "progress": g.progress, "status": g.status.value}
+                if (g := self.goal_manager.active_goal())
+                else None
+            ),
+            "goal_stats": self.goal_manager.stats(),
         }
 
         # Add neural simulation state if active
