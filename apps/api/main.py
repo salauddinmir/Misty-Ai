@@ -19,9 +19,11 @@ from fastapi.middleware.cors import CORSMiddleware
 from apps.api.database import Database
 from apps.api.routes.brain import router as brain_router
 from apps.api.routes.chat import router as chat_router
+from apps.api.routes.media import router as media_router
 from apps.api.websocket.brain_stream import router as ws_router
 from brain.core.brain import Brain
 from brain.learning.consolidation import ConsolidationEvent
+from brain.memory.procedural import Procedure
 
 
 async def _restore_persistent_knowledge(brain: Brain, database: Database) -> None:
@@ -58,7 +60,25 @@ async def _restore_persistent_knowledge(brain: Brain, database: Database) -> Non
                 confidence=item.get("confidence", 1.0),
             )
 
-        print(f"Restored {len(persisted_concepts)} concepts and {len(persisted_relations)} relations from database")
+        # Restore learned procedural rules as well
+        persisted_procedures = await database.load_procedures()
+        for item in persisted_procedures:
+            proc = Procedure(
+                procedure_id=item["procedure_id"],
+                name=item["name"],
+                condition=item["condition"],
+                action=item["action"],
+                strength=item.get("strength", 0.5),
+                use_count=item.get("use_count", 0),
+                success_count=item.get("success_count", 0),
+            )
+            brain.procedural_memory.procedures[proc.procedure_id] = proc
+
+        print(
+            f"Restored {len(persisted_concepts)} concepts, "
+            f"{len(persisted_relations)} relations and "
+            f"{len(persisted_procedures)} procedures from database"
+        )
     except Exception:
         print("No persisted knowledge to restore; starting with a blank brain")
 
@@ -90,17 +110,69 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
             importance=event.importance,
         )
 
-    def _consolidation_sink_sync(event: ConsolidationEvent) -> None:
-        # The consolidator is synchronous; schedule the flush on the event loop.
+    _pending_tasks: set = set()
+
+    def _discard(t: object) -> None:
+        """Remove a finished task from the pending set."""
+        _pending_tasks.discard(t)
+
+    def _safe_schedule(coro):
+        """Schedule a coroutine and keep a reference to avoid GC warnings."""
         import asyncio
 
         try:
-            asyncio.get_running_loop()
+            loop = asyncio.get_running_loop()
         except RuntimeError:
             return
-        asyncio.get_running_loop().create_task(_consolidation_sink(event))
+        task = loop.create_task(coro)
+        _pending_tasks.add(task)
+        task.add_done_callback(_discard)
+
+    def _consolidation_sink_sync(event: ConsolidationEvent) -> None:
+        # The consolidator is synchronous; schedule the flush on the event loop.
+        _safe_schedule(_consolidation_sink(event))
 
     brain.consolidator.persistence_sink = _consolidation_sink_sync
+
+    # Hook procedural memory into the database: any procedure that is stored
+    # or reinforced is flushed to SQLite immediately so learned behavioral
+    # rules survive server restarts.
+    _original_store = brain.procedural_memory.store
+
+    def _persisting_store(name: str, condition: str, action: str, strength: float = 0.5) -> Procedure:
+        proc = _original_store(name, condition, action, strength)
+        _safe_schedule(
+            database.save_procedure(
+                procedure_id=proc.procedure_id,
+                name=proc.name,
+                condition=proc.condition,
+                action=proc.action,
+                strength=proc.strength,
+                use_count=proc.use_count,
+                success_count=proc.success_count,
+            )
+        )
+        return proc
+
+    brain.procedural_memory.store = _persisting_store  # type: ignore[method-assign]
+
+    _original_reinforce = Procedure.reinforce
+
+    def _persisting_reinforce(proc: Procedure, success: bool, amount: float = 0.1) -> None:
+        _original_reinforce(proc, success, amount)
+        _safe_schedule(
+            database.save_procedure(
+                procedure_id=proc.procedure_id,
+                name=proc.name,
+                condition=proc.condition,
+                action=proc.action,
+                strength=proc.strength,
+                use_count=proc.use_count,
+                success_count=proc.success_count,
+            )
+        )
+
+    Procedure.reinforce = _persisting_reinforce  # type: ignore[method-assign]
 
     # Restore previously learned knowledge from the database so the brain
     # remembers concepts and relations across server restarts
@@ -142,6 +214,7 @@ app.add_middleware(
 
 # Include routers
 app.include_router(chat_router, prefix="/api")
+app.include_router(media_router, prefix="/api")
 app.include_router(brain_router, prefix="/api/brain")
 app.include_router(ws_router)
 

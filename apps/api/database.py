@@ -297,6 +297,57 @@ class Database:
         ]
         return episodes
 
+    # ==================== Procedures ====================
+
+    async def save_procedure(
+        self,
+        procedure_id: str,
+        name: str,
+        condition: str,
+        action: str,
+        strength: float = 0.5,
+        use_count: int = 0,
+        success_count: int = 0,
+    ) -> str:
+        """Save a procedural memory rule.
+
+        Uses INSERT OR REPLACE so re-saving an existing procedure updates
+        its learned statistics instead of failing on duplicate keys.
+        """
+        created_at = time_module.time()
+        await self.connection.execute(
+            """INSERT OR REPLACE INTO procedures
+               (procedure_id, name, condition, action, strength,
+                use_count, success_count, created_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+            (procedure_id, name, condition, action, strength, use_count, success_count, created_at),
+        )
+        await self.connection.commit()
+        return procedure_id
+
+    async def load_procedures(self) -> List[Dict[str, Any]]:
+        """Load all persisted procedures.
+
+        Returns:
+            List of procedure dictionaries.
+        """
+        cursor = await self.connection.execute("SELECT * FROM procedures ORDER BY strength DESC")
+        rows = await cursor.fetchall()
+        procedures = [
+            {
+                "procedure_id": row[0],
+                "name": row[1],
+                "condition": row[2],
+                "action": row[3],
+                "strength": row[4],
+                "use_count": row[5],
+                "success_count": row[6],
+                "created_at": row[7],
+            }
+            for row in rows
+        ]
+        return procedures
+
     # ==================== Brain States ====================
 
     async def save_brain_state(

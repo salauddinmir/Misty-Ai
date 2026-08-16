@@ -39,6 +39,7 @@ npm run dev   # http://localhost:3000
 | Endpoint | Method | Description |
 |----------|--------|-------------|
 | `/api/chat` | POST | Send a message; the brain runs a full cognitive cycle |
+| `/api/chat/media` | POST | Send image/audio input (base64) through the multimodal perception gateway — `{"modality": "image\|audio", "data": "<base64>", "message": "..."}`; the percept drives the neural sensory region and the cognitive cycle |
 | `/api/brain/*` | GET | Inspect concepts, memories, and brain state |
 | `/ws/brain/activity` | WS | Real-time brain activity stream |
 | `/health` | GET | Health check |

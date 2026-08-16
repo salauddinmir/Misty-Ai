@@ -49,6 +49,18 @@ CREATE TABLE IF NOT EXISTS brain_states (
     timestamp REAL NOT NULL
 );
 
+-- Procedures table: stores learned procedural rules (Phase 2)
+CREATE TABLE IF NOT EXISTS procedures (
+    procedure_id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    condition TEXT NOT NULL,
+    action TEXT NOT NULL,
+    strength REAL DEFAULT 0.5,
+    use_count INTEGER DEFAULT 0,
+    success_count INTEGER DEFAULT 0,
+    created_at REAL NOT NULL
+);
+
 -- Indexes for performance
 CREATE INDEX IF NOT EXISTS idx_concepts_name ON concepts(name);
 CREATE INDEX IF NOT EXISTS idx_concepts_type ON concepts(concept_type);
@@ -57,3 +69,4 @@ CREATE INDEX IF NOT EXISTS idx_relations_target ON relations(target_id);
 CREATE INDEX IF NOT EXISTS idx_relations_type ON relations(relation_type);
 CREATE INDEX IF NOT EXISTS idx_episodes_timestamp ON episodes(timestamp);
 CREATE INDEX IF NOT EXISTS idx_brain_states_timestamp ON brain_states(timestamp);
+CREATE INDEX IF NOT EXISTS idx_procedures_name ON procedures(name);

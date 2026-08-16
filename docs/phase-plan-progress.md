@@ -27,3 +27,26 @@
 - কোর ব্রেইন সাবসিস্টেম ≈ ৫০% → ≈ ৬৫% (neural merge, learning hardening)
 
 ### পরবর্তী: Phase 2 — Multimodal Perception (ভিশন/অডিও ইনপুট) এবং Procedural Memory persistence
+
+---
+
+## Phase 2: Procedural Persistence & Multimodal Perception — সমাপ্ত (commit `215f895`-এর পরবর্তী, main ব্রাঞ্চ)
+
+### যা করা হয়েছে
+
+| কাজ | অবস্থা | বিবরণ |
+|---|---|---|
+| CI workflow পুশ | সমাপ্ত | `.github/workflows/ci.yml` — Python 3.10–3.12 ম্যাট্রিক্স টেস্ট + ruff লিন্ট (কমিট `215f895`) |
+| Procedural persistence schema | সমাপ্ত | `database/schema.sql`-এ `procedures` টেবিল + index |
+| Procedural save/load | সমাপ্ত | `Database.save_procedure()` (INSERT OR REPLACE, statistics আপডেট) এবাং `load_procedures()` |
+| Procedural flush হুক | সমাপ্ত | main.py-তে `ProceduralMemory.store` ও `Procedure.reinforce` monkey-patch — প্রতিটি নতুন/আপডেট হওয়া procedure তাৎক্ষণিক SQLite-এ flush হয়; boot-এ restore হয় |
+| Multimodal perception | সমাপ্ত | নতুন `brain/perception/` মডিউল: `ModalityEncoder` বেস, `ImageEncoder` (luminance, RGB স্ট্যাটস, হিস্টোগ্রাম, 4x4 গ্রিড, 32-বিন Haar edge = 64-dim L2-normalized), `AudioEncoder` (RMS, ZCR, spectral centroid/flatness, 16 log bands, frame snapshots = 64-dim), `MultimodalGateway` (modality routing + graceful fallback) |
+| Media API endpoint | সমাপ্ত | `POST /api/chat/media` — base64 image/audio ইনপুট → perception → sensory region spikes → cognitive cycle response; অজানা modality-তে graceful fallback, invalid base64-তে graceful error |
+| নতুন টেস্ট | সমাপ্ত | `test_procedural_persistence.py` (5), `test_perception.py` (13), `test_media_endpoint.py` (4) — Live TestClient সহ E2E |
+| লাইভ API ভেরিফিকেশন | সবুজ | চ্যাট + media endpoint হাতে টেস্ট; লাইব্রেরি-বিহীন (Pillow optional — fallback raw-byte path) |
+| টেস্ট সুইট | সবুজ | **২৩৬ টেস্ট পাস** (২১৪ → ২৩৬), ruff clean |
+
+### কিছু গুরুত্বপূর্ণ নোট
+Perception encoder গুলো পুরোটাই pure NumPy — কোনো ML মডেল ডিপেন্ডেন্সি নেই, তাই `requirements.txt` অপরিবর্তিত। Pillow ইনস্টল থাকলে আসল PNG/JPEG ডিকোড হয়, না থাকলে নির্দিষ্ট (deterministic) raw-byte fallback চালু হয়। production-grade embedding (CLIP/Whisper) পরে subclass করে প্লাগ করা যাবে।
+
+### পরবর্তী: Phase 3 — Language & Dialogue Depth (context memory, coreference, Bengali dialogue improvements) এবাং speech I/O সূচনা
