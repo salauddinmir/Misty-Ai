@@ -12,8 +12,19 @@ export class BrainWebSocket {
   private reconnectTimeout: ReturnType<typeof setTimeout> | null = null;
   private shouldReconnect: boolean = true;
 
-  constructor(url: string = "ws://localhost:8000/ws/brain") {
-    this.url = url;
+  constructor(url?: string) {
+    // Production: NEXT_PUBLIC_API_URL points at the Render-hosted backend.
+    // Development: falls back to the local uvicorn WebSocket endpoint.
+    if (url) {
+      this.url = url;
+    } else if (process.env.NEXT_PUBLIC_API_URL) {
+      this.url = process.env.NEXT_PUBLIC_API_URL
+        .replace(/^https:/, "wss:")
+        .replace(/^http:/, "ws:")
+        .replace(/\/$/, "") + "/ws/brain";
+    } else {
+      this.url = "ws://localhost:8000/ws/brain";
+    }
   }
 
   connect(): void {

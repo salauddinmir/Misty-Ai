@@ -1,0 +1,15 @@
+services:
+  - type: web
+    name: misty-brain
+    env: docker
+    plan: starter
+    region: singapore
+    dockerfilePath: ./Dockerfile
+    healthCheckPath: /health
+    envVars:
+      - key: MISTY_DB_URL
+        sync: false
+      - key: PYTHONUNBUFFERED
+        value: "1"
+      - key: PYTHONPATH
+        value: /app
