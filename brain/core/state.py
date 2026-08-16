@@ -23,6 +23,7 @@ class BrainState:
     last_output: str = ""
     timestamp: float = field(default_factory=time_module.time)
     context: Dict[str, Any] = field(default_factory=dict)
+    last_prediction_error: float = 0.0
 
     def to_dict(self) -> Dict[str, Any]:
         """Convert brain state to a serializable dictionary."""
@@ -36,6 +37,7 @@ class BrainState:
             "last_output": self.last_output,
             "timestamp": self.timestamp,
             "context": self.context,
+            "last_prediction_error": self.last_prediction_error,
         }
 
     def __repr__(self) -> str:

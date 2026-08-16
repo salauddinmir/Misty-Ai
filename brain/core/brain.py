@@ -34,6 +34,7 @@ from brain.planner.planner import Planner
 from brain.reasoning.inference import InferenceEngine
 from brain.reflection.reflection import ReflectionEngine
 from brain.synapses.plasticity import PlasticityManager
+from brain.world import WorldModel
 
 
 class Brain:
@@ -89,6 +90,8 @@ class Brain:
         self.hebbian = HebbianLearner()
         self.recall_scorer = WeightedRecall()
         self.curiosity = CuriosityExplorer()
+        # Phase 5: world model (entity registry + intent prediction)
+        self.world = WorldModel()
 
         # Meta-cognition
         self.reflection = ReflectionEngine()
@@ -202,6 +205,23 @@ class Brain:
         # Phase 2: INTERPRET
         interpret_result = self._phase_interpret(text_input)
         self.cycle.advance(interpret_result)
+        # Phase 5: compare actual intent against the prediction; the
+        # resulting prediction error is stored in the brain state and can
+        # feed downstream learners.
+        actual_intent = interpret_result.data.get("intent", "unknown")
+        intent_outcome = self.world.record_intent(actual_intent)
+        # Phase 5: entities mentioned in the input join the world model
+        # (location is inferred from dialogue context when present).
+        parse_result_obj = interpret_result.data.get("parse_result")
+        entities = getattr(parse_result_obj, "entities", {}) or {}
+        if isinstance(entities, dict):
+            for candidate in entities.values():
+                if isinstance(candidate, str) and candidate and candidate not in self._PRONOUN_TOKENS:
+                    self.world.add_entity(candidate, "concept")
+                elif isinstance(candidate, list):
+                    for item in candidate:
+                        if isinstance(item, str) and item and item not in self._PRONOUN_TOKENS:
+                            self.world.add_entity(item, "concept")
 
         # Phase 3: RECALL
         recall_result = self._phase_recall(interpret_result.data.get("parse_result"))
@@ -258,6 +278,8 @@ class Brain:
         self.state.current_phase = "idle"
         self.state.timestamp = time_module.time()
 
+        # Phase 5: expose prediction outcome in the returned state.
+        self.state.last_prediction_error = intent_outcome.get("error", 0.0)
         # Record performance
         self.reflection.record_performance(
             input_type=interpret_result.data.get("intent", "unknown"),
@@ -1083,6 +1105,9 @@ class Brain:
             "emotional_state": self.emotion.to_dict(),
             "active_concepts": self.state.active_concepts,
             "performance": self.reflection.evaluate_recent_performance(),
+            # Phase 5: structured world state and last prediction error.
+            "world_entities": list(self.world.entities.keys()),
+            "last_prediction_error": self.state.last_prediction_error,
         }
 
         # Add neural simulation state if active
