@@ -112,6 +112,13 @@ class NLUParser:
             re.compile(r"(হ্যালো|হাই|নমস্কার|আসসালামু|সালাম)", re.UNICODE),
         ]
 
+        # Bengali interrogative words that must NEVER be captured as a name.
+        # Prevents inputs like "আমার নাম কি?" being parsed as a name declaration.
+        self._bn_interrogatives = re.compile(
+            r"(কি|কী|কে|কোন|কোথা|কখন|কেমন|কতটা|কার|কেন|কিসের)$",
+            re.UNICODE,
+        )
+
         # English patterns
         self._en_name_patterns = [
             re.compile(r"my\s+name\s+is\s+(\w+)", re.IGNORECASE),
@@ -188,6 +195,14 @@ class NLUParser:
             match = pattern.search(text)
             if match:
                 name = match.group(1).strip("\u0964. ")
+                # Guard: an interrogative word after "আমার নাম" (or any
+                # question mark) means this is a question, not a declaration.
+                if self._bn_interrogatives.search(name) or "?" in text:
+                    return ParseResult(
+                        intent=IntentType.UNKNOWN,
+                        raw_text=text,
+                        confidence=0.3,
+                    )
                 return ParseResult(
                     intent=IntentType.NAME_DECLARATION,
                     entities={"name": name, "type": "Person", "is_self": True},
@@ -260,11 +275,25 @@ class NLUParser:
                     confidence=0.9,
                 )
 
+        # English interrogative words that must NEVER be captured as a name.
+        self._en_interrogatives = re.compile(
+            r"^(what|who|where|when|why|how|which|whose|whatever|anything)$",
+            re.IGNORECASE,
+        )
         # Check name declarations
         for pattern in self._en_name_patterns:
             match = pattern.search(text)
             if match:
                 name = match.group(1)
+                # Guard: an interrogative word (or any question mark) after
+                # "my name is" means this is a question, not a declaration
+                # (e.g. "my name is what?")
+                if self._en_interrogatives.match(name) or "?" in text:
+                    return ParseResult(
+                        intent=IntentType.UNKNOWN,
+                        raw_text=text,
+                        confidence=0.3,
+                    )
                 return ParseResult(
                     intent=IntentType.NAME_DECLARATION,
                     entities={"name": name, "type": "Person", "is_self": True},

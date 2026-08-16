@@ -95,6 +95,20 @@ async def chat(request: Request, body: ChatRequest) -> ChatResponse:
             metadata=concept.metadata,
         )
 
+    # Persist knowledge graph relations (edges) so learned knowledge survives
+    # server restarts, matching the persistence already done for concepts
+    for rel in brain.concept_graph.get_all_relations():
+        try:
+            await database.save_relation(
+                source_id=rel["source_id"],
+                target_id=rel["target_id"],
+                relation_type=rel["relation_type"],
+                weight=rel["weight"],
+                confidence=rel["confidence"],
+            )
+        except Exception:  # noqa: BLE001 - never break chat on persistence glitch
+            pass
+
     return ChatResponse(
         response=result["response"],
         processing_time=result["processing_time"],

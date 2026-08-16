@@ -100,6 +100,9 @@ class Brain:
         """
         start_time = time_module.time()
         self.state.last_input = text_input
+        # Timestamp of the current cognitive cycle (used by episodic memory
+        # and consolidation to order events chronologically)
+        self._cycle_start = time_module.time()
 
         # Start cognitive cycle
         self.cycle.start_cycle()
@@ -224,6 +227,17 @@ class Brain:
                 recalled["semantic_facts"] = [
                     {"subject": f.subject, "predicate": f.predicate, "obj": f.obj}
                     for f in facts
+                ]
+
+            # Search episodic memory: past interactions about this target
+            # (experience-based recall, not just stored facts)
+            episode_hits = self.episodic_memory.recall_by_content(target_name)
+            if episode_hits:
+                recalled["episode_hits"] = [
+                    {"event": ep.content.get("event") if isinstance(ep.content, dict) else str(ep.content),
+                     "result": ep.content.get("result") if isinstance(ep.content, dict) else "",
+                     "importance": ep.importance}
+                    for ep in episode_hits[:5]
                 ]
 
             # Search knowledge graph
@@ -355,8 +369,10 @@ class Brain:
             confidence = 0.9
 
         else:
-            response = "I received your input but I am not sure how to process it yet."
-            confidence = 0.3
+            # Unknown/unsupported input: give a contextual fallback instead
+            # of a flat "I don't know" so the user understands the brain's
+            # current capability boundary and what it CAN learn.
+            response, confidence = self._act_unknown(parse_result)
 
         return CycleResult(
             phase=CognitivePhase.ACT,
@@ -475,6 +491,26 @@ class Brain:
             f"'{relation}' relation with {target_name}."
         ), 0.3
 
+    def _act_unknown(self, parse_result: ParseResult) -> tuple:
+        """Handle inputs the brain cannot yet understand.
+
+        Gives a contextual fallback response that acknowledges the input,
+        signals humility (low confidence), and invites the user to teach
+        the brain using supported phrasings. This keeps the conversation
+        flowing instead of dead-ending on unknown input.
+        """
+        raw = parse_result.raw_text or "your message"
+        self.emotion.update_from_outcome(success=False)
+        # Remember the unknown input as a learning opportunity
+        self.working_memory.store("unknown_input", raw)
+        response = (
+            "I heard you, but I am still learning and cannot fully "
+            "understand that yet. You can teach me things like "
+            "\"আমার নাম X\", \"আমি Y-এর creator\", or ask "
+            "\"Y কে তৈরি করেছে?\""
+        )
+        return response, 0.3
+
     def _phase_evaluate(self, act_result: CycleResult) -> CycleResult:
         """EVALUATE phase: Assess the response quality."""
         self.state.current_phase = "evaluate"
@@ -507,6 +543,25 @@ class Brain:
         state_key = parse_result.intent.value if parse_result else "unknown"
         action_key = "respond"
         self.learner.update(state_key, action_key, reward)
+
+        # Store the interaction as an episodic memory so experiences can
+        # be recalled later (event + context + action + result + reward).
+        episode = {
+            "event": text_input if not parse_result else parse_result.raw_text,
+            "intent": state_key,
+            "action": action_key,
+            "result": act_result.data.get("response", ""),
+            "reward": reward,
+            "context": {
+                "user_name": self.user_name,
+                "cycle_count": self.cycle.cycle_count,
+            },
+        }
+        self.episodic_memory.store(
+            content=episode,
+            emotional_valence=reward,
+            importance=confidence,
+        )
 
         return CycleResult(
             phase=CognitivePhase.LEARN,

@@ -22,6 +22,47 @@ from apps.api.routes.brain import router as brain_router
 from apps.api.websocket.brain_stream import router as ws_router
 
 
+async def _restore_persistent_knowledge(brain: Brain, database: Database) -> None:
+    """Rebuild the brain's knowledge graph from the persisted database.
+
+    Restores concepts (nodes) first, then relations (edges), so the brain
+    remembers everything it learned in previous sessions instead of
+    starting from a blank slate after every restart.
+    """
+    try:
+        persisted_concepts = await database.load_concepts()
+        for item in persisted_concepts:
+            # Avoid duplicates if the brain already has a concept with this ID
+            if not brain.concept_graph.get_concept(item["concept_id"]):
+                from brain.graph.concepts import Concept
+                concept = Concept(
+                    name=item["name"],
+                    concept_type=item["concept_type"],
+                    concept_id=item["concept_id"],
+                    activation_level=item.get("activation_level", 0.0),
+                    created_at=item.get("created_at"),
+                    metadata=item.get("metadata", {}),
+                )
+                brain.concept_graph.add_concept(concept)
+
+        persisted_relations = await database.load_relations()
+        for item in persisted_relations:
+            brain.concept_graph.add_relation(
+                source_id=item["source_id"],
+                target_id=item["target_id"],
+                relation_type=item["relation_type"],
+                weight=item.get("weight", 1.0),
+                confidence=item.get("confidence", 1.0),
+            )
+
+        print(
+            f"Restored {len(persisted_concepts)} concepts and "
+            f"{len(persisted_relations)} relations from database"
+        )
+    except Exception:  # noqa: BLE001 - a fresh DB must never break startup
+        print("No persisted knowledge to restore; starting with a blank brain")
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     """Application lifespan handler.
@@ -33,6 +74,10 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     brain = Brain()
     database = Database()
     await database.initialize()
+
+    # Restore previously learned knowledge from the database so the brain
+    # remembers concepts and relations across server restarts
+    await _restore_persistent_knowledge(brain, database)
 
     # Store in app state for access in route handlers
     app.state.brain = brain

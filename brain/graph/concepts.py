@@ -182,6 +182,27 @@ class ConceptGraph:
         """Number of concepts in the graph."""
         return len(self._concepts)
 
+    def get_all_relations(self) -> List[Dict[str, Any]]:
+        """Return every relation (edge) in the knowledge graph.
+
+        Used by the persistence layer to save the learned graph to the
+        database so knowledge survives server restarts.
+
+        Returns:
+            List of dicts with source_id, target_id, relation_type,
+            weight and confidence for every edge.
+        """
+        relations = []
+        for source_id, target_id, data in self._graph.edges(data=True):
+            relations.append({
+                "source_id": source_id,
+                "target_id": target_id,
+                "relation_type": data.get("relation_type", "related_to"),
+                "weight": data.get("weight", 1.0),
+                "confidence": data.get("confidence", 1.0),
+            })
+        return relations
+
     @property
     def num_relations(self) -> int:
         """Number of relations in the graph."""
