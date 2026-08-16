@@ -9,11 +9,10 @@ Tests cover:
 """
 
 import numpy as np
-import pytest
 
-from brain.encoding.text_encoder import TextEncoder
 from brain.encoding.concept_encoder import ConceptEncoder
 from brain.encoding.decoder import Decoder
+from brain.encoding.text_encoder import TextEncoder
 
 
 class TestTextEncoder:

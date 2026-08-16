@@ -5,7 +5,7 @@ Records spike trains, firing rates, and network state during
 simulation for monitoring and analysis.
 """
 
-from typing import Dict, List, Optional
+from typing import Dict, List
 
 import numpy as np
 
@@ -34,9 +34,7 @@ class SpikeRecorder:
         self.rate_history: Dict[str, List[float]] = {}
         self._timestep: int = 0
 
-    def add_spikes(
-        self, region_name: str, timestep: int, spikes: np.ndarray
-    ) -> None:
+    def add_spikes(self, region_name: str, timestep: int, spikes: np.ndarray) -> None:
         """Record a spike array for a region at a given timestep.
 
         Args:
@@ -62,7 +60,7 @@ class SpikeRecorder:
 
         self._timestep = timestep
 
-    def get_spike_train(self, region_name: str) -> Optional[np.ndarray]:
+    def get_spike_train(self, region_name: str) -> np.ndarray | None:
         """Get the full spike train matrix for a region.
 
         Args:
@@ -97,9 +95,7 @@ class SpikeRecorder:
         recent = history[-window:]
         return float(np.mean(recent))
 
-    def get_history(
-        self, region_name: str, last_n_steps: int = 100
-    ) -> Optional[np.ndarray]:
+    def get_history(self, region_name: str, last_n_steps: int = 100) -> np.ndarray | None:
         """Get the most recent spike history for a region.
 
         Args:
@@ -145,7 +141,4 @@ class SpikeRecorder:
         self._timestep = 0
 
     def __repr__(self) -> str:
-        return (
-            f"SpikeRecorder(regions={len(self.spike_trains)}, "
-            f"timesteps={self._timestep})"
-        )
+        return f"SpikeRecorder(regions={len(self.spike_trains)}, timesteps={self._timestep})"

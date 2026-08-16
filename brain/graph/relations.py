@@ -5,10 +5,10 @@ Represents typed, weighted, directional relationships
 between concepts in the knowledge graph.
 """
 
-from dataclasses import dataclass, field
-from typing import Any, Dict
 import time as time_module
 import uuid
+from dataclasses import dataclass, field
+from typing import Any, Dict
 
 
 @dataclass

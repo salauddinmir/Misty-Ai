@@ -9,17 +9,19 @@ Run with:
     uvicorn apps.api.main:app --reload
 """
 
+import json
+from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
-from typing import AsyncGenerator
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from brain.core.brain import Brain
 from apps.api.database import Database
-from apps.api.routes.chat import router as chat_router
 from apps.api.routes.brain import router as brain_router
+from apps.api.routes.chat import router as chat_router
 from apps.api.websocket.brain_stream import router as ws_router
+from brain.core.brain import Brain
+from brain.learning.consolidation import ConsolidationEvent
 
 
 async def _restore_persistent_knowledge(brain: Brain, database: Database) -> None:
@@ -35,6 +37,7 @@ async def _restore_persistent_knowledge(brain: Brain, database: Database) -> Non
             # Avoid duplicates if the brain already has a concept with this ID
             if not brain.concept_graph.get_concept(item["concept_id"]):
                 from brain.graph.concepts import Concept
+
                 concept = Concept(
                     name=item["name"],
                     concept_type=item["concept_type"],
@@ -55,11 +58,8 @@ async def _restore_persistent_knowledge(brain: Brain, database: Database) -> Non
                 confidence=item.get("confidence", 1.0),
             )
 
-        print(
-            f"Restored {len(persisted_concepts)} concepts and "
-            f"{len(persisted_relations)} relations from database"
-        )
-    except Exception:  # noqa: BLE001 - a fresh DB must never break startup
+        print(f"Restored {len(persisted_concepts)} concepts and {len(persisted_relations)} relations from database")
+    except Exception:
         print("No persisted knowledge to restore; starting with a blank brain")
 
 
@@ -74,6 +74,33 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     brain = Brain()
     database = Database()
     await database.initialize()
+
+    # Hook the consolidation engine into the database: consolidated items
+    # above the importance threshold are flushed to SQLite immediately so
+    # nothing is lost if the process exits before a shutdown hook runs.
+    async def _consolidation_sink(event: ConsolidationEvent) -> None:
+        # The episodes table stores arbitrary dict content as JSON, so both
+        # facts and episodes flush there; the semantic memory already keeps
+        # the structured fact in the running brain graph as well.
+        content = json.dumps(event.content) if isinstance(event.content, dict) else str(event.content)
+        await database.save_episode(
+            content=content,
+            context=event.context,
+            emotional_valence=event.importance,
+            importance=event.importance,
+        )
+
+    def _consolidation_sink_sync(event: ConsolidationEvent) -> None:
+        # The consolidator is synchronous; schedule the flush on the event loop.
+        import asyncio
+
+        try:
+            asyncio.get_running_loop()
+        except RuntimeError:
+            return
+        asyncio.get_running_loop().create_task(_consolidation_sink(event))
+
+    brain.consolidator.persistence_sink = _consolidation_sink_sync
 
     # Restore previously learned knowledge from the database so the brain
     # remembers concepts and relations across server restarts

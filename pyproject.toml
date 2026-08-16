@@ -27,6 +27,32 @@ dev = [
 [tool.setuptools.packages.find]
 include = ["brain*", "tools*", "database*", "apps*"]
 
+[tool.ruff]
+line-length = 120
+target-version = "py310"
+
+[tool.ruff.lint]
+# Focus CI on real bugs and clarity; annotation style rules (UP006, UP035,
+# FA100) are excluded because the codebase predates Python 3.9 generics.
+select = [
+    "E",    # pycodestyle errors
+    "F",    # pyflakes
+    "W",    # pycodestyle warnings
+    "I",    # isort
+    "N",    # pep8-naming
+    "UP",   # pyupgrade
+    "B",    # bugbear
+    "PERF", # performance
+    "RUF",  # ruff-specific
+]
+ignore = [
+    "UP006",  # non-pep585-annotation
+    "UP035",  # deprecated-import
+    "FA100",  # future-rewritable-type-annotation
+    "N818",   # error-suffix-on-exception-name
+    "PERF203",# try-except-in-loop
+]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 asyncio_mode = "auto"

@@ -15,10 +15,9 @@ Tests cover:
 import time
 
 import numpy as np
-import pytest
 
-from brain.neurons.vectorized import VectorizedPopulation, NeuronType
 from brain.neurons.lif import LIFNeuron
+from brain.neurons.vectorized import NeuronType, VectorizedPopulation
 
 
 class TestVectorizedCreation:
@@ -136,17 +135,18 @@ class TestSpikeGeneration:
         """Vectorized dynamics match individual LIFNeuron behavior."""
         lif = LIFNeuron(threshold=1.0, decay=0.9, rest_potential=0.0, refractory_period=2)
         pop = VectorizedPopulation(
-            size=1, threshold_val=1.0, decay_val=0.9,
-            rest_potential_val=0.0, refractory_period_val=2
+            size=1,
+            threshold_val=1.0,
+            decay_val=0.9,
+            rest_potential_val=0.0,
+            refractory_period_val=2,
         )
 
         test_inputs = [0.3, 0.4, 0.5, 1.5, 0.0, 0.0, 1.2, 0.8, 0.0, 2.0]
         for current in test_inputs:
             lif_spike = lif.step(current)
             pop_spikes = pop.step(np.array([current]))
-            assert lif_spike == pop_spikes[0], (
-                f"Mismatch at input={current}: LIF={lif_spike}, Vec={pop_spikes[0]}"
-            )
+            assert lif_spike == pop_spikes[0], f"Mismatch at input={current}: LIF={lif_spike}, Vec={pop_spikes[0]}"
 
 
 class TestRefractoryPeriod:
@@ -173,9 +173,7 @@ class TestRefractoryPeriod:
 
     def test_potential_at_rest_during_refractory(self) -> None:
         """Membrane potential stays at rest during refractory."""
-        pop = VectorizedPopulation(
-            size=1, threshold_val=1.0, rest_potential_val=0.0, refractory_period_val=2
-        )
+        pop = VectorizedPopulation(size=1, threshold_val=1.0, rest_potential_val=0.0, refractory_period_val=2)
         pop.step(np.array([2.0]))  # Fire
         pop.step(np.array([5.0]))  # High input during refractory
         assert pop.membrane_potential[0] == 0.0

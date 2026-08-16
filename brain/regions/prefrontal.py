@@ -6,7 +6,7 @@ planning, and decision-making. Maintains a goal representation
 and evaluates progress toward it using neural population dynamics.
 """
 
-from typing import List, Optional
+from typing import List
 
 import numpy as np
 
@@ -67,7 +67,7 @@ class PrefrontalRegion(BrainRegion):
         )
         self.goal_strength: float = goal_strength
         self.decision_threshold: float = decision_threshold
-        self.goal_pattern: Optional[np.ndarray] = None
+        self.goal_pattern: np.ndarray | None = None
         self.progress_history: List[float] = []
         self._activity_accumulator: np.ndarray = np.zeros(size, dtype=np.float64)
         self._accumulator_steps: int = 0
@@ -170,7 +170,4 @@ class PrefrontalRegion(BrainRegion):
 
     def __repr__(self) -> str:
         has_goal = self.goal_pattern is not None
-        return (
-            f"PrefrontalRegion(name='{self.name}', size={self.size}, "
-            f"has_goal={has_goal})"
-        )
+        return f"PrefrontalRegion(name='{self.name}', size={self.size}, has_goal={has_goal})"

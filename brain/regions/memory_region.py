@@ -6,7 +6,7 @@ Supports encoding new patterns and retrieving stored patterns
 using cosine similarity matching between cues and stored memories.
 """
 
-from typing import Dict, List, Optional, Tuple
+from typing import List, Tuple
 
 import numpy as np
 
@@ -69,7 +69,7 @@ class MemoryRegion(BrainRegion):
         self.memory_bank: List[np.ndarray] = []
         self.memory_labels: List[str] = []
 
-    def encode(self, pattern: np.ndarray, label: Optional[str] = None) -> int:
+    def encode(self, pattern: np.ndarray, label: str | None = None) -> int:
         """Encode a new pattern into the memory bank.
 
         Stores the pattern vector. If the memory bank is full, the oldest
@@ -107,7 +107,7 @@ class MemoryRegion(BrainRegion):
             self.memory_labels.append(label or "")
             return len(self.memory_bank) - 1
 
-    def retrieve(self, cue: np.ndarray) -> Tuple[Optional[np.ndarray], float]:
+    def retrieve(self, cue: np.ndarray) -> Tuple[np.ndarray | None, float]:
         """Retrieve the most similar stored pattern given a cue.
 
         Computes cosine similarity between the cue and all stored patterns,

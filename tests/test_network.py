@@ -12,13 +12,13 @@ Tests cover:
 import numpy as np
 import pytest
 
-from brain.neurons.vectorized import VectorizedPopulation, NeuronType
-from brain.synapses.network import SynapticNetwork, ConnectionInfo
-from brain.regions.sensory import SensoryRegion
+from brain.neurons.vectorized import VectorizedPopulation
 from brain.regions.association import AssociationRegion
-from brain.simulation.engine import SimulationEngine
+from brain.regions.sensory import SensoryRegion
 from brain.simulation.config import SimulationConfig
+from brain.simulation.engine import SimulationEngine
 from brain.simulation.recorder import SpikeRecorder
+from brain.synapses.network import SynapticNetwork
 
 
 class TestSynapticNetworkCreation:
@@ -80,9 +80,7 @@ class TestConnectionCreation:
         net = SynapticNetwork()
         source = VectorizedPopulation(size=10, name="exc_src", excitatory_ratio=1.0)
         target = VectorizedPopulation(size=10, name="tgt1")
-        conn = net.connect_populations(
-            source, target, probability=1.0, weight_range=(0.1, 0.5), seed=42
-        )
+        conn = net.connect_populations(source, target, probability=1.0, weight_range=(0.1, 0.5), seed=42)
         # All weights should be positive
         weights = conn.weight_matrix.toarray()
         nonzero = weights[weights != 0]
@@ -93,9 +91,7 @@ class TestConnectionCreation:
         net = SynapticNetwork()
         source = VectorizedPopulation(size=10, name="inh_src", excitatory_ratio=0.0)
         target = VectorizedPopulation(size=10, name="tgt2")
-        conn = net.connect_populations(
-            source, target, probability=1.0, weight_range=(0.1, 0.5), seed=42
-        )
+        conn = net.connect_populations(source, target, probability=1.0, weight_range=(0.1, 0.5), seed=42)
         # All weights should be negative (inhibitory source)
         weights = conn.weight_matrix.toarray()
         nonzero = weights[weights != 0]
@@ -106,9 +102,7 @@ class TestConnectionCreation:
         net = SynapticNetwork()
         source = VectorizedPopulation(size=100, name="mixed_src", excitatory_ratio=0.5)
         target = VectorizedPopulation(size=50, name="tgt3")
-        conn = net.connect_populations(
-            source, target, probability=0.5, weight_range=(0.1, 0.3), seed=42
-        )
+        conn = net.connect_populations(source, target, probability=0.5, weight_range=(0.1, 0.3), seed=42)
         weights = conn.weight_matrix.toarray()
         nonzero = weights[weights != 0]
         assert np.any(nonzero > 0), "Should have positive weights from excitatory"
@@ -149,9 +143,7 @@ class TestSpikePropagation:
         net = SynapticNetwork()
         source = VectorizedPopulation(size=10, name="prop_src", excitatory_ratio=1.0)
         target = VectorizedPopulation(size=10, name="prop_tgt")
-        net.connect_populations(
-            source, target, probability=1.0, weight_range=(0.5, 0.5), seed=42
-        )
+        net.connect_populations(source, target, probability=1.0, weight_range=(0.5, 0.5), seed=42)
 
         # All source neurons fire
         spikes = np.ones(10, dtype=bool)

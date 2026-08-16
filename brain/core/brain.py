@@ -6,33 +6,29 @@ processes input through the cognitive cycle. This is the primary
 entry point for the cognitive system.
 """
 
-from typing import Any, Dict, List, Optional
 import time as time_module
+from typing import Any, Dict, List
 
 import numpy as np
 
-from brain.neurons.lif import LIFNeuron
-from brain.neurons.populations import NeuronPopulation
-from brain.synapses.synapse import Synapse
-from brain.synapses.stdp import STDPRule
-from brain.synapses.plasticity import PlasticityManager
-from brain.memory.working import WorkingMemory
-from brain.memory.episodic import EpisodicMemory
-from brain.memory.semantic import SemanticMemory
-from brain.memory.procedural import ProceduralMemory
-from brain.graph.concepts import Concept, ConceptGraph
+from brain.core.cycle import CognitiveCycle, CognitivePhase, CycleResult
+from brain.core.state import BrainState
+from brain.emotion.state import EmotionalState
 from brain.graph.activation import SpreadingActivation
-from brain.reasoning.inference import InferenceEngine
-from brain.planner.planner import Planner
-from brain.planner.goals import Goal
+from brain.graph.concepts import ConceptGraph
+from brain.learning.consolidation import MemoryConsolidator
 from brain.learning.reinforcement import ReinforcementLearner
 from brain.learning.reward import RewardSignal
-from brain.learning.consolidation import MemoryConsolidator
+from brain.memory.episodic import EpisodicMemory
+from brain.memory.procedural import ProceduralMemory
+from brain.memory.semantic import SemanticMemory
+from brain.memory.working import WorkingMemory
+from brain.neurons.populations import NeuronPopulation
+from brain.nlu.parser import IntentType, NLUParser, ParseResult
+from brain.planner.planner import Planner
+from brain.reasoning.inference import InferenceEngine
 from brain.reflection.reflection import ReflectionEngine
-from brain.emotion.state import EmotionalState
-from brain.nlu.parser import NLUParser, ParseResult, IntentType
-from brain.core.state import BrainState
-from brain.core.cycle import CognitiveCycle, CognitivePhase, CycleResult
+from brain.synapses.plasticity import PlasticityManager
 
 
 class Brain:
@@ -56,8 +52,8 @@ class Brain:
                           Default False preserves Phase 0 behavior.
         """
         # Identity
-        self.name: Optional[str] = None
-        self.user_name: Optional[str] = None
+        self.name: str | None = None
+        self.user_name: str | None = None
         self.use_neural_sim: bool = use_neural_sim
 
         # Neural substrate
@@ -115,13 +111,13 @@ class Brain:
         regions, connects them via a synaptic network, and sets up the
         simulation engine and concept encoder.
         """
-        from brain.regions.sensory import SensoryRegion
+        from brain.encoding.concept_encoder import ConceptEncoder
         from brain.regions.association import AssociationRegion
         from brain.regions.memory_region import MemoryRegion
-        from brain.synapses.network import SynapticNetwork
-        from brain.simulation.engine import SimulationEngine
+        from brain.regions.sensory import SensoryRegion
         from brain.simulation.config import SimulationConfig
-        from brain.encoding.concept_encoder import ConceptEncoder
+        from brain.simulation.engine import SimulationEngine
+        from brain.synapses.network import SynapticNetwork
 
         # Create brain regions
         sensory = SensoryRegion(name="sensory", size=256, gain=2.0)
@@ -137,18 +133,21 @@ class Brain:
         # Create synaptic network
         network = SynapticNetwork()
         network.connect_populations(
-            sensory.population, association.population,
-            probability=0.1, weight_range=(0.02, 0.08), seed=42
+            sensory.population,
+            association.population,
+            probability=0.1,
+            weight_range=(0.02, 0.08),
+            seed=42,
         )
         network.connect_populations(
-            association.population, memory.population,
-            probability=0.08, weight_range=(0.02, 0.06), seed=43
+            association.population,
+            memory.population,
+            probability=0.08,
+            weight_range=(0.02, 0.06),
+            seed=43,
         )
         # Recurrent connections in association cortex
-        network.connect_self(
-            association.population,
-            probability=0.05, weight_range=(0.01, 0.04), seed=44
-        )
+        network.connect_self(association.population, probability=0.05, weight_range=(0.01, 0.04), seed=44)
         self._neural_network = network
 
         # Create simulation engine
@@ -158,9 +157,7 @@ class Brain:
             stdp_enabled=True,
         )
         regions_list = [sensory, association, memory]
-        self._neural_sim_engine = SimulationEngine(
-            regions_list, network, config
-        )
+        self._neural_sim_engine = SimulationEngine(regions_list, network, config)
 
         # Concept encoder for neural patterns
         self._concept_encoder = ConceptEncoder(population_size=512, sparsity=0.07)
@@ -178,9 +175,6 @@ class Brain:
         """
         start_time = time_module.time()
         self.state.last_input = text_input
-        # Timestamp of the current cognitive cycle (used by episodic memory
-        # and consolidation to order events chronologically)
-        self._cycle_start = time_module.time()
 
         # Start cognitive cycle
         self.cycle.start_cycle()
@@ -274,12 +268,15 @@ class Brain:
         self.state.current_phase = "interpret"
         parse_result = self.nlu.parse(text_input)
 
-        self.working_memory.store("parse_result", {
-            "intent": parse_result.intent.value,
-            "entities": parse_result.entities,
-            "relations": parse_result.relations,
-            "query": parse_result.query,
-        })
+        self.working_memory.store(
+            "parse_result",
+            {
+                "intent": parse_result.intent.value,
+                "entities": parse_result.entities,
+                "relations": parse_result.relations,
+                "query": parse_result.query,
+            },
+        )
 
         return CycleResult(
             phase=CognitivePhase.INTERPRET,
@@ -290,7 +287,7 @@ class Brain:
             success=parse_result.confidence > 0.3,
         )
 
-    def _phase_recall(self, parse_result: Optional[ParseResult]) -> CycleResult:
+    def _phase_recall(self, parse_result: ParseResult | None) -> CycleResult:
         """RECALL phase: Retrieve relevant memories."""
         self.state.current_phase = "recall"
         recalled: Dict[str, Any] = {}
@@ -303,8 +300,7 @@ class Brain:
             facts = self.semantic_memory.query(predicate=relation, obj=target_name)
             if facts:
                 recalled["semantic_facts"] = [
-                    {"subject": f.subject, "predicate": f.predicate, "obj": f.obj}
-                    for f in facts
+                    {"subject": f.subject, "predicate": f.predicate, "obj": f.obj} for f in facts
                 ]
 
             # Search episodic memory: past interactions about this target
@@ -312,18 +308,18 @@ class Brain:
             episode_hits = self.episodic_memory.recall_by_content(target_name)
             if episode_hits:
                 recalled["episode_hits"] = [
-                    {"event": ep.content.get("event") if isinstance(ep.content, dict) else str(ep.content),
-                     "result": ep.content.get("result") if isinstance(ep.content, dict) else "",
-                     "importance": ep.importance}
+                    {
+                        "event": ep.content.get("event") if isinstance(ep.content, dict) else str(ep.content),
+                        "result": ep.content.get("result") if isinstance(ep.content, dict) else "",
+                        "importance": ep.importance,
+                    }
                     for ep in episode_hits[:5]
                 ]
 
             # Search knowledge graph
             target_concept = self.concept_graph.get_concept_by_name(target_name)
             if target_concept:
-                relations = self.concept_graph.get_relations(
-                    target_concept.concept_id, direction="incoming"
-                )
+                relations = self.concept_graph.get_relations(target_concept.concept_id, direction="incoming")
                 recalled["graph_relations"] = relations
 
         return CycleResult(
@@ -332,7 +328,7 @@ class Brain:
             success=True,
         )
 
-    def _phase_associate(self, parse_result: Optional[ParseResult]) -> CycleResult:
+    def _phase_associate(self, parse_result: ParseResult | None) -> CycleResult:
         """ASSOCIATE phase: Spread activation to related concepts.
 
         If neural simulation is enabled, uses the neural engine to
@@ -344,11 +340,7 @@ class Brain:
 
         if parse_result:
             entities = parse_result.entities
-            target = (
-                entities.get("target")
-                or entities.get("name")
-                or parse_result.query.get("target")
-            )
+            target = entities.get("target") or entities.get("name") or parse_result.query.get("target")
 
             if target:
                 concept = self.concept_graph.get_concept_by_name(target)
@@ -358,14 +350,10 @@ class Brain:
                         activated = self._neural_associate(concept.concept_id)
                     else:
                         # Graph-based path (Phase 0 default)
-                        activation_map = self.spreading_activation.activate(
-                            self.concept_graph, concept.concept_id
-                        )
+                        activation_map = self.spreading_activation.activate(self.concept_graph, concept.concept_id)
                         activated = activation_map
 
-                    self.state.active_concepts = {
-                        k: round(v, 3) for k, v in activated.items()
-                    }
+                    self.state.active_concepts = {k: round(v, 3) for k, v in activated.items()}
 
         return CycleResult(
             phase=CognitivePhase.ASSOCIATE,
@@ -435,7 +423,7 @@ class Brain:
 
         return activation_map
 
-    def _phase_reason(self, parse_result: Optional[ParseResult]) -> CycleResult:
+    def _phase_reason(self, parse_result: ParseResult | None) -> CycleResult:
         """REASON phase: Apply inference rules."""
         self.state.current_phase = "reason"
         derived: List[Dict[str, Any]] = []
@@ -447,18 +435,35 @@ class Brain:
             target_concept = self.concept_graph.get_concept_by_name(target_name)
             if target_concept:
                 related = self.concept_graph.find_related(
-                    target_concept.concept_id, relation_type=relation, direction="incoming"
+                    target_concept.concept_id,
+                    relation_type=relation,
+                    direction="incoming",
                 )
                 if related:
                     derived = [{"answer": c.name, "relation": relation} for c in related]
 
+        # Consult procedural memory: apply the strongest learned
+        # if-then procedure matching the current context so stored
+        # procedures actually influence reasoning instead of sitting idle
+        context = parse_result.raw_text if parse_result else ""
+        if context and hasattr(self, "procedural_memory") and self.procedural_memory.size > 0:
+            procedure = self.procedural_memory.get_strongest(context)
+            if procedure:
+                procedure.reinforce(success=True, amount=0.05)
+                derived.append(
+                    {
+                        "procedure": procedure.name,
+                        "action": procedure.action,
+                        "strength": procedure.strength,
+                    }
+                )
         return CycleResult(
             phase=CognitivePhase.REASON,
             data={"derived": derived},
             success=True,
         )
 
-    def _phase_plan(self, parse_result: Optional[ParseResult]) -> CycleResult:
+    def _phase_plan(self, parse_result: ParseResult | None) -> CycleResult:
         """PLAN phase: Decide what to do."""
         self.state.current_phase = "plan"
 
@@ -488,7 +493,7 @@ class Brain:
 
     def _phase_act(
         self,
-        parse_result: Optional[ParseResult],
+        parse_result: ParseResult | None,
         recall_data: Dict[str, Any],
         associate_data: Dict[str, Any],
     ) -> CycleResult:
@@ -548,11 +553,15 @@ class Brain:
                 metadata={"is_user": is_self},
             )
             self.semantic_memory.store_fact(
-                subject=name, predicate="is_a", obj="Person",
+                subject=name,
+                predicate="is_a",
+                obj="Person",
             )
             if is_self:
                 self.semantic_memory.store_fact(
-                    subject=name, predicate="is", obj="user",
+                    subject=name,
+                    predicate="is",
+                    obj="user",
                 )
 
         # Register concept in neural encoder if simulation is active
@@ -580,15 +589,11 @@ class Brain:
         # Ensure concepts exist
         source_concept = self.concept_graph.get_concept_by_name(source_name)
         if not source_concept:
-            source_concept = self.concept_graph.create_concept(
-                name=source_name, concept_type="Person"
-            )
+            source_concept = self.concept_graph.create_concept(name=source_name, concept_type="Person")
 
         target_concept = self.concept_graph.get_concept_by_name(target_name)
         if not target_concept:
-            target_concept = self.concept_graph.create_concept(
-                name=target_name, concept_type="Entity"
-            )
+            target_concept = self.concept_graph.create_concept(name=target_name, concept_type="Entity")
 
         # Add relation to graph
         self.concept_graph.add_relation(
@@ -599,7 +604,9 @@ class Brain:
 
         # Store in semantic memory
         self.semantic_memory.store_fact(
-            subject=source_name, predicate=relation_type, obj=target_name,
+            subject=source_name,
+            predicate=relation_type,
+            obj=target_name,
         )
 
         # Register concepts in neural encoder if simulation is active
@@ -607,10 +614,7 @@ class Brain:
             self._concept_encoder.encode_concept(source_name)
             self._concept_encoder.encode_concept(target_name)
 
-        response = (
-            f"I have learned that {source_name} has relation "
-            f"'{relation_type}' with {target_name}."
-        )
+        response = f"I have learned that {source_name} has relation '{relation_type}' with {target_name}."
         return response, 0.9
 
     def _act_query(self, parse_result: ParseResult, recall_data: Dict[str, Any]) -> tuple:
@@ -646,10 +650,7 @@ class Brain:
 
         # No answer found
         self.emotion.update_from_outcome(success=False)
-        return (
-            f"I do not have information about who has "
-            f"'{relation}' relation with {target_name}."
-        ), 0.3
+        return (f"I do not have information about who has '{relation}' relation with {target_name}."), 0.3
 
     def _act_unknown(self, parse_result: ParseResult) -> tuple:
         """Handle inputs the brain cannot yet understand.
@@ -666,8 +667,8 @@ class Brain:
         response = (
             "I heard you, but I am still learning and cannot fully "
             "understand that yet. You can teach me things like "
-            "\"আমার নাম X\", \"আমি Y-এর creator\", or ask "
-            "\"Y কে তৈরি করেছে?\""
+            '"আমার নাম X", "আমি Y-এর creator", or ask '
+            '"Y কে তৈরি করেছে?"'
         )
         return response, 0.3
 
@@ -686,9 +687,7 @@ class Brain:
             success=True,
         )
 
-    def _phase_learn(
-        self, parse_result: Optional[ParseResult], act_result: CycleResult
-    ) -> CycleResult:
+    def _phase_learn(self, parse_result: ParseResult | None, act_result: CycleResult) -> CycleResult:
         """LEARN phase: Update learning systems."""
         self.state.current_phase = "learn"
 
@@ -707,7 +706,7 @@ class Brain:
         # Store the interaction as an episodic memory so experiences can
         # be recalled later (event + context + action + result + reward).
         episode = {
-            "event": text_input if not parse_result else parse_result.raw_text,
+            "event": self.state.last_input if not parse_result else parse_result.raw_text,
             "intent": state_key,
             "action": action_key,
             "result": act_result.data.get("response", ""),

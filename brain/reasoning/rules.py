@@ -4,9 +4,9 @@ Rule-Based Inference Rules.
 Defines production rules (condition-action pairs) for the reasoning engine.
 """
 
+import uuid
 from dataclasses import dataclass, field
 from typing import Any, Dict, List
-import uuid
 
 
 @dataclass

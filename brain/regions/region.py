@@ -6,8 +6,6 @@ with specialized region-level behavior including input buffering, output trackin
 and firing rate computation.
 """
 
-from typing import Optional
-
 import numpy as np
 
 from brain.neurons.vectorized import VectorizedPopulation
@@ -66,9 +64,7 @@ class BrainRegion:
         self.input_buffer: np.ndarray = np.zeros(size, dtype=np.float64)
         self.output_spikes: np.ndarray = np.zeros(size, dtype=bool)
         self._spike_history_length: int = 100
-        self._spike_history: np.ndarray = np.zeros(
-            self._spike_history_length, dtype=np.float64
-        )
+        self._spike_history: np.ndarray = np.zeros(self._spike_history_length, dtype=np.float64)
         self._step_count: int = 0
 
     @property
@@ -132,6 +128,5 @@ class BrainRegion:
 
     def __repr__(self) -> str:
         return (
-            f"{self.__class__.__name__}(name='{self.name}', "
-            f"size={self.size}, firing_rate={self.get_firing_rate():.4f})"
+            f"{self.__class__.__name__}(name='{self.name}', size={self.size}, firing_rate={self.get_firing_rate():.4f})"
         )

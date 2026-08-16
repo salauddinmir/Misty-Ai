@@ -4,15 +4,16 @@ Goal Class.
 Represents a goal that the brain is trying to achieve.
 """
 
-from dataclasses import dataclass, field
-from typing import Any, Dict, List
-from enum import Enum
 import time as time_module
 import uuid
+from dataclasses import dataclass, field
+from enum import Enum
+from typing import Any, Dict, List
 
 
 class GoalStatus(str, Enum):
     """Possible states of a goal."""
+
     PENDING = "pending"
     ACTIVE = "active"
     ACHIEVED = "achieved"
@@ -53,10 +54,11 @@ class Goal:
     @property
     def is_terminal(self) -> bool:
         """Whether this goal is in a terminal state."""
-        return self.status in (GoalStatus.ACHIEVED, GoalStatus.FAILED, GoalStatus.ABANDONED)
+        return self.status in (
+            GoalStatus.ACHIEVED,
+            GoalStatus.FAILED,
+            GoalStatus.ABANDONED,
+        )
 
     def __repr__(self) -> str:
-        return (
-            f"Goal(desc='{self.description[:30]}...', "
-            f"type={self.goal_type}, status={self.status.value})"
-        )
+        return f"Goal(desc='{self.description[:30]}...', type={self.goal_type}, status={self.status.value})"

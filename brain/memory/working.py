@@ -6,9 +6,9 @@ Items are stored with activation levels that decay over time;
 when capacity is exceeded, the least active item is removed.
 """
 
-from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional
 import time as time_module
+from dataclasses import dataclass, field
+from typing import Any, Dict
 
 
 @dataclass
@@ -66,7 +66,7 @@ class WorkingMemory:
 
         self.items[key] = MemoryItem(content=content)
 
-    def retrieve(self, key: str) -> Optional[Any]:
+    def retrieve(self, key: str) -> Any | None:
         """Retrieve an item from working memory."""
         item = self.items.get(key)
         if item is not None:

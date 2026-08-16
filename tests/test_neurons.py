@@ -10,8 +10,6 @@ Tests cover:
 - Sub-threshold integration
 """
 
-import pytest
-
 from brain.neurons.lif import LIFNeuron
 
 

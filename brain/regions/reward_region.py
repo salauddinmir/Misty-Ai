@@ -6,7 +6,7 @@ Tracks reward signals, computes reward prediction errors, and provides
 reinforcement signals for learning in connected regions.
 """
 
-from typing import List, Optional
+from typing import List
 
 import numpy as np
 
@@ -84,10 +84,7 @@ class RewardRegion(BrainRegion):
         self.prediction_error = amount - self.reward_baseline
 
         # Update baseline with exponential moving average
-        self.reward_baseline = (
-            self.baseline_decay * self.reward_baseline
-            + (1.0 - self.baseline_decay) * amount
-        )
+        self.reward_baseline = self.baseline_decay * self.reward_baseline + (1.0 - self.baseline_decay) * amount
 
         # Record history
         self.reward_history.append(amount)
@@ -107,9 +104,7 @@ class RewardRegion(BrainRegion):
         """
         # Scale prediction error into current
         # Distribute uniformly across the population with some structure
-        signal = np.full(
-            self.size, self.prediction_error, dtype=np.float64
-        )
+        signal = np.full(self.size, self.prediction_error, dtype=np.float64)
 
         # Add spatial structure: excitatory neurons carry positive signals,
         # inhibitory neurons carry negative signals

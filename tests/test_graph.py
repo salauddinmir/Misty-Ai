@@ -10,10 +10,8 @@ Tests cover:
 - Activation decay with distance
 """
 
-import pytest
-
-from brain.graph.concepts import Concept, ConceptGraph
 from brain.graph.activation import SpreadingActivation
+from brain.graph.concepts import ConceptGraph
 
 
 class TestConceptCreation:
@@ -100,9 +98,7 @@ class TestRelations:
         graph = ConceptGraph()
         a = graph.create_concept(name="Mir")
         b = graph.create_concept(name="MistLook")
-        success = graph.add_relation(
-            a.concept_id, b.concept_id, "creator_of"
-        )
+        success = graph.add_relation(a.concept_id, b.concept_id, "creator_of")
         assert success is True
         assert graph.num_relations == 1
 
@@ -246,9 +242,7 @@ class TestSpreadingActivation:
     def test_max_depth_limit(self) -> None:
         """Activation respects max_depth limit."""
         graph = ConceptGraph()
-        nodes = []
-        for i in range(10):
-            nodes.append(graph.create_concept(name=f"N{i}"))
+        nodes = [graph.create_concept(name=f"N{i}") for i in range(10)]
         for i in range(9):
             graph.add_relation(nodes[i].concept_id, nodes[i + 1].concept_id, "next")
 
@@ -258,9 +252,7 @@ class TestSpreadingActivation:
         # Should not reach far nodes
         assert nodes[0].concept_id in result
         # Nodes beyond max_depth should not be activated (or below threshold)
-        far_nodes_activated = sum(
-            1 for n in nodes[5:] if n.concept_id in result
-        )
+        far_nodes_activated = sum(1 for n in nodes[5:] if n.concept_id in result)
         # Due to depth limit and decay, far nodes should not be reached
         assert far_nodes_activated == 0
 

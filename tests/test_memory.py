@@ -10,9 +10,7 @@ Tests cover:
 - Clearing memory
 """
 
-import pytest
-
-from brain.memory.working import WorkingMemory, MemoryItem
+from brain.memory.working import MemoryItem, WorkingMemory
 
 
 class TestWorkingMemoryBasics:

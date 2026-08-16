@@ -5,8 +5,8 @@ Represents a connection between two neurons with a weight,
 transmission delay, and references to pre/post synaptic neurons.
 """
 
-from dataclasses import dataclass, field
 import uuid
+from dataclasses import dataclass, field
 
 
 @dataclass
@@ -65,8 +65,4 @@ class Synapse:
         self.last_post_spike_time = time
 
     def __repr__(self) -> str:
-        return (
-            f"Synapse(id={self.synapse_id}, "
-            f"{self.pre_neuron_id}->{self.post_neuron_id}, "
-            f"w={self.weight:.3f})"
-        )
+        return f"Synapse(id={self.synapse_id}, {self.pre_neuron_id}->{self.post_neuron_id}, w={self.weight:.3f})"

@@ -8,8 +8,8 @@ across the network during simulation.
 from dataclasses import dataclass, field
 from typing import Dict, List
 
-from brain.synapses.synapse import Synapse
 from brain.synapses.stdp import STDPRule
+from brain.synapses.synapse import Synapse
 
 
 @dataclass

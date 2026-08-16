@@ -8,7 +8,6 @@ NumPy operations instead of per-neuron Python loops.
 
 from dataclasses import dataclass, field
 from enum import IntEnum
-from typing import Optional
 
 import numpy as np
 
@@ -112,8 +111,7 @@ class VectorizedPopulation:
 
         # Step 2: Active neurons - integrate (decay toward rest + input)
         self.membrane_potential[active_mask] = (
-            self.decay[active_mask]
-            * (self.membrane_potential[active_mask] - self.rest_potential[active_mask])
+            self.decay[active_mask] * (self.membrane_potential[active_mask] - self.rest_potential[active_mask])
             + self.rest_potential[active_mask]
             + input_current[active_mask]
         )

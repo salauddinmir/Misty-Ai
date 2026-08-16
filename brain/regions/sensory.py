@@ -6,8 +6,6 @@ into neural spike patterns suitable for downstream processing. This acts
 as the interface between external data and the spiking neural system.
 """
 
-from typing import Optional
-
 import numpy as np
 
 from brain.regions.region import BrainRegion
@@ -127,7 +125,4 @@ class SensoryRegion(BrainRegion):
         return super().step()
 
     def __repr__(self) -> str:
-        return (
-            f"SensoryRegion(name='{self.name}', size={self.size}, "
-            f"gain={self.gain}, noise={self.noise_level})"
-        )
+        return f"SensoryRegion(name='{self.name}', size={self.size}, gain={self.gain}, noise={self.noise_level})"

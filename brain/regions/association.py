@@ -7,7 +7,7 @@ stores attractor patterns and can reconstruct full patterns from
 partial or noisy cues.
 """
 
-from typing import List, Optional
+from typing import List
 
 import numpy as np
 
@@ -70,9 +70,7 @@ class AssociationRegion(BrainRegion):
         self.stored_patterns: List[np.ndarray] = []
 
         # Hebbian weight matrix for recurrent connections (dense for simplicity)
-        self._recurrent_weights: np.ndarray = np.zeros(
-            (size, size), dtype=np.float64
-        )
+        self._recurrent_weights: np.ndarray = np.zeros((size, size), dtype=np.float64)
 
     def store_pattern(self, pattern: np.ndarray) -> None:
         """Store a pattern using Hebbian learning.
@@ -134,9 +132,7 @@ class AssociationRegion(BrainRegion):
                 current = full_input * self.population.threshold[0]
             else:
                 # Recurrent input from previous spikes
-                recurrent_input = self._recurrent_weights @ self.output_spikes.astype(
-                    np.float64
-                )
+                recurrent_input = self._recurrent_weights @ self.output_spikes.astype(np.float64)
                 current = recurrent_input + full_input * 0.3
 
             self.input_buffer = current
@@ -161,15 +157,10 @@ class AssociationRegion(BrainRegion):
             Boolean array of shape (size,) indicating which neurons fired.
         """
         # Add recurrent feedback from previous output
-        recurrent_input = self._recurrent_weights @ self.output_spikes.astype(
-            np.float64
-        )
+        recurrent_input = self._recurrent_weights @ self.output_spikes.astype(np.float64)
         self.input_buffer += recurrent_input
 
         return super().step()
 
     def __repr__(self) -> str:
-        return (
-            f"AssociationRegion(name='{self.name}', size={self.size}, "
-            f"stored_patterns={len(self.stored_patterns)})"
-        )
+        return f"AssociationRegion(name='{self.name}', size={self.size}, stored_patterns={len(self.stored_patterns)})"

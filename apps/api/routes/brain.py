@@ -11,7 +11,6 @@ from typing import Any, Dict, List
 from fastapi import APIRouter, Request
 from pydantic import BaseModel
 
-
 router = APIRouter()
 
 
@@ -72,16 +71,17 @@ async def get_brain_state(request: Request) -> BrainStateResponse:
 async def get_concepts(request: Request) -> List[ConceptResponse]:
     """Get all concepts currently in the knowledge graph."""
     brain = request.app.state.brain
-    concepts = []
-    for concept_id, concept in brain.concept_graph._concepts.items():
-        concepts.append(ConceptResponse(
+    concepts = [
+        ConceptResponse(
             concept_id=concept.concept_id,
             name=concept.name,
             concept_type=concept.concept_type,
             activation_level=concept.activation_level,
             created_at=concept.created_at,
             metadata=concept.metadata,
-        ))
+        )
+        for concept in brain.concept_graph._concepts.values()
+    ]
     return concepts
 
 
@@ -92,27 +92,30 @@ async def get_graph(request: Request) -> GraphResponse:
     graph = brain.concept_graph
 
     # Collect nodes
-    nodes = []
-    for concept_id, concept in graph._concepts.items():
-        nodes.append(ConceptResponse(
+    nodes = [
+        ConceptResponse(
             concept_id=concept.concept_id,
             name=concept.name,
             concept_type=concept.concept_type,
             activation_level=concept.activation_level,
             created_at=concept.created_at,
             metadata=concept.metadata,
-        ))
+        )
+        for concept in graph._concepts.values()
+    ]
 
     # Collect edges from NetworkX graph
     edges = []
     for source, target, data in graph.graph.edges(data=True):
-        edges.append(RelationResponse(
-            source=source,
-            target=target,
-            relation_type=data.get("relation_type", "related_to"),
-            weight=data.get("weight", 1.0),
-            confidence=data.get("confidence", 1.0),
-        ))
+        edges.append(
+            RelationResponse(
+                source=source,
+                target=target,
+                relation_type=data.get("relation_type", "related_to"),
+                weight=data.get("weight", 1.0),
+                confidence=data.get("confidence", 1.0),
+            )
+        )
 
     return GraphResponse(
         nodes=nodes,

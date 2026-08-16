@@ -4,9 +4,10 @@ Regression tests for NLU parser fixes.
 Ensures Bengali interrogative words are never captured as names and
 that question inputs are not misclassified as name declarations.
 """
+
 import pytest
 
-from brain.nlu.parser import NLUParser, IntentType
+from brain.nlu.parser import IntentType, NLUParser
 
 
 @pytest.fixture
@@ -50,5 +51,4 @@ class TestBengaliInterrogativeGuard:
 class TestNameCaptureDoesNotEatInterrogatives:
     def test_english_my_name_is_what(self, parser):
         result = parser.parse("my name is what?")
-        assert result.intent != IntentType.NAME_DECLARATION or \
-            result.entities.get("name") != "what"
+        assert result.intent != IntentType.NAME_DECLARATION or result.entities.get("name") != "what"

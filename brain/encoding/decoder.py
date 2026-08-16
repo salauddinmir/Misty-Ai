@@ -81,9 +81,7 @@ class Decoder:
             if concept_norm < 1e-10:
                 continue
 
-            similarity = float(
-                np.dot(pattern, concept_pattern) / (pattern_norm * concept_norm)
-            )
+            similarity = float(np.dot(pattern, concept_pattern) / (pattern_norm * concept_norm))
 
             if similarity >= self.similarity_threshold:
                 matches.append((concept_id, similarity))

@@ -11,10 +11,9 @@ import os
 import time as time_module
 import uuid
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 
 import aiosqlite
-
 
 # Default database path
 DEFAULT_DB_PATH = os.path.join(
@@ -42,14 +41,14 @@ class Database:
         _connection: Active aiosqlite connection.
     """
 
-    def __init__(self, db_path: Optional[str] = None) -> None:
+    def __init__(self, db_path: str | None = None) -> None:
         """Initialize with database path.
 
         Args:
             db_path: Path to SQLite database file. Defaults to data/misty_brain.db.
         """
         self.db_path = db_path or DEFAULT_DB_PATH
-        self._connection: Optional[aiosqlite.Connection] = None
+        self._connection: aiosqlite.Connection | None = None
 
     async def initialize(self) -> None:
         """Initialize database: create directory, connect, and apply schema."""
@@ -90,8 +89,8 @@ class Database:
         name: str,
         concept_type: str = "generic",
         activation_level: float = 0.0,
-        created_at: Optional[float] = None,
-        metadata: Optional[Dict[str, Any]] = None,
+        created_at: float | None = None,
+        metadata: Dict[str, Any] | None = None,
     ) -> None:
         """Save or update a concept in the database.
 
@@ -110,7 +109,14 @@ class Database:
             """INSERT OR REPLACE INTO concepts
                (concept_id, name, concept_type, activation_level, created_at, metadata)
                VALUES (?, ?, ?, ?, ?, ?)""",
-            (concept_id, name, concept_type, activation_level, created_at, metadata_json),
+            (
+                concept_id,
+                name,
+                concept_type,
+                activation_level,
+                created_at,
+                metadata_json,
+            ),
         )
         await self.connection.commit()
 
@@ -122,19 +128,20 @@ class Database:
         """
         cursor = await self.connection.execute("SELECT * FROM concepts")
         rows = await cursor.fetchall()
-        concepts = []
-        for row in rows:
-            concepts.append({
+        concepts = [
+            {
                 "concept_id": row[0],
                 "name": row[1],
                 "concept_type": row[2],
                 "activation_level": row[3],
                 "created_at": row[4],
                 "metadata": json.loads(row[5]) if row[5] else {},
-            })
+            }
+            for row in rows
+        ]
         return concepts
 
-    async def get_concept_by_name(self, name: str) -> Optional[Dict[str, Any]]:
+    async def get_concept_by_name(self, name: str) -> Dict[str, Any] | None:
         """Load a concept by its name.
 
         Args:
@@ -143,9 +150,7 @@ class Database:
         Returns:
             Concept dictionary or None.
         """
-        cursor = await self.connection.execute(
-            "SELECT * FROM concepts WHERE name = ?", (name,)
-        )
+        cursor = await self.connection.execute("SELECT * FROM concepts WHERE name = ?", (name,))
         row = await cursor.fetchone()
         if row:
             return {
@@ -167,7 +172,7 @@ class Database:
         relation_type: str,
         weight: float = 1.0,
         confidence: float = 1.0,
-        metadata: Optional[Dict[str, Any]] = None,
+        metadata: Dict[str, Any] | None = None,
     ) -> str:
         """Save a relation between two concepts.
 
@@ -190,7 +195,16 @@ class Database:
             """INSERT INTO relations
                (relation_id, source_id, target_id, relation_type, weight, confidence, created_at, metadata)
                VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
-            (relation_id, source_id, target_id, relation_type, weight, confidence, created_at, metadata_json),
+            (
+                relation_id,
+                source_id,
+                target_id,
+                relation_type,
+                weight,
+                confidence,
+                created_at,
+                metadata_json,
+            ),
         )
         await self.connection.commit()
         return relation_id
@@ -203,9 +217,8 @@ class Database:
         """
         cursor = await self.connection.execute("SELECT * FROM relations")
         rows = await cursor.fetchall()
-        relations = []
-        for row in rows:
-            relations.append({
+        relations = [
+            {
                 "relation_id": row[0],
                 "source_id": row[1],
                 "target_id": row[2],
@@ -214,7 +227,9 @@ class Database:
                 "confidence": row[5],
                 "created_at": row[6],
                 "metadata": json.loads(row[7]) if row[7] else {},
-            })
+            }
+            for row in rows
+        ]
         return relations
 
     # ==================== Episodes ====================
@@ -222,7 +237,7 @@ class Database:
     async def save_episode(
         self,
         content: str,
-        context: Optional[Dict[str, Any]] = None,
+        context: Dict[str, Any] | None = None,
         emotional_valence: float = 0.0,
         importance: float = 0.5,
     ) -> str:
@@ -245,7 +260,14 @@ class Database:
             """INSERT INTO episodes
                (episode_id, content, context, timestamp, emotional_valence, importance)
                VALUES (?, ?, ?, ?, ?, ?)""",
-            (episode_id, content, context_json, timestamp, emotional_valence, importance),
+            (
+                episode_id,
+                content,
+                context_json,
+                timestamp,
+                emotional_valence,
+                importance,
+            ),
         )
         await self.connection.commit()
         return episode_id
@@ -259,13 +281,10 @@ class Database:
         Returns:
             List of episode dictionaries (newest first).
         """
-        cursor = await self.connection.execute(
-            "SELECT * FROM episodes ORDER BY timestamp DESC LIMIT ?", (limit,)
-        )
+        cursor = await self.connection.execute("SELECT * FROM episodes ORDER BY timestamp DESC LIMIT ?", (limit,))
         rows = await cursor.fetchall()
-        episodes = []
-        for row in rows:
-            episodes.append({
+        episodes = [
+            {
                 "episode_id": row[0],
                 "content": row[1],
                 "context": json.loads(row[2]) if row[2] else {},
@@ -273,7 +292,9 @@ class Database:
                 "emotional_valence": row[4],
                 "importance": row[5],
                 "access_count": row[6],
-            })
+            }
+            for row in rows
+        ]
         return episodes
 
     # ==================== Brain States ====================
@@ -282,8 +303,8 @@ class Database:
         self,
         cycle_count: int,
         current_phase: str,
-        active_concepts: Optional[Dict[str, float]] = None,
-        emotional_state: Optional[Dict[str, float]] = None,
+        active_concepts: Dict[str, float] | None = None,
+        emotional_state: Dict[str, float] | None = None,
         last_input: str = "",
         last_output: str = "",
     ) -> None:
@@ -305,7 +326,15 @@ class Database:
             """INSERT INTO brain_states
                (cycle_count, current_phase, active_concepts, emotional_state, last_input, last_output, timestamp)
                VALUES (?, ?, ?, ?, ?, ?, ?)""",
-            (cycle_count, current_phase, active_json, emotion_json, last_input, last_output, timestamp),
+            (
+                cycle_count,
+                current_phase,
+                active_json,
+                emotion_json,
+                last_input,
+                last_output,
+                timestamp,
+            ),
         )
         await self.connection.commit()
 
@@ -318,13 +347,10 @@ class Database:
         Returns:
             List of brain state dictionaries (newest first).
         """
-        cursor = await self.connection.execute(
-            "SELECT * FROM brain_states ORDER BY timestamp DESC LIMIT ?", (limit,)
-        )
+        cursor = await self.connection.execute("SELECT * FROM brain_states ORDER BY timestamp DESC LIMIT ?", (limit,))
         rows = await cursor.fetchall()
-        states = []
-        for row in rows:
-            states.append({
+        states = [
+            {
                 "state_id": row[0],
                 "cycle_count": row[1],
                 "current_phase": row[2],
@@ -333,5 +359,7 @@ class Database:
                 "last_input": row[5],
                 "last_output": row[6],
                 "timestamp": row[7],
-            })
+            }
+            for row in rows
+        ]
         return states

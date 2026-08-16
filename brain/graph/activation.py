@@ -5,10 +5,10 @@ Activates a source concept and propagates activation to
 connected concepts with distance-based decay.
 """
 
-from dataclasses import dataclass, field
-from typing import Dict, List, Optional, Set
+from dataclasses import dataclass
+from typing import Dict, List, Set
 
-from brain.graph.concepts import ConceptGraph, Concept
+from brain.graph.concepts import ConceptGraph
 
 
 @dataclass
@@ -50,9 +50,7 @@ class SpreadingActivation:
 
             if current_id in visited:
                 if current_id in activation_map:
-                    activation_map[current_id] = max(
-                        activation_map[current_id], current_activation
-                    )
+                    activation_map[current_id] = max(activation_map[current_id], current_activation)
                 continue
 
             if current_activation < self.threshold:
@@ -96,13 +94,8 @@ class SpreadingActivation:
     ) -> List[tuple]:
         """Spread activation and return the most activated concepts."""
         activation_map = self.activate(graph, source_id, initial_activation)
-        sorted_items = sorted(
-            activation_map.items(), key=lambda x: x[1], reverse=True
-        )
+        sorted_items = sorted(activation_map.items(), key=lambda x: x[1], reverse=True)
         return sorted_items[:top_n]
 
     def __repr__(self) -> str:
-        return (
-            f"SpreadingActivation(decay={self.decay_factor}, "
-            f"threshold={self.threshold}, max_depth={self.max_depth})"
-        )
+        return f"SpreadingActivation(decay={self.decay_factor}, threshold={self.threshold}, max_depth={self.max_depth})"

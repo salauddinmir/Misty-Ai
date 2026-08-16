@@ -21,7 +21,6 @@ from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 
 from brain.core.brain import Brain
 
-
 router = APIRouter()
 
 # Track active WebSocket connections
@@ -35,11 +34,13 @@ async def broadcast_event(event_type: str, data: Dict[str, Any]) -> None:
         event_type: Type of event (e.g., 'brain_state', 'phase_update').
         data: Event payload data.
     """
-    message = json.dumps({
-        "type": event_type,
-        "data": data,
-        "timestamp": time_module.time(),
-    })
+    message = json.dumps(
+        {
+            "type": event_type,
+            "data": data,
+            "timestamp": time_module.time(),
+        }
+    )
 
     disconnected = set()
     for connection in active_connections:
@@ -74,11 +75,15 @@ async def brain_websocket(websocket: WebSocket) -> None:
     try:
         # Send initial state on connection
         state = brain.get_state()
-        await websocket.send_text(json.dumps({
-            "type": "brain_state",
-            "data": state,
-            "timestamp": time_module.time(),
-        }))
+        await websocket.send_text(
+            json.dumps(
+                {
+                    "type": "brain_state",
+                    "data": state,
+                    "timestamp": time_module.time(),
+                }
+            )
+        )
 
         # Listen for messages from client
         while True:
@@ -87,11 +92,15 @@ async def brain_websocket(websocket: WebSocket) -> None:
             try:
                 message = json.loads(raw_message)
             except json.JSONDecodeError:
-                await websocket.send_text(json.dumps({
-                    "type": "error",
-                    "data": {"message": "Invalid JSON"},
-                    "timestamp": time_module.time(),
-                }))
+                await websocket.send_text(
+                    json.dumps(
+                        {
+                            "type": "error",
+                            "data": {"message": "Invalid JSON"},
+                            "timestamp": time_module.time(),
+                        }
+                    )
+                )
                 continue
 
             action = message.get("action", "")
@@ -100,17 +109,24 @@ async def brain_websocket(websocket: WebSocket) -> None:
                 # Process a text message through the brain
                 text = message.get("message", "")
                 if not text:
-                    await websocket.send_text(json.dumps({
-                        "type": "error",
-                        "data": {"message": "Empty message"},
-                        "timestamp": time_module.time(),
-                    }))
+                    await websocket.send_text(
+                        json.dumps(
+                            {
+                                "type": "error",
+                                "data": {"message": "Empty message"},
+                                "timestamp": time_module.time(),
+                            }
+                        )
+                    )
                     continue
 
                 # Notify processing start
-                await broadcast_event("processing_start", {
-                    "input": text,
-                })
+                await broadcast_event(
+                    "processing_start",
+                    {
+                        "input": text,
+                    },
+                )
 
                 # Track concepts before processing
                 concepts_before = set(brain.concept_graph._concepts.keys())
@@ -124,36 +140,50 @@ async def brain_websocket(websocket: WebSocket) -> None:
                 for concept_id in new_concepts:
                     concept = brain.concept_graph.get_concept(concept_id)
                     if concept:
-                        await broadcast_event("concept_created", {
-                            "concept_id": concept.concept_id,
-                            "name": concept.name,
-                            "concept_type": concept.concept_type,
-                        })
+                        await broadcast_event(
+                            "concept_created",
+                            {
+                                "concept_id": concept.concept_id,
+                                "name": concept.name,
+                                "concept_type": concept.concept_type,
+                            },
+                        )
 
                 # Broadcast processing complete
-                await broadcast_event("processing_complete", {
-                    "response": result["response"],
-                    "processing_time": result["processing_time"],
-                    "cycle_count": result["cycle_count"],
-                    "active_concepts": result["active_concepts"],
-                    "emotional_state": result["emotional_state"],
-                })
+                await broadcast_event(
+                    "processing_complete",
+                    {
+                        "response": result["response"],
+                        "processing_time": result["processing_time"],
+                        "cycle_count": result["cycle_count"],
+                        "active_concepts": result["active_concepts"],
+                        "emotional_state": result["emotional_state"],
+                    },
+                )
 
             elif action == "get_state":
                 # Return current brain state
                 state = brain.get_state()
-                await websocket.send_text(json.dumps({
-                    "type": "brain_state",
-                    "data": state,
-                    "timestamp": time_module.time(),
-                }))
+                await websocket.send_text(
+                    json.dumps(
+                        {
+                            "type": "brain_state",
+                            "data": state,
+                            "timestamp": time_module.time(),
+                        }
+                    )
+                )
 
             else:
-                await websocket.send_text(json.dumps({
-                    "type": "error",
-                    "data": {"message": f"Unknown action: {action}"},
-                    "timestamp": time_module.time(),
-                }))
+                await websocket.send_text(
+                    json.dumps(
+                        {
+                            "type": "error",
+                            "data": {"message": f"Unknown action: {action}"},
+                            "timestamp": time_module.time(),
+                        }
+                    )
+                )
 
     except WebSocketDisconnect:
         pass

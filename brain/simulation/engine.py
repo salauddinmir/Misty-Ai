@@ -6,14 +6,14 @@ processes synaptic transmission between populations, optionally
 applies STDP learning, and records spike history.
 """
 
-from typing import Dict, List, Optional
+from typing import Dict, List
 
 import numpy as np
 
 from brain.regions.region import BrainRegion
-from brain.synapses.network import SynapticNetwork
 from brain.simulation.config import SimulationConfig
 from brain.simulation.recorder import SpikeRecorder
+from brain.synapses.network import SynapticNetwork
 
 
 class SimulationEngine:
@@ -38,8 +38,8 @@ class SimulationEngine:
         self,
         regions: List[BrainRegion],
         network: SynapticNetwork,
-        config: Optional[SimulationConfig] = None,
-        recorder: Optional[SpikeRecorder] = None,
+        config: SimulationConfig | None = None,
+        recorder: SpikeRecorder | None = None,
     ) -> None:
         """Initialize the simulation engine.
 
@@ -93,9 +93,7 @@ class SimulationEngine:
 
             # Record spikes
             if self.config.record_spikes and self.current_step >= self.config.settling_steps:
-                self.recorder.add_spikes(
-                    region.name, self.current_step, spikes
-                )
+                self.recorder.add_spikes(region.name, self.current_step, spikes)
 
         self.current_step += 1
         return self._spike_dict.copy()
@@ -109,9 +107,7 @@ class SimulationEngine:
         for _ in range(n_steps):
             self.step()
 
-    def inject_current(
-        self, region_name: str, currents: np.ndarray
-    ) -> None:
+    def inject_current(self, region_name: str, currents: np.ndarray) -> None:
         """Inject external current into a specific region.
 
         Adds the specified currents to the region's input buffer

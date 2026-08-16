@@ -6,9 +6,9 @@ Supports forward chaining (data-driven) and backward chaining
 """
 
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 
-from brain.reasoning.rules import Rule, RuleBase
+from brain.reasoning.rules import RuleBase
 
 
 @dataclass
@@ -44,17 +44,19 @@ class InferenceEngine:
 
                     if key not in all_facts:
                         self.derived_facts[key] = value
-                        new_facts.append({
-                            "key": key,
-                            "value": value,
-                            "derived_from": rule.name,
-                            "confidence": rule.confidence,
-                        })
+                        new_facts.append(
+                            {
+                                "key": key,
+                                "value": value,
+                                "derived_from": rule.name,
+                                "confidence": rule.confidence,
+                            }
+                        )
                         changed = True
 
         return new_facts
 
-    def backward_chain(self, goal_key: str) -> Optional[Any]:
+    def backward_chain(self, goal_key: str) -> Any | None:
         """Apply backward chaining - try to prove a goal."""
         if goal_key in self.working_facts:
             return self.working_facts[goal_key]
@@ -80,7 +82,7 @@ class InferenceEngine:
 
         return None
 
-    def query(self, key: str) -> Optional[Any]:
+    def query(self, key: str) -> Any | None:
         """Query for a fact, using inference if needed."""
         if key in self.working_facts:
             return self.working_facts[key]

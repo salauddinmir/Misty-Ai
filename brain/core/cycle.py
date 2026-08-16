@@ -8,11 +8,12 @@ PLAN -> ACT -> EVALUATE -> LEARN -> CONSOLIDATE
 
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 
 
 class CognitivePhase(str, Enum):
     """Phases of the cognitive cycle."""
+
     IDLE = "idle"
     OBSERVE = "observe"
     INTERPRET = "interpret"
@@ -65,7 +66,7 @@ class CognitiveCycle:
         self.current_phase = CognitivePhase.OBSERVE
         return self.current_phase
 
-    def advance(self, result: CycleResult) -> Optional[CognitivePhase]:
+    def advance(self, result: CycleResult) -> CognitivePhase | None:
         """Advance to the next phase after recording result."""
         self.phase_results.append(result)
 
@@ -78,7 +79,7 @@ class CognitiveCycle:
             self.current_phase = CognitivePhase.IDLE
             return None
 
-    def get_phase_result(self, phase: CognitivePhase) -> Optional[CycleResult]:
+    def get_phase_result(self, phase: CognitivePhase) -> CycleResult | None:
         """Get the result from a specific phase in the current cycle."""
         for result in self.phase_results:
             if result.phase == phase:
@@ -90,7 +91,4 @@ class CognitiveCycle:
         return self.current_phase != CognitivePhase.IDLE
 
     def __repr__(self) -> str:
-        return (
-            f"CognitiveCycle(phase={self.current_phase.value}, "
-            f"cycles={self.cycle_count})"
-        )
+        return f"CognitiveCycle(phase={self.current_phase.value}, cycles={self.cycle_count})"

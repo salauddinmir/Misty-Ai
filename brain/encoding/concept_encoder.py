@@ -6,7 +6,7 @@ Each concept gets a unique binary pattern with configurable sparsity,
 enabling efficient neural representation and similarity computation.
 """
 
-from typing import Dict, List, Optional
+from typing import Dict, List
 
 import numpy as np
 
@@ -68,9 +68,7 @@ class ConceptEncoder:
         self.patterns[concept_id] = pattern
         return pattern.copy()
 
-    def register_concept(
-        self, concept_id: str, pattern: Optional[np.ndarray] = None
-    ) -> np.ndarray:
+    def register_concept(self, concept_id: str, pattern: np.ndarray | None = None) -> np.ndarray:
         """Register a concept with an explicit or auto-generated pattern.
 
         Args:
@@ -94,7 +92,7 @@ class ConceptEncoder:
         else:
             return self.encode_concept(concept_id)
 
-    def get_pattern(self, concept_id: str) -> Optional[np.ndarray]:
+    def get_pattern(self, concept_id: str) -> np.ndarray | None:
         """Retrieve the stored pattern for a concept.
 
         Args:
@@ -134,9 +132,7 @@ class ConceptEncoder:
         n_active = max(1, int(self.population_size * self.sparsity))
 
         # Select random positions (deterministic due to seeded RNG)
-        active_indices = rng.choice(
-            self.population_size, size=n_active, replace=False
-        )
+        active_indices = rng.choice(self.population_size, size=n_active, replace=False)
 
         pattern = np.zeros(self.population_size, dtype=np.float64)
         pattern[active_indices] = 1.0

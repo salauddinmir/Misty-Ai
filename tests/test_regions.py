@@ -11,14 +11,13 @@ Tests cover:
 """
 
 import numpy as np
-import pytest
 
-from brain.regions.region import BrainRegion
-from brain.regions.sensory import SensoryRegion
 from brain.regions.association import AssociationRegion
 from brain.regions.memory_region import MemoryRegion
 from brain.regions.prefrontal import PrefrontalRegion
+from brain.regions.region import BrainRegion
 from brain.regions.reward_region import RewardRegion
+from brain.regions.sensory import SensoryRegion
 
 
 class TestBrainRegion:
@@ -187,6 +186,7 @@ class TestMemoryRegion:
         # May or may not match depending on random, but threshold is high
         # We just verify the interface works
         assert isinstance(similarity, float)
+        assert retrieved is None or retrieved.shape == pattern.shape
 
     def test_multiple_memories_retrieves_best(self) -> None:
         """With multiple stored patterns, retrieves the closest."""
@@ -204,7 +204,7 @@ class TestMemoryRegion:
         # Cue similar to p1
         cue = np.zeros(100)
         cue[:25] = 1.0
-        retrieved, sim = mem.retrieve(cue)
+        retrieved, _sim = mem.retrieve(cue)
         assert retrieved is not None
         # Should have high overlap with p1
         assert np.dot(retrieved, p1 / np.linalg.norm(p1)) > 0.5

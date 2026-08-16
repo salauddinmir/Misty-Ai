@@ -5,9 +5,9 @@ Holds the complete current state of the brain including
 all subsystem states, active concepts, and processing context.
 """
 
+import time as time_module
 from dataclasses import dataclass, field
 from typing import Any, Dict
-import time as time_module
 
 
 @dataclass

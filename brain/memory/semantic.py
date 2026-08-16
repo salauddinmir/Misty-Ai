@@ -5,7 +5,7 @@ Stores facts and concepts linked to the knowledge graph.
 """
 
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional
+from typing import Dict, List
 
 
 @dataclass
@@ -55,9 +55,9 @@ class SemanticMemory:
 
     def query(
         self,
-        subject: Optional[str] = None,
-        predicate: Optional[str] = None,
-        obj: Optional[str] = None,
+        subject: str | None = None,
+        predicate: str | None = None,
+        obj: str | None = None,
     ) -> List[SemanticFact]:
         """Query semantic memory with optional filters."""
         results = []

@@ -4,9 +4,9 @@ Procedural Memory.
 Stores learned procedures and rules that the brain can execute.
 """
 
-from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional
 import uuid
+from dataclasses import dataclass, field
+from typing import Dict, List
 
 
 @dataclass
@@ -58,13 +58,10 @@ class ProceduralMemory:
 
     def find_matching(self, context: str) -> List[Procedure]:
         """Find procedures whose condition matches the given context."""
-        matches = [
-            proc for proc in self.procedures.values()
-            if proc.condition.lower() in context.lower()
-        ]
+        matches = [proc for proc in self.procedures.values() if proc.condition.lower() in context.lower()]
         return sorted(matches, key=lambda p: p.strength, reverse=True)
 
-    def get_strongest(self, context: str) -> Optional[Procedure]:
+    def get_strongest(self, context: str) -> Procedure | None:
         """Get the strongest matching procedure for a context."""
         matches = self.find_matching(context)
         return matches[0] if matches else None

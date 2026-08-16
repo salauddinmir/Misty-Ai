@@ -8,9 +8,8 @@ A biologically-inspired neuron model that:
 - Enters a refractory period after firing
 """
 
-from dataclasses import dataclass, field
-from typing import Optional
 import uuid
+from dataclasses import dataclass, field
 
 
 @dataclass
@@ -52,9 +51,7 @@ class LIFNeuron:
 
         # Integrate: decay toward rest and add input current
         self.membrane_potential = (
-            self.decay * (self.membrane_potential - self.rest_potential)
-            + self.rest_potential
-            + input_current
+            self.decay * (self.membrane_potential - self.rest_potential) + self.rest_potential + input_current
         )
 
         # Fire if above threshold

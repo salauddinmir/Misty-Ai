@@ -5,7 +5,7 @@ Creates and manages plans to achieve goals.
 """
 
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 
 from brain.planner.goals import Goal, GoalStatus
 
@@ -32,7 +32,7 @@ class Plan:
         """Whether all steps have been completed."""
         return self.current_step >= len(self.steps)
 
-    def next_step(self) -> Optional[PlanStep]:
+    def next_step(self) -> PlanStep | None:
         """Get the next step to execute."""
         if self.is_complete:
             return None
@@ -97,12 +97,9 @@ class Planner:
         goal.activate()
         return plan
 
-    def get_current_plan(self) -> Optional[Plan]:
+    def get_current_plan(self) -> Plan | None:
         """Get the plan for the highest-priority active goal."""
-        active_goals = [
-            g for g in self.goals.values()
-            if g.status == GoalStatus.ACTIVE
-        ]
+        active_goals = [g for g in self.goals.values() if g.status == GoalStatus.ACTIVE]
         if not active_goals:
             return None
 

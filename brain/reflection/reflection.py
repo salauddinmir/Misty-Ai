@@ -99,7 +99,4 @@ class ReflectionEngine:
         return self.success_count / self.cycle_count
 
     def __repr__(self) -> str:
-        return (
-            f"ReflectionEngine(cycles={self.cycle_count}, "
-            f"success_rate={self.overall_success_rate:.2f})"
-        )
+        return f"ReflectionEngine(cycles={self.cycle_count}, success_rate={self.overall_success_rate:.2f})"

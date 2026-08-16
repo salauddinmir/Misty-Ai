@@ -6,13 +6,13 @@ VectorizedPopulation instances using scipy.sparse matrices for
 memory-efficient storage and fast matrix-vector multiplication.
 """
 
-from dataclasses import dataclass, field
-from typing import Dict, List, Optional, Tuple
+from dataclasses import dataclass
+from typing import Dict, List, Tuple
 
 import numpy as np
 from scipy.sparse import csr_matrix, lil_matrix
 
-from brain.neurons.vectorized import VectorizedPopulation, NeuronType
+from brain.neurons.vectorized import VectorizedPopulation
 
 
 @dataclass
@@ -63,9 +63,7 @@ class SynapticNetwork:
             ValueError: If a population with the same name already exists.
         """
         if population.name in self.populations:
-            raise ValueError(
-                f"Population '{population.name}' already registered in network."
-            )
+            raise ValueError(f"Population '{population.name}' already registered in network.")
         self.populations[population.name] = population
 
     def connect_populations(
@@ -74,7 +72,7 @@ class SynapticNetwork:
         target: VectorizedPopulation,
         probability: float = 0.1,
         weight_range: Tuple[float, float] = (0.01, 0.1),
-        seed: Optional[int] = None,
+        seed: int | None = None,
     ) -> ConnectionInfo:
         """Create feed-forward connections from source to target population.
 
@@ -108,9 +106,7 @@ class SynapticNetwork:
         conn_mask = rng.random((target.size, source.size)) < probability
 
         # Generate random weights in the given range
-        weights = rng.uniform(
-            weight_range[0], weight_range[1], size=(target.size, source.size)
-        )
+        weights = rng.uniform(weight_range[0], weight_range[1], size=(target.size, source.size))
 
         # Apply Dale's law: sign determined by source neuron type
         # source.type_array shape is (source.size,), broadcast across rows
@@ -137,7 +133,7 @@ class SynapticNetwork:
         probability: float = 0.05,
         weight_range: Tuple[float, float] = (0.01, 0.05),
         allow_autapse: bool = False,
-        seed: Optional[int] = None,
+        seed: int | None = None,
     ) -> ConnectionInfo:
         """Create recurrent (self) connections within a single population.
 

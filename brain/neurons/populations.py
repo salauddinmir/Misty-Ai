@@ -5,9 +5,9 @@ Manages groups of neurons that represent concepts, features,
 or processing layers within the cognitive system.
 """
 
-from dataclasses import dataclass, field
-from typing import Dict, List, Optional
 import uuid
+from dataclasses import dataclass, field
+from typing import Dict, List
 
 from brain.neurons.lif import LIFNeuron
 
@@ -61,7 +61,7 @@ class NeuronPopulation:
             created.append(neuron)
         return created
 
-    def step(self, inputs: Optional[Dict[str, float]] = None) -> Dict[str, bool]:
+    def step(self, inputs: Dict[str, float] | None = None) -> Dict[str, bool]:
         """Advance all neurons by one timestep.
 
         Args:
@@ -80,10 +80,7 @@ class NeuronPopulation:
 
     def get_active_neurons(self) -> List[str]:
         """Get IDs of neurons that just fired (in refractory at max)."""
-        return [
-            nid for nid, neuron in self.neurons.items()
-            if neuron.refractory_counter == neuron.refractory_period
-        ]
+        return [nid for nid, neuron in self.neurons.items() if neuron.refractory_counter == neuron.refractory_period]
 
     def reset(self) -> None:
         """Reset all neurons in this population."""

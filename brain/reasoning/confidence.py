@@ -51,7 +51,4 @@ class ConfidenceScorer:
         return max(self.min_confidence, result)
 
     def __repr__(self) -> str:
-        return (
-            f"ConfidenceScorer(base={self.base_confidence}, "
-            f"decay_per_hop={self.decay_per_hop})"
-        )
+        return f"ConfidenceScorer(base={self.base_confidence}, decay_per_hop={self.decay_per_hop})"

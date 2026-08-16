@@ -12,12 +12,13 @@ Handles the MVP test cases:
 
 import re
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional
 from enum import Enum
+from typing import Any, Dict, List
 
 
 class IntentType(str, Enum):
     """Types of recognized user intents."""
+
     NAME_DECLARATION = "name_declaration"
     RELATION_DECLARATION = "relation_declaration"
     QUERY_WHO = "query_who"
@@ -128,9 +129,7 @@ class NLUParser:
 
         self._en_relation_patterns = [
             # "I am the creator of X" / "I am creator of X"
-            re.compile(
-                r"i\s+am\s+(?:the\s+)?(\w+)\s+of\s+(\w+)", re.IGNORECASE
-            ),
+            re.compile(r"i\s+am\s+(?:the\s+)?(\w+)\s+of\s+(\w+)", re.IGNORECASE),
             # "I created X"
             re.compile(r"i\s+created\s+(\w+)", re.IGNORECASE),
             # "X is a Y" / "X is Y"
@@ -237,11 +236,13 @@ class NLUParser:
                     return ParseResult(
                         intent=IntentType.RELATION_DECLARATION,
                         entities={"target": target, "relation_role": relation},
-                        relations=[{
-                            "source": "__self__",
-                            "relation_type": f"{relation}_of",
-                            "target": target,
-                        }],
+                        relations=[
+                            {
+                                "source": "__self__",
+                                "relation_type": f"{relation}_of",
+                                "target": target,
+                            }
+                        ],
                         raw_text=text,
                         confidence=0.9,
                     )
@@ -252,12 +253,18 @@ class NLUParser:
                     relation = match.group(3)
                     return ParseResult(
                         intent=IntentType.RELATION_DECLARATION,
-                        entities={"subject": subject, "object": obj, "relation": relation},
-                        relations=[{
-                            "source": subject,
-                            "relation_type": f"{relation}_of",
-                            "target": obj,
-                        }],
+                        entities={
+                            "subject": subject,
+                            "object": obj,
+                            "relation": relation,
+                        },
+                        relations=[
+                            {
+                                "source": subject,
+                                "relation_type": f"{relation}_of",
+                                "target": obj,
+                            }
+                        ],
                         raw_text=text,
                         confidence=0.85,
                     )
@@ -334,11 +341,13 @@ class NLUParser:
                     return ParseResult(
                         intent=IntentType.RELATION_DECLARATION,
                         entities={"target": target, "relation_role": relation},
-                        relations=[{
-                            "source": "__self__",
-                            "relation_type": f"{relation}_of",
-                            "target": target,
-                        }],
+                        relations=[
+                            {
+                                "source": "__self__",
+                                "relation_type": f"{relation}_of",
+                                "target": target,
+                            }
+                        ],
                         raw_text=text,
                         confidence=0.85,
                     )
@@ -348,11 +357,13 @@ class NLUParser:
                     return ParseResult(
                         intent=IntentType.RELATION_DECLARATION,
                         entities={"target": target, "relation_role": "creator"},
-                        relations=[{
-                            "source": "__self__",
-                            "relation_type": "creator_of",
-                            "target": target,
-                        }],
+                        relations=[
+                            {
+                                "source": "__self__",
+                                "relation_type": "creator_of",
+                                "target": target,
+                            }
+                        ],
                         raw_text=text,
                         confidence=0.85,
                     )

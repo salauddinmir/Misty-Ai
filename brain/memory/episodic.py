@@ -5,10 +5,10 @@ Stores event-based memories with timestamps, context, and
 emotional valence. Supports temporal retrieval and context-based recall.
 """
 
-from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional
 import time as time_module
 import uuid
+from dataclasses import dataclass, field
+from typing import Any, Dict, List
 
 
 @dataclass
@@ -34,7 +34,7 @@ class EpisodicMemory:
     def store(
         self,
         content: Any,
-        context: Optional[Dict[str, Any]] = None,
+        context: Dict[str, Any] | None = None,
         emotional_valence: float = 0.0,
         importance: float = 0.5,
     ) -> Episode:
@@ -49,7 +49,7 @@ class EpisodicMemory:
 
         if len(self.episodes) > self.max_episodes:
             self.episodes.sort(key=lambda e: e.importance, reverse=True)
-            self.episodes = self.episodes[:self.max_episodes]
+            self.episodes = self.episodes[: self.max_episodes]
 
         return episode
 
@@ -62,10 +62,7 @@ class EpisodicMemory:
 
     def recall_by_context(self, context_key: str, context_value: Any) -> List[Episode]:
         """Recall episodes matching a context attribute."""
-        matches = [
-            ep for ep in self.episodes
-            if ep.context.get(context_key) == context_value
-        ]
+        matches = [ep for ep in self.episodes if ep.context.get(context_key) == context_value]
         for ep in matches:
             ep.access_count += 1
         return matches

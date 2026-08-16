@@ -11,7 +11,6 @@ from typing import Any, Dict
 from fastapi import APIRouter, Request
 from pydantic import BaseModel, Field
 
-
 router = APIRouter()
 
 
@@ -85,7 +84,7 @@ async def chat(request: Request, body: ChatRequest) -> ChatResponse:
     )
 
     # Persist any new concepts to database
-    for concept_id, concept in brain.concept_graph._concepts.items():
+    for concept in brain.concept_graph._concepts.values():
         await database.save_concept(
             concept_id=concept.concept_id,
             name=concept.name,
@@ -106,7 +105,7 @@ async def chat(request: Request, body: ChatRequest) -> ChatResponse:
                 weight=rel["weight"],
                 confidence=rel["confidence"],
             )
-        except Exception:  # noqa: BLE001 - never break chat on persistence glitch
+        except Exception:
             pass
 
     return ChatResponse(

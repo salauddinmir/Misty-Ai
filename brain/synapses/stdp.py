@@ -6,8 +6,8 @@ the postsynaptic neuron (causal timing), and weakens synapses
 when the postsynaptic neuron fires first (anti-causal timing).
 """
 
-from dataclasses import dataclass
 import math
+from dataclasses import dataclass
 
 from brain.synapses.synapse import Synapse
 
@@ -79,7 +79,4 @@ class STDPRule:
         return weight_change
 
     def __repr__(self) -> str:
-        return (
-            f"STDPRule(A+={self.a_plus}, A-={self.a_minus}, "
-            f"tau+={self.tau_plus}, tau-={self.tau_minus})"
-        )
+        return f"STDPRule(A+={self.a_plus}, A-={self.a_minus}, tau+={self.tau_plus}, tau-={self.tau_minus})"

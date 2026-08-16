@@ -165,7 +165,4 @@ class TextEncoder:
         return positions
 
     def __repr__(self) -> str:
-        return (
-            f"TextEncoder(population_size={self.population_size}, "
-            f"rate_range=[{self.min_rate}, {self.max_rate}])"
-        )
+        return f"TextEncoder(population_size={self.population_size}, rate_range=[{self.min_rate}, {self.max_rate}])"

@@ -12,10 +12,7 @@ Also tests:
 - Emotional state changes
 """
 
-import pytest
-
 from brain.core.brain import Brain
-from brain.core.cycle import CognitivePhase
 
 
 class TestBrainInitialization:
@@ -120,9 +117,7 @@ class TestRelationDeclaration:
         assert mistlook is not None
 
         # Check relation exists
-        relations = brain.concept_graph.get_relations(
-            mir.concept_id, direction="outgoing"
-        )
+        relations = brain.concept_graph.get_relations(mir.concept_id, direction="outgoing")
         creator_rels = [r for r in relations if r["relation_type"] == "creator_of"]
         assert len(creator_rels) > 0
         assert creator_rels[0]["target"] == mistlook.concept_id
@@ -189,11 +184,13 @@ class TestMVPEndToEnd:
 
         # Step 1: Name declaration
         r1 = brain.process("\u0986\u09ae\u09be\u09b0 \u09a8\u09be\u09ae Mir\u0964")
+        assert "Mir" in r1["response"]
         assert brain.user_name == "Mir"
         assert brain.concept_graph.get_concept_by_name("Mir") is not None
 
         # Step 2: Relation declaration
         r2 = brain.process("\u0986\u09ae\u09bf MistLook-\u098f\u09b0 creator\u0964")
+        assert r2["response"]
         assert brain.concept_graph.get_concept_by_name("MistLook") is not None
         assert brain.concept_graph.num_relations > 0
 

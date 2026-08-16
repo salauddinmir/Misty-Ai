@@ -5,8 +5,8 @@ A minimal neuron that outputs 1 (active) or 0 (inactive)
 based on whether its input exceeds a threshold.
 """
 
-from dataclasses import dataclass, field
 import uuid
+from dataclasses import dataclass, field
 
 
 @dataclass
@@ -40,7 +40,4 @@ class BinaryNeuron:
         self.state = False
 
     def __repr__(self) -> str:
-        return (
-            f"BinaryNeuron(id={self.neuron_id}, "
-            f"threshold={self.threshold}, state={self.state})"
-        )
+        return f"BinaryNeuron(id={self.neuron_id}, threshold={self.threshold}, state={self.state})"

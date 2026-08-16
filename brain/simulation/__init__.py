@@ -7,7 +7,7 @@ rules, and records spike history.
 """
 
 from brain.simulation.config import SimulationConfig
-from brain.simulation.recorder import SpikeRecorder
 from brain.simulation.engine import SimulationEngine
+from brain.simulation.recorder import SpikeRecorder
 
-__all__ = ["SimulationConfig", "SpikeRecorder", "SimulationEngine"]
+__all__ = ["SimulationConfig", "SimulationEngine", "SpikeRecorder"]

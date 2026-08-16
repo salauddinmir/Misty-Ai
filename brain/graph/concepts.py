@@ -5,10 +5,10 @@ Represents concepts as nodes in a NetworkX graph with
 activation levels, types, and metadata.
 """
 
-from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional
 import time as time_module
 import uuid
+from dataclasses import dataclass, field
+from typing import Any, Dict, List
 
 import networkx as nx
 
@@ -44,10 +44,7 @@ class Concept:
         }
 
     def __repr__(self) -> str:
-        return (
-            f"Concept(name={self.name}, type={self.concept_type}, "
-            f"activation={self.activation_level:.3f})"
-        )
+        return f"Concept(name={self.name}, type={self.concept_type}, activation={self.activation_level:.3f})"
 
 
 class ConceptGraph:
@@ -72,7 +69,7 @@ class ConceptGraph:
         self,
         name: str,
         concept_type: str = "generic",
-        metadata: Optional[Dict[str, Any]] = None,
+        metadata: Dict[str, Any] | None = None,
     ) -> Concept:
         """Create and add a new concept to the graph."""
         concept = Concept(
@@ -83,11 +80,11 @@ class ConceptGraph:
         self.add_concept(concept)
         return concept
 
-    def get_concept(self, concept_id: str) -> Optional[Concept]:
+    def get_concept(self, concept_id: str) -> Concept | None:
         """Get a concept by its ID."""
         return self._concepts.get(concept_id)
 
-    def get_concept_by_name(self, name: str) -> Optional[Concept]:
+    def get_concept_by_name(self, name: str) -> Concept | None:
         """Get a concept by its name (case-insensitive)."""
         concept_id = self._name_index.get(name.lower())
         if concept_id:
@@ -125,30 +122,34 @@ class ConceptGraph:
 
         if direction in ("outgoing", "both"):
             for _, target, data in self._graph.out_edges(concept_id, data=True):
-                relations.append({
-                    "source": concept_id,
-                    "target": target,
-                    "relation_type": data.get("relation_type", "related_to"),
-                    "weight": data.get("weight", 1.0),
-                    "confidence": data.get("confidence", 1.0),
-                })
+                relations.append(
+                    {
+                        "source": concept_id,
+                        "target": target,
+                        "relation_type": data.get("relation_type", "related_to"),
+                        "weight": data.get("weight", 1.0),
+                        "confidence": data.get("confidence", 1.0),
+                    }
+                )
 
         if direction in ("incoming", "both"):
             for source, _, data in self._graph.in_edges(concept_id, data=True):
-                relations.append({
-                    "source": source,
-                    "target": concept_id,
-                    "relation_type": data.get("relation_type", "related_to"),
-                    "weight": data.get("weight", 1.0),
-                    "confidence": data.get("confidence", 1.0),
-                })
+                relations.append(
+                    {
+                        "source": source,
+                        "target": concept_id,
+                        "relation_type": data.get("relation_type", "related_to"),
+                        "weight": data.get("weight", 1.0),
+                        "confidence": data.get("confidence", 1.0),
+                    }
+                )
 
         return relations
 
     def find_related(
         self,
         concept_id: str,
-        relation_type: Optional[str] = None,
+        relation_type: str | None = None,
         direction: str = "outgoing",
     ) -> List[Concept]:
         """Find concepts related to a given concept."""
@@ -194,13 +195,15 @@ class ConceptGraph:
         """
         relations = []
         for source_id, target_id, data in self._graph.edges(data=True):
-            relations.append({
-                "source_id": source_id,
-                "target_id": target_id,
-                "relation_type": data.get("relation_type", "related_to"),
-                "weight": data.get("weight", 1.0),
-                "confidence": data.get("confidence", 1.0),
-            })
+            relations.append(
+                {
+                    "source_id": source_id,
+                    "target_id": target_id,
+                    "relation_type": data.get("relation_type", "related_to"),
+                    "weight": data.get("weight", 1.0),
+                    "confidence": data.get("confidence", 1.0),
+                }
+            )
         return relations
 
     @property
