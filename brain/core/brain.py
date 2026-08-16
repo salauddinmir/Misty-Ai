@@ -13,6 +13,7 @@ import numpy as np
 
 from brain.core.cycle import CognitiveCycle, CognitivePhase, CycleResult
 from brain.core.state import BrainState
+from brain.dialogue.context import DialogueContext
 from brain.emotion.state import EmotionalState
 from brain.graph.activation import SpreadingActivation
 from brain.graph.concepts import ConceptGraph
@@ -24,6 +25,7 @@ from brain.memory.procedural import ProceduralMemory
 from brain.memory.semantic import SemanticMemory
 from brain.memory.working import WorkingMemory
 from brain.neurons.populations import NeuronPopulation
+from brain.nlu.coreference import resolve_entities
 from brain.nlu.parser import IntentType, NLUParser, ParseResult
 from brain.planner.planner import Planner
 from brain.reasoning.inference import InferenceEngine
@@ -89,6 +91,9 @@ class Brain:
 
         # NLU
         self.nlu = NLUParser()
+
+        # Multi-turn dialogue context (Phase 3)
+        self.dialogue_context = DialogueContext()
 
         # Cognitive cycle
         self.cycle = CognitiveCycle()
@@ -176,6 +181,10 @@ class Brain:
         start_time = time_module.time()
         self.state.last_input = text_input
 
+        # Record the user turn in the dialogue context so later turns
+        # can resolve pronouns ("সে", "it", "its") back to this turn.
+        self.dialogue_context.add_turn(text_input, role="user")
+
         # Start cognitive cycle
         self.cycle.start_cycle()
 
@@ -227,6 +236,17 @@ class Brain:
         processing_time = time_module.time() - start_time
         response = act_result.data.get("response", "")
         self.state.last_output = response
+
+        # Record the brain turn so the next user turn can resolve
+        # pronouns back to this exchange.
+        self.dialogue_context.add_turn(
+            text=response,
+            role="brain",
+            entities=self.dialogue_context.extract_from_text(response)
+            if hasattr(self.dialogue_context, "extract_from_text")
+            else None,
+            intent=(interpret_result.data.get("intent", "unknown") if interpret_result is not None else "unknown"),
+        )
         self.state.cycle_count = self.cycle.cycle_count
         self.state.current_phase = "idle"
         self.state.timestamp = time_module.time()
@@ -268,6 +288,11 @@ class Brain:
         self.state.current_phase = "interpret"
         parse_result = self.nlu.parse(text_input)
 
+        # Phase 3 coreference resolution: map pronoun-targeted queries and
+        # pronoun-only inputs to the most salient entity from the ongoing
+        # conversation (e.g. "সে কে?" -> target = last mentioned name).
+        self._resolve_coreference(parse_result)
+
         self.working_memory.store(
             "parse_result",
             {
@@ -286,6 +311,62 @@ class Brain:
             },
             success=parse_result.confidence > 0.3,
         )
+
+    def _resolve_coreference(self, parse_result: ParseResult) -> None:
+        """Resolve pronoun references in a freshly parsed result.
+
+        Empty or pronoun query targets are replaced with the most
+        salient entity from the dialogue context, and pronoun-only
+        inputs inherit that entity so the ACT phase can answer them.
+        """
+        salient = self.dialogue_context.get_salient_entities()
+        if not salient:
+            return
+
+        target = parse_result.query.get("target", "")
+        if parse_result.intent in (IntentType.QUERY_WHO, IntentType.QUERY_WHAT):
+            if not target or target in self._PRONOUN_TOKENS:
+                parse_result.query["target"] = salient[0]
+                parse_result.entities["coreference_target"] = salient[0]
+
+        if not parse_result.entities and parse_result.intent in (
+            IntentType.STATEMENT,
+            IntentType.UNKNOWN,
+            IntentType.CONTINUATION,
+            IntentType.CORRECTION,
+            IntentType.TEACH,
+        ):
+            resolved = resolve_entities(parse_result.raw_text, salient)
+            if resolved:
+                parse_result.entities["resolved_entities"] = resolved
+
+    _PRONOUN_TOKENS = frozenset(
+        {
+            # Bengali pronouns
+            "সে",
+            "তার",
+            "এটা",
+            "ওটা",
+            "এই",
+            "সেই",
+            "এ",
+            "ও",
+            "তারা",
+            # English pronouns
+            "it",
+            "its",
+            "him",
+            "her",
+            "he",
+            "she",
+            "this",
+            "that",
+            "these",
+            "those",
+            "them",
+            "their",
+        }
+    )
 
     def _phase_recall(self, parse_result: ParseResult | None) -> CycleResult:
         """RECALL phase: Retrieve relevant memories."""
@@ -482,6 +563,10 @@ class Brain:
             plan = "answer_query"
         elif parse_result.intent == IntentType.GREETING:
             plan = "greet_back"
+        elif parse_result.intent in (IntentType.TEACH, IntentType.STATEMENT, IntentType.CORRECTION):
+            plan = "absorb_knowledge"
+        elif parse_result.intent == IntentType.CONTINUATION:
+            plan = "continue_topic"
         else:
             plan = "acknowledge"
 
@@ -518,6 +603,21 @@ class Brain:
 
         elif parse_result.intent == IntentType.QUERY_WHO:
             response, confidence = self._act_query(parse_result, recall_data)
+
+        elif parse_result.intent == IntentType.QUERY_WHAT:
+            response, confidence = self._act_query_what(parse_result, recall_data)
+
+        elif parse_result.intent == IntentType.STATEMENT:
+            response, confidence = self._act_statement(parse_result)
+
+        elif parse_result.intent == IntentType.TEACH:
+            response, confidence = self._act_teach(parse_result)
+
+        elif parse_result.intent == IntentType.CORRECTION:
+            response, confidence = self._act_correction(parse_result)
+
+        elif parse_result.intent == IntentType.CONTINUATION:
+            response, confidence = self._act_continuation(parse_result)
 
         elif parse_result.intent == IntentType.GREETING:
             name_part = f", {self.user_name}" if self.user_name else ""
@@ -671,6 +771,156 @@ class Brain:
             '"Y কে তৈরি করেছে?"'
         )
         return response, 0.3
+
+    def _act_query_what(self, parse_result: ParseResult, recall_data: Dict[str, Any]) -> tuple:
+        """Handle definition (is_a / means) queries like "মিস্টি মানে কী?".
+
+        Looks up is_a facts in the knowledge graph and semantic memory,
+        and falls back to a humble "still learning" answer that mentions
+        the asked-about entity so the user can teach it.
+        """
+        target_name = parse_result.query.get("target", "")
+        if not target_name:
+            return self._act_unknown(parse_result)
+
+        facts = self.semantic_memory.query(subject=target_name, predicate="is_a")
+        if facts:
+            definitions = [fact.obj for fact in facts]
+            return f"{target_name} হলো {', '.join(definitions[:3])}।", 0.9
+
+        concept = self.concept_graph.get_concept_by_name(target_name)
+        if concept and concept.concept_type and concept.concept_type != "Entity":
+            return f"{target_name} হলো {concept.concept_type}।", 0.8
+
+        recalled = recall_data.get("semantic_facts", [])
+        for fact in recalled:
+            if fact.get("subject") == target_name and fact.get("predicate") == "is_a":
+                return f"{target_name} হলো {fact.get('obj', '')}।", 0.85
+
+        self.emotion.update_from_outcome(success=False)
+        return (f'আমি এখনো {target_name} সম্পর্কে জানি না। আপনি বলতে পারেন: "{target_name} হলো X" — তাহলে আমি মনে রাখব।'), 0.3
+
+    def _act_statement(self, parse_result: ParseResult) -> tuple:
+        """Handle ordinary assertions like "মিস্টি হলো এআই" (is_a fact)
+        or plain statements without actionable structure.
+
+        Extracted is_a facts are stored in the knowledge graph and
+        semantic memory; unresolved statements are acknowledged with
+        context-aware humility referencing recent conversation.
+        """
+        facts = parse_result.facts if hasattr(parse_result, "facts") and parse_result.facts else []
+        stored = []
+        for fact in facts:
+            subject = fact.get("subject", "").strip()
+            obj = fact.get("obj", "").strip()
+            if not subject or not obj:
+                continue
+            concept = self.concept_graph.get_concept_by_name(subject)
+            if not concept:
+                concept = self.concept_graph.create_concept(name=subject, concept_type="Entity")
+            target = self.concept_graph.get_concept_by_name(obj)
+            if not target:
+                target = self.concept_graph.create_concept(name=obj, concept_type="Category")
+            self.concept_graph.add_relation(
+                source_id=concept.concept_id,
+                target_id=target.concept_id,
+                relation_type="is_a",
+            )
+            self.semantic_memory.store_fact(subject=subject, predicate="is_a", obj=obj)
+            if self.use_neural_sim and self._concept_encoder is not None:
+                self._concept_encoder.encode_concept(subject)
+                self._concept_encoder.encode_concept(obj)
+            stored.append(f"{subject} -> is_a -> {obj}")
+
+        if stored:
+            response = f"ধন্যবাদ! আমি শিখেছি: {', '.join(stored)}। এটা আমার জ্ঞান গ্রাফে সংরক্ষিত হয়েছে।"
+            return response, 0.9
+
+        # Plain statement without extractable facts: acknowledge using
+        # the current conversation context so it does not feel robotic.
+        salient = self.dialogue_context.get_salient_entities()
+        context_hint = salient[0] if salient else ""
+        context_part = f" ({context_hint} নিয়ে)" if context_hint else ""
+        return (
+            f"আমি আপনার কথাটি শুনলাম{context_part}, কিন্তু এখনো "
+            "এটি সম্পূর্ণ বুঝতে শিখিনি। আপনি চাইলে শেখাতে পারেন: "
+            '"মনে রাখো ..." বা "X হলো Y" ফরম্যাটে।'
+        ), 0.5
+
+    def _act_teach(self, parse_result: ParseResult) -> tuple:
+        """Handle explicit teaching ("মনে রাখো ...", "I know that ...").
+
+        The full statement is stored verbatim in episodic memory and the
+        extracted fact (if any) is added to the semantic layer.
+        """
+        raw = parse_result.raw_text
+        facts = parse_result.facts if hasattr(parse_result, "facts") and parse_result.facts else []
+        for fact in facts:
+            subject, obj = fact.get("subject", ""), fact.get("obj", "")
+            if subject and obj:
+                self.semantic_memory.store_fact(subject=subject, predicate="is_a", obj=obj)
+                self.episodic_memory.store(
+                    content={"type": "taught_fact", "subject": subject, "obj": obj},
+                    emotional_valence=0.7,
+                    importance=0.8,
+                )
+                return f"মনে রাখা হয়েছে: {subject} হলো {obj}।", 0.9
+
+        self.episodic_memory.store(
+            content={"type": "taught_statement", "text": raw},
+            emotional_valence=0.6,
+            importance=0.7,
+        )
+        return f"আমি মনে রাখলাম: {raw}", 0.7
+
+    def _act_correction(self, parse_result: ParseResult) -> tuple:
+        """Handle corrections ("আসলে মিস্টি", "no, it is Misty").
+
+        Treats the first resolved entity in the correction as the
+        intended identity and acknowledges it.
+        """
+        candidates = []
+        for value in parse_result.entities.values():
+            if isinstance(value, str) and value:
+                candidates.append(value)
+            elif isinstance(value, list):
+                candidates.extend(v for v in value if isinstance(v, str))
+        if candidates:
+            correction_target = candidates[0]
+            return (f"ধন্যবাদ সংশোধনের জন্য। আপনি ঠিক বলছেন — {correction_target}। আমি এটা মনে রাখলাম।"), 0.8
+        return ("আমি বুঝতে পেরেছি আপনি সংশোধন করছেন, কিন্তু কী সংশোধন করতে চাইছেন সেটা স্পষ্ট করে বলুন।"), 0.5
+
+    def _act_continuation(self, parse_result: ParseResult) -> tuple:
+        """Handle conversational continuations ("আরো বলো", "more").
+
+        Reuses the most salient topic from the ongoing dialogue so the
+        brain keeps talking about what the user just asked about.
+        """
+        salient = self.dialogue_context.get_salient_entities()
+        topic = salient[0] if salient else None
+        if not topic:
+            name_part = f" আপনার নাম {self.user_name}" if self.user_name else ""
+            return (
+                f"আপনি আমাকে আলো করার জন্য বলছেন{name_part}, কিন্তু "
+                "আমার মনে এখনো আগের কোনো টপিক নেই যেটা আমি আরো বলতে "
+                "পারি। আমাকে কিছু শেখান বা কিছু জিজ্ঞেস করুন।"
+            ), 0.6
+
+        facts = self.semantic_memory.query(subject=topic, predicate="is_a")
+        if facts:
+            detail = ", ".join(fact.obj for fact in facts[:2])
+            return (
+                f"আমি {topic} নিয়ে বলছি — {topic} হলো {detail}। এর বেশি জানতে চাইলে বলুন 'আমি {topic}-এর তথ্য দাও'।"
+            ), 0.8
+
+        topic_concept = self.concept_graph.get_concept_by_name(topic)
+        related = []
+        if topic_concept:
+            related = self.concept_graph.find_related(topic_concept.concept_id, direction="outgoing")
+        if related:
+            names = [concept.name for concept in related[:3]]
+            return f"{topic} নিয়ে আমার জ্ঞান: সম্পর্কিত ধারণা — {', '.join(names)}।", 0.7
+        return (f"{topic} নিয়ে আমি এখনো বেশি কিছু জানি না। আপনি কি আমাকে আরো শেখাবেন?"), 0.5
 
     def _phase_evaluate(self, act_result: CycleResult) -> CycleResult:
         """EVALUATE phase: Assess the response quality."""

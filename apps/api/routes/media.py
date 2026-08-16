@@ -35,7 +35,7 @@ class MediaRequest(BaseModel):
         sample_rate: Audio sample rate in Hz (only used for ``audio``).
     """
 
-    modality: str = Field(..., description="\"image\" or \"audio\".")
+    modality: str = Field(..., description='"image" or "audio".')
     data: str = Field(..., description="Base64-encoded raw input data.")
     message: str = Field(default="", description="Optional text context.")
     sample_rate: int = Field(default=16000, description="Audio sample rate in Hz.")

@@ -24,6 +24,9 @@ class IntentType(str, Enum):
     QUERY_WHO = "query_who"
     QUERY_WHAT = "query_what"
     STATEMENT = "statement"
+    TEACH = "teach"
+    CORRECTION = "correction"
+    CONTINUATION = "continuation"
     GREETING = "greeting"
     UNKNOWN = "unknown"
 
@@ -47,6 +50,9 @@ class ParseResult:
     query: Dict[str, str] = field(default_factory=dict)
     raw_text: str = ""
     confidence: float = 1.0
+    # Extracted classification facts {subject, obj} from is_a / means
+    # patterns (used by the brain's absorption handlers in Phase 3).
+    facts: List[Dict[str, str]] = field(default_factory=list)
 
 
 class NLUParser:
@@ -69,14 +75,23 @@ class NLUParser:
         ]
 
         self._bn_relation_patterns = [
-            # "আমি X-এর creator" / "আমি X-এর Y"
+            # "আমি X-এর Y Z" (I am Y of X, Z) / "আমি Xের Y Z"
+            # group(1)=possessor X, group(2)=role Y, group(3)=target Z.
+            # The possessive marker attaches with a hyphen ("-এর") or
+            # directly ("সালাউদ্দিনের"), so it must not require a space.
+            # "আমি Xের Y Z" (possessive এর attached directly to X)
             re.compile(
-                r"আমি\s+([A-Za-z\u0980-\u09FF]+)-এর\s+([A-Za-z\u0980-\u09FF]+)",
+                # "আমি X-এর Y Z" / "আমি Xের Y Z" — possessive marker may
+                # attach with a hyphen ("-এর") or directly ("Xের").
+                # Longer possessive forms first (-(এর|ের) before bare র) so
+                # "রহিমের" is not wrongly split as "রহিমে" + "র".
+                r"আমি\s+([A-Za-z\u0980-\u09FF]+?)(?:-এর|-ের|ের|র)\s+([A-Za-z\u0980-\u09FF]+)\s+([A-Za-z\u0980-\u09FF]+)",
                 re.UNICODE,
             ),
-            # "আমি X এর creator"
+            # "আমি X-এর Y" (I am Y of X) — must not be followed by another
+            # word, otherwise the 3-group pattern above should apply first.
             re.compile(
-                r"আমি\s+([A-Za-z\u0980-\u09FF]+)\s+এর\s+([A-Za-z\u0980-\u09FF]+)",
+                r"আমি\s+([A-Za-z\u0980-\u09FF]+?)(?:-এর|-ের|ের|র)\s+([A-Za-z\u0980-\u09FF]+)(?!\s+[A-Za-z\u0980-\u09FF])",
                 re.UNICODE,
             ),
             # "X হলো Y-এর Z" (X is Z of Y)
@@ -112,6 +127,48 @@ class NLUParser:
         self._bn_greeting_patterns = [
             re.compile(r"(হ্যালো|হাই|নমস্কার|আসসালামু|সালাম)", re.UNICODE),
         ]
+
+        # Bengali correction signals that start a turn (highest priority in
+        # Bengali path). Examples: "না, ভুল হয়েছে", "আসলে মিস্টি",
+        # "এটা সালাউদ্দিন".
+        self._bn_correction_patterns = [
+            # "এটা" followed by "কী/কি" is a definition question, not a
+            # correction, so those continuations are excluded here.
+            re.compile(
+                r"^\s*(না[ ,।]|ভুল|আসলে\s|এটা\s(?!কী|কি))",
+                re.UNICODE,
+            ),
+        ]
+
+        # Bengali explicit teaching: "আমি জানি যে ...", "মনে রাখো ..."
+        self._bn_teach_patterns = [
+            re.compile(r"(?:আমি জানি যে|মনে রাখো|মনে রাখুন|শেখো যে)\s+(.+)", re.UNICODE),
+        ]
+
+        # Bengali "X হলো Y" generic assertion (statement with is_a relation).
+        # Skipped below when the text already matched a relation-declaration
+        # pattern, so "X হলো Y-এর Z" is not double-matched.
+        self._bn_is_a_pattern = re.compile(
+            r"([A-Za-z\u0980-\u09FF]+)\s+হলো\s+([A-Za-z\u0980-\u09FF]+)",
+            re.UNICODE,
+        )
+
+        # Bengali definition queries: "X মানে কী?"
+        self._bn_what_query_pattern = re.compile(
+            r"([A-Za-z\u0980-\u09FF]+)\s+মানে\s+(কী|কি)\s*[?\u0964\uff1f]?",
+            re.UNICODE,
+        )
+
+        # Bengali pronoun-targeted queries with an empty target, to be
+        # resolved against the dialogue context by the brain:
+        # "সে কে?", "এটা কী?", "তার creator কে?"
+        # "সে কে?" / "এটা কী?" / "সে কী।" — the trailing word boundary
+        # cannot use \b because it does not recognize Bengali characters,
+        # so the pattern anchors at optional sentence-ending punctuation.
+        self._bn_pronoun_query_pattern = re.compile(
+            r"(সে|এটা|ওটা|এই|সেই)\s+(কে|কী|কি)\s*[?।\u0964]?\s*$",
+            re.UNICODE,
+        )
 
         # Bengali interrogative words that must NEVER be captured as a name.
         # Prevents inputs like "আমার নাম কি?" being parsed as a name declaration.
@@ -149,6 +206,30 @@ class NLUParser:
             re.compile(r"^(hello|hi|hey|greetings)\b", re.IGNORECASE),
         ]
 
+        # English correction signals that start a turn.
+        self._en_correction_patterns = [
+            re.compile(r"^\s*(no\b|wrong\b|actually\b|it is\b|it's\b|that's wrong)", re.IGNORECASE),
+        ]
+
+        # English explicit teaching: "learn that ...", "remember that ..."
+        self._en_teach_patterns = [
+            re.compile(r"(?:learn that|remember that|note that|keep in mind that)\s+(.+)$", re.IGNORECASE),
+        ]
+
+        # English "X means Y" / "X is a/an Y" assertions
+        self._en_is_a_pattern = re.compile(
+            r"(\w+)\s+(?:means|is a|is an)\s+(.+)$",
+            re.IGNORECASE,
+        )
+
+        # English pronoun-targeted queries with an empty target, resolved
+        # against the dialogue context by the brain:
+        # "who is he?", "what is it?", "who created her?"
+        self._en_pronoun_query_pattern = re.compile(
+            r"\b(who|what|which)\b\s+.*\b(it|its|him|her|he|she|this|that)\b",
+            re.IGNORECASE,
+        )
+
     def parse(self, text: str) -> ParseResult:
         """Parse input text and extract structured information.
 
@@ -171,6 +252,34 @@ class NLUParser:
         if result.intent != IntentType.UNKNOWN:
             return result
 
+        # Ellipsis/continuation patterns (Bengali or English) map to the
+        # CONTINUATION intent so the brain can reuse the last topic.
+        # Imported lazily to keep the parser importable on its own.
+        from brain.nlu.coreference import is_continuation
+
+        # Continuation triggers must be very short; a sentence with
+        # several words (e.g. "আমার নাম কি?") must never be swallowed
+        # as a continuation even when it contains a trigger word.
+        if is_continuation(text) and len(text.split()) <= 3:
+            return ParseResult(
+                intent=IntentType.CONTINUATION,
+                raw_text=text,
+                confidence=0.6,
+            )
+
+        # Questions that no pattern understood must stay UNKNOWN instead
+        # of becoming a confident-enough statement. This also preserves
+        # the phase-2 guard where "আমার নাম কি?" is not a name
+        # declaration and not an assertion either.
+        is_question = (
+            "?" in text or "\u0964" in text or "\uff1f" in text or re.search(r"\b(কি|কী|কেন|কীভাবে)\b", text, re.UNICODE)
+        )
+        if is_question:
+            return ParseResult(
+                intent=IntentType.UNKNOWN,
+                raw_text=text,
+                confidence=0.3,
+            )
         # Default: treat as unknown statement
         return ParseResult(
             intent=IntentType.STATEMENT,
@@ -180,6 +289,27 @@ class NLUParser:
 
     def _try_bengali(self, text: str) -> ParseResult:
         """Try Bengali pattern matching."""
+        # Check corrections first (a correction overrides anything else)
+        for pattern in self._bn_correction_patterns:
+            if pattern.search(text):
+                return ParseResult(
+                    intent=IntentType.CORRECTION,
+                    raw_text=text,
+                    confidence=0.8,
+                )
+
+        # Check explicit teach patterns
+        for pattern in self._bn_teach_patterns:
+            match = pattern.search(text)
+            if match:
+                taught = match.group(1).strip("।. ")
+                return ParseResult(
+                    intent=IntentType.TEACH,
+                    entities={"taught": taught},
+                    raw_text=text,
+                    confidence=0.8,
+                )
+
         # Check greetings
         for pattern in self._bn_greeting_patterns:
             if pattern.search(text):
@@ -225,12 +355,33 @@ class NLUParser:
                     confidence=0.9,
                 )
 
+        # Check "X হলো Y" generic assertions before relation patterns
+        is_a_match = self._bn_is_a_pattern.search(text)
+
         # Check relation declarations
         for i, pattern in enumerate(self._bn_relation_patterns):
             match = pattern.search(text)
             if match:
-                if i < 2:
-                    # "আমি X-এর Y" pattern
+                if i == 0:
+                    # "আমি X-এর Y Z" pattern
+                    possessor = match.group(1).strip("\u0964. ")
+                    relation = match.group(2).strip("\u0964. ")
+                    target = match.group(3).strip("\u0964. ")
+                    return ParseResult(
+                        intent=IntentType.RELATION_DECLARATION,
+                        entities={"target": target, "relation_role": relation, "possessor": possessor},
+                        relations=[
+                            {
+                                "source": possessor,
+                                "relation_type": f"{relation}_of",
+                                "target": target,
+                            }
+                        ],
+                        raw_text=text,
+                        confidence=0.9,
+                    )
+                if i == 1:
+                    # Legacy "আমি X-এর Y" pattern: I am Y of X
                     target = match.group(1).strip("\u0964. ")
                     relation = match.group(2).strip("\u0964. ")
                     return ParseResult(
@@ -246,7 +397,7 @@ class NLUParser:
                         raw_text=text,
                         confidence=0.9,
                     )
-                else:
+                if i == 2:
                     # "X হলো Y-এর Z" pattern
                     subject = match.group(1)
                     obj = match.group(2)
@@ -269,9 +420,87 @@ class NLUParser:
                         confidence=0.85,
                     )
 
+        # "X হলো Y" generic assertion (only if no relation pattern matched)
+        if is_a_match:
+            subject = is_a_match.group(1).strip()
+            definition = is_a_match.group(2).strip()
+            if definition not in {"কী", "কি"}:
+                return ParseResult(
+                    intent=IntentType.STATEMENT,
+                    entities={"subject": subject, "is_a": definition},
+                    relations=[
+                        {
+                            "source": subject,
+                            "relation_type": "is_a",
+                            "target": definition,
+                        }
+                    ],
+                    facts=[{"subject": subject, "obj": definition}],
+                    raw_text=text,
+                    confidence=0.7,
+                )
+
+        # Pronoun-targeted query "সে কে?" / "এটা কী?"
+        pron_match = self._bn_pronoun_query_pattern.search(text)
+        if pron_match:
+            pronoun = pron_match.group(1)
+            question_word = pron_match.group(2)
+            return ParseResult(
+                intent=IntentType.QUERY_WHO if question_word == "কে" else IntentType.QUERY_WHAT,
+                query={
+                    "type": "who" if question_word == "কে" else "what",
+                    "relation": "creator_of" if question_word == "কে" else "is_a",
+                    "target": "",
+                    "pronoun": pronoun,
+                },
+                raw_text=text,
+                confidence=0.6,
+            )
+
+        # Definition query "X মানে কী?"
+        what_match = self._bn_what_query_pattern.search(text)
+        if what_match:
+            target = what_match.group(1).strip()
+            # A pronoun/stopword target ("এর মানে কী?", "সে মানে কি?") is
+            # not a definition query on its own; coreference in the brain
+            # will map the pronoun to the salient entity instead.
+            if target in {"এর", "সে", "এই", "সেই", "এ", "ও", "তার", "কি", "কী", "মানে"}:
+                return ParseResult(
+                    intent=IntentType.QUERY_WHAT,
+                    query={"type": "what", "relation": "is_a", "target": ""},
+                    raw_text=text,
+                    confidence=0.6,
+                )
+            return ParseResult(
+                intent=IntentType.QUERY_WHAT,
+                query={"type": "what", "relation": "is_a", "target": target},
+                raw_text=text,
+                confidence=0.8,
+            )
+
         return ParseResult(intent=IntentType.UNKNOWN, raw_text=text)
 
     def _try_english(self, text: str) -> ParseResult:
+        # Check corrections first (a correction overrides anything else)
+        for pattern in self._en_correction_patterns:
+            if pattern.search(text):
+                return ParseResult(
+                    intent=IntentType.CORRECTION,
+                    raw_text=text,
+                    confidence=0.8,
+                )
+
+        # Check explicit teach patterns
+        for pattern in self._en_teach_patterns:
+            match = pattern.search(text)
+            if match:
+                taught = match.group(1).strip(". ")
+                return ParseResult(
+                    intent=IntentType.TEACH,
+                    entities={"taught": taught},
+                    raw_text=text,
+                    confidence=0.8,
+                )
         """Try English pattern matching."""
         # Check greetings
         for pattern in self._en_greeting_patterns:
@@ -329,6 +558,48 @@ class NLUParser:
                     raw_text=text,
                     confidence=0.85,
                 )
+
+        # Pronoun-targeted query "who is he?" / "what is it?"
+        pron_match = self._en_pronoun_query_pattern.search(text)
+        if pron_match:
+            question_word = pron_match.group(1).lower()
+            if question_word == "what":
+                query_type = "what"
+                relation = "is_a"
+            else:
+                query_type = "who"
+                relation = "creator_of"
+            return ParseResult(
+                intent=IntentType.QUERY_WHO if query_type == "who" else IntentType.QUERY_WHAT,
+                query={
+                    "type": query_type,
+                    "relation": relation,
+                    "target": "",
+                    "pronoun": pron_match.group(2).lower(),
+                },
+                raw_text=text,
+                confidence=0.6,
+            )
+
+        # Check "X means Y" / "X is a Y" assertions
+        is_a_match = self._en_is_a_pattern.search(text)
+        if is_a_match:
+            subject = is_a_match.group(1)
+            definition = is_a_match.group(2).strip(". ")
+            return ParseResult(
+                intent=IntentType.STATEMENT,
+                entities={"subject": subject, "is_a": definition},
+                relations=[
+                    {
+                        "source": subject,
+                        "relation_type": "is_a",
+                        "target": definition,
+                    }
+                ],
+                facts=[{"subject": subject, "obj": definition}],
+                raw_text=text,
+                confidence=0.7,
+            )
 
         # Check relations
         for i, pattern in enumerate(self._en_relation_patterns):
