@@ -21,6 +21,7 @@ from apps.api.routes.brain import router as brain_router
 from apps.api.routes.chat import router as chat_router
 from apps.api.routes.media import router as media_router
 from apps.api.routes.voice import router as voice_router
+from apps.api.routes.voice_stream import router as voice_stream_router
 from apps.api.websocket.brain_stream import router as ws_router
 from brain.core.brain import Brain
 from brain.learning.consolidation import ConsolidationEvent
@@ -219,6 +220,7 @@ app.include_router(media_router, prefix="/api")
 app.include_router(voice_router, prefix="/api")
 app.include_router(brain_router, prefix="/api/brain")
 app.include_router(ws_router)
+app.include_router(voice_stream_router)
 
 
 @app.get("/")

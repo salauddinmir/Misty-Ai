@@ -266,6 +266,8 @@ class Brain:
         processing_time = time_module.time() - start_time
         response = act_result.data.get("response", "")
         self.state.last_output = response
+        # Keep the interpreted intent accessible to API consumers.
+        intent_value = interpret_result.data.get("intent", "unknown") if interpret_result is not None else "unknown"
 
         # Record the brain turn so the next user turn can resolve
         # pronouns back to this exchange.
@@ -299,6 +301,8 @@ class Brain:
             "cycle_count": self.cycle.cycle_count,
             "active_concepts": self.state.active_concepts,
             "emotional_state": self.emotion.to_dict(),
+            "intent": intent_value,
+            "confidence": act_result.data.get("confidence", 0.5),
         }
 
     def _phase_observe(self, text_input: str) -> CycleResult:
