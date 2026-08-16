@@ -1,0 +1,66 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --neural-bg: #0a0a0f;
+  --neural-surface: #12121a;
+  --neural-border: #1e1e2e;
+  --neural-accent: #00d4ff;
+  --neural-glow: #00d4ff;
+}
+
+body {
+  background-color: var(--neural-bg);
+  color: #e2e8f0;
+  font-family: "JetBrains Mono", "Fira Code", monospace, system-ui;
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--neural-bg);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--neural-border);
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--neural-accent);
+}
+
+/* Glow animation for active elements */
+@keyframes neural-pulse {
+  0%,
+  100% {
+    box-shadow: 0 0 5px rgba(0, 212, 255, 0.3);
+  }
+  50% {
+    box-shadow: 0 0 15px rgba(0, 212, 255, 0.6);
+  }
+}
+
+.neural-pulse {
+  animation: neural-pulse 2s ease-in-out infinite;
+}
+
+/* Activity feed item animation */
+@keyframes slide-in {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.activity-item {
+  animation: slide-in 0.3s ease-out;
+}
