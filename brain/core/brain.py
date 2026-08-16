@@ -9,6 +9,8 @@ entry point for the cognitive system.
 from typing import Any, Dict, List, Optional
 import time as time_module
 
+import numpy as np
+
 from brain.neurons.lif import LIFNeuron
 from brain.neurons.populations import NeuronPopulation
 from brain.synapses.synapse import Synapse
@@ -39,13 +41,24 @@ class Brain:
     Initializes all subsystems and processes input through
     the cognitive cycle to produce intelligent responses
     WITHOUT any LLM dependency.
+
+    Supports an optional neural simulation mode that uses vectorized
+    populations and brain regions for concept activation and association.
     """
 
-    def __init__(self) -> None:
-        """Initialize all cognitive subsystems."""
+    def __init__(self, use_neural_sim: bool = False) -> None:
+        """Initialize all cognitive subsystems.
+
+        Args:
+            use_neural_sim: If True, enables the neural simulation engine
+                          for concept activation and association using
+                          vectorized populations and brain regions.
+                          Default False preserves Phase 0 behavior.
+        """
         # Identity
         self.name: Optional[str] = None
         self.user_name: Optional[str] = None
+        self.use_neural_sim: bool = use_neural_sim
 
         # Neural substrate
         self.concept_population = NeuronPopulation(name="concepts")
@@ -86,6 +99,71 @@ class Brain:
 
         # State
         self.state = BrainState()
+
+        # Neural simulation (Phase 1)
+        self._neural_sim_engine = None
+        self._neural_regions: Dict[str, Any] = {}
+        self._concept_encoder = None
+        self._neural_network = None
+        if use_neural_sim:
+            self._init_neural_simulation()
+
+    def _init_neural_simulation(self) -> None:
+        """Initialize the neural simulation engine with brain regions.
+
+        Creates vectorized populations for sensory, association, and memory
+        regions, connects them via a synaptic network, and sets up the
+        simulation engine and concept encoder.
+        """
+        from brain.regions.sensory import SensoryRegion
+        from brain.regions.association import AssociationRegion
+        from brain.regions.memory_region import MemoryRegion
+        from brain.synapses.network import SynapticNetwork
+        from brain.simulation.engine import SimulationEngine
+        from brain.simulation.config import SimulationConfig
+        from brain.encoding.concept_encoder import ConceptEncoder
+
+        # Create brain regions
+        sensory = SensoryRegion(name="sensory", size=256, gain=2.0)
+        association = AssociationRegion(name="association", size=512)
+        memory = MemoryRegion(name="memory", size=512)
+
+        self._neural_regions = {
+            "sensory": sensory,
+            "association": association,
+            "memory": memory,
+        }
+
+        # Create synaptic network
+        network = SynapticNetwork()
+        network.connect_populations(
+            sensory.population, association.population,
+            probability=0.1, weight_range=(0.02, 0.08), seed=42
+        )
+        network.connect_populations(
+            association.population, memory.population,
+            probability=0.08, weight_range=(0.02, 0.06), seed=43
+        )
+        # Recurrent connections in association cortex
+        network.connect_self(
+            association.population,
+            probability=0.05, weight_range=(0.01, 0.04), seed=44
+        )
+        self._neural_network = network
+
+        # Create simulation engine
+        config = SimulationConfig(
+            record_spikes=True,
+            record_rates=True,
+            stdp_enabled=True,
+        )
+        regions_list = [sensory, association, memory]
+        self._neural_sim_engine = SimulationEngine(
+            regions_list, network, config
+        )
+
+        # Concept encoder for neural patterns
+        self._concept_encoder = ConceptEncoder(population_size=512, sparsity=0.07)
 
     def process(self, text_input: str) -> Dict[str, Any]:
         """Process a text input through the full cognitive cycle.
@@ -182,7 +260,7 @@ class Brain:
         self.state.current_phase = "observe"
         self.working_memory.store("current_input", text_input)
 
-        is_question = "?" in text_input or "কে" in text_input or "কি" in text_input
+        is_question = "?" in text_input or "\u0995\u09c7" in text_input or "\u0995\u09bf" in text_input
         self.emotion.update_from_input(is_question=is_question, is_new_info=True)
 
         return CycleResult(
@@ -255,7 +333,12 @@ class Brain:
         )
 
     def _phase_associate(self, parse_result: Optional[ParseResult]) -> CycleResult:
-        """ASSOCIATE phase: Spread activation to related concepts."""
+        """ASSOCIATE phase: Spread activation to related concepts.
+
+        If neural simulation is enabled, uses the neural engine to
+        spread activation via spike propagation through the synaptic
+        network. Otherwise, uses the graph-based spreading activation.
+        """
         self.state.current_phase = "associate"
         activated: Dict[str, float] = {}
 
@@ -270,12 +353,18 @@ class Brain:
             if target:
                 concept = self.concept_graph.get_concept_by_name(target)
                 if concept:
-                    activation_map = self.spreading_activation.activate(
-                        self.concept_graph, concept.concept_id
-                    )
-                    activated = activation_map
+                    if self.use_neural_sim and self._neural_sim_engine is not None:
+                        # Neural simulation path: encode concept and run simulation
+                        activated = self._neural_associate(concept.concept_id)
+                    else:
+                        # Graph-based path (Phase 0 default)
+                        activation_map = self.spreading_activation.activate(
+                            self.concept_graph, concept.concept_id
+                        )
+                        activated = activation_map
+
                     self.state.active_concepts = {
-                        k: round(v, 3) for k, v in activation_map.items()
+                        k: round(v, 3) for k, v in activated.items()
                     }
 
         return CycleResult(
@@ -283,6 +372,68 @@ class Brain:
             data={"activation_map": activated},
             success=True,
         )
+
+    def _neural_associate(self, concept_id: str) -> Dict[str, float]:
+        """Run neural association using the simulation engine.
+
+        Encodes the concept as a spike pattern, injects it into the
+        sensory region, runs the simulation for a few steps, and
+        reads out activations from the association region.
+
+        Args:
+            concept_id: The concept to activate neurally.
+
+        Returns:
+            Dictionary mapping concept IDs to activation levels.
+        """
+        if self._concept_encoder is None or self._neural_sim_engine is None:
+            return {}
+
+        # Encode concept as spike pattern
+        pattern = self._concept_encoder.encode_concept(concept_id)
+
+        # Inject into sensory region
+        sensory = self._neural_regions.get("sensory")
+        if sensory is None:
+            return {}
+
+        # Resize pattern to sensory region size
+        sensory_input = np.zeros(sensory.size, dtype=np.float64)
+        n = min(len(pattern), sensory.size)
+        sensory_input[:n] = pattern[:n] * sensory.population.threshold[0] * 2.0
+        sensory.receive_input(sensory_input)
+
+        # Run simulation for a few steps
+        for _ in range(5):
+            self._neural_sim_engine.step()
+
+        # Read association region activity as activation map
+        association = self._neural_regions.get("association")
+        if association is None:
+            return {}
+
+        # Convert spikes to activation levels
+        activation_map: Dict[str, float] = {}
+        rate = association.get_firing_rate()
+        if rate > 0:
+            activation_map[concept_id] = min(1.0, rate * 10.0)
+
+        # Check other known concepts
+        for cid in self._concept_encoder.get_all_concepts():
+            if cid != concept_id:
+                c_pattern = self._concept_encoder.patterns[cid]
+                # Check overlap with current association activity
+                assoc_activity = association.output_spikes.astype(np.float64)
+                if np.sum(assoc_activity) > 0:
+                    # Simple overlap score
+                    resized_pattern = np.zeros(association.size, dtype=np.float64)
+                    m = min(len(c_pattern), association.size)
+                    resized_pattern[:m] = c_pattern[:m]
+                    overlap = np.dot(assoc_activity, resized_pattern)
+                    if overlap > 0:
+                        activation_map[cid] = min(1.0, float(overlap) / 5.0)
+
+        return activation_map
 
     def _phase_reason(self, parse_result: Optional[ParseResult]) -> CycleResult:
         """REASON phase: Apply inference rules."""
@@ -404,6 +555,10 @@ class Brain:
                     subject=name, predicate="is", obj="user",
                 )
 
+        # Register concept in neural encoder if simulation is active
+        if self.use_neural_sim and self._concept_encoder is not None:
+            self._concept_encoder.encode_concept(name)
+
         response = f"I understand. Your name is {name}. I have created a concept for you."
         return response, 0.95
 
@@ -446,6 +601,11 @@ class Brain:
         self.semantic_memory.store_fact(
             subject=source_name, predicate=relation_type, obj=target_name,
         )
+
+        # Register concepts in neural encoder if simulation is active
+        if self.use_neural_sim and self._concept_encoder is not None:
+            self._concept_encoder.encode_concept(source_name)
+            self._concept_encoder.encode_concept(target_name)
 
         response = (
             f"I have learned that {source_name} has relation "
@@ -590,7 +750,7 @@ class Brain:
 
     def get_state(self) -> Dict[str, Any]:
         """Get a snapshot of the current brain state."""
-        return {
+        state_dict = {
             "cycle_count": self.cycle.cycle_count,
             "user_name": self.user_name,
             "concepts": self.concept_graph.num_concepts,
@@ -603,9 +763,20 @@ class Brain:
             "performance": self.reflection.evaluate_recent_performance(),
         }
 
+        # Add neural simulation state if active
+        if self.use_neural_sim and self._neural_sim_engine is not None:
+            state_dict["neural_simulation"] = {
+                "enabled": True,
+                "regions": list(self._neural_regions.keys()),
+                "simulation_step": self._neural_sim_engine.current_step,
+            }
+
+        return state_dict
+
     def __repr__(self) -> str:
+        sim_info = ", neural_sim=True" if self.use_neural_sim else ""
         return (
             f"Brain(cycles={self.cycle.cycle_count}, "
             f"concepts={self.concept_graph.num_concepts}, "
-            f"relations={self.concept_graph.num_relations})"
+            f"relations={self.concept_graph.num_relations}{sim_info})"
         )
