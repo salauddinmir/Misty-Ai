@@ -17,12 +17,15 @@ from brain.dialogue.context import DialogueContext
 from brain.emotion.state import EmotionalState
 from brain.graph.activation import SpreadingActivation
 from brain.graph.concepts import ConceptGraph
+from brain.graph.hebbian import HebbianLearner
 from brain.learning.consolidation import MemoryConsolidator
+from brain.learning.curiosity import CuriosityExplorer
 from brain.learning.reinforcement import ReinforcementLearner
 from brain.learning.reward import RewardSignal
 from brain.memory.episodic import EpisodicMemory
 from brain.memory.procedural import ProceduralMemory
 from brain.memory.semantic import SemanticMemory
+from brain.memory.weighted_recall import WeightedRecall
 from brain.memory.working import WorkingMemory
 from brain.neurons.populations import NeuronPopulation
 from brain.nlu.coreference import resolve_entities
@@ -82,6 +85,10 @@ class Brain:
         self.learner = ReinforcementLearner()
         self.reward_system = RewardSignal()
         self.consolidator = MemoryConsolidator()
+        # Phase 4: associative learning depth
+        self.hebbian = HebbianLearner()
+        self.recall_scorer = WeightedRecall()
+        self.curiosity = CuriosityExplorer()
 
         # Meta-cognition
         self.reflection = ReflectionEngine()
@@ -340,6 +347,26 @@ class Brain:
             if resolved:
                 parse_result.entities["resolved_entities"] = resolved
 
+    def _curiosity_prompt(self, activation_map: Dict[str, float]) -> str | None:
+        """Phase 4 curiosity: ask about an under-explored neighbor concept.
+
+        Returns a Bengali question or None when curiosity stays below
+        threshold (high urgency, well-known neighbors, cooldown).
+        """
+        if not activation_map:
+            return None
+        suggestion = self.curiosity.evaluate(
+            self.concept_graph,
+            activation_map,
+            urgency=self.emotion.to_dict().get("urgency", 0.0),
+            satisfaction=self.emotion.to_dict().get("satisfaction", 0.0),
+        )
+        question = suggestion.get("question")
+        if question:
+            self.working_memory.store("curiosity_target", suggestion.get("target"))
+            self.working_memory.store("curiosity_bonus", suggestion.get("bonus", 0.0))
+        return question
+
     _PRONOUN_TOKENS = frozenset(
         {
             # Bengali pronouns
@@ -372,6 +399,19 @@ class Brain:
         """RECALL phase: Retrieve relevant memories."""
         self.state.current_phase = "recall"
         recalled: Dict[str, Any] = {}
+
+        if parse_result:
+            # Phase 4: mark recalled targets and score by recency/
+            # frequency/emotion so retrieval favors human-like recall.
+            target_name = parse_result.query.get("target", "")
+            if target_name:
+                target_concept = self.concept_graph.get_concept_by_name(target_name)
+                if target_concept:
+                    self.recall_scorer.record_recall(target_concept.concept_id)
+                    recalled["recall_scores"] = self.recall_scorer.score(
+                        target_concept.concept_id,
+                        emotional_valence=self._current_valence(),
+                    )
 
         if parse_result and parse_result.intent == IntentType.QUERY_WHO:
             target_name = parse_result.query.get("target", "")
@@ -435,7 +475,13 @@ class Brain:
                         activated = activation_map
 
                     self.state.active_concepts = {k: round(v, 3) for k, v in activated.items()}
-
+                    # Phase 4: Hebbian learning — strengthen edges between
+                    # concepts that fired together this cycle.
+                    hebbian_updates = self.hebbian.update(self.concept_graph, list(activated.keys()))
+                    if hebbian_updates:
+                        self.working_memory.store("hebbian_updates", hebbian_updates)
+        # Phase 4: Hebbian bookkeeping (also covers the neural path).
+        self.hebbian.register_activations(self.state.active_concepts.keys())
         return CycleResult(
             phase=CognitivePhase.ASSOCIATE,
             data={"activation_map": activated},
@@ -629,6 +675,13 @@ class Brain:
             # of a flat "I don't know" so the user understands the brain's
             # current capability boundary and what it CAN learn.
             response, confidence = self._act_unknown(parse_result)
+
+        # Phase 4: curiosity-driven exploration — when an under-explored
+        # neighbor concept earns a bonus above threshold, append a question
+        # so the agent actively seeks missing knowledge.
+        curiosity_question = self._curiosity_prompt(self.state.active_concepts)
+        if curiosity_question:
+            response = (response + " " + curiosity_question) if response else curiosity_question
 
         return CycleResult(
             phase=CognitivePhase.ACT,
@@ -990,12 +1043,32 @@ class Brain:
 
         self.working_memory.decay_all()
         self.emotion.decay()
-
+        # Phase 4: slowly decay unused Hebbian edge weights so the graph
+        # forgets weak associations over time.
+        decayed = self.hebbian.decay_unused(self.concept_graph)
+        if decayed:
+            self.working_memory.store("hebbian_decay", len(decayed))
+        # Phase 4: tick curiosity cooldowns once per cycle.
+        self.curiosity.step_cooldowns()
         return CycleResult(
             phase=CognitivePhase.CONSOLIDATE,
-            data={"consolidated_keys": consolidated},
+            data={"consolidated_keys": consolidated, "hebbian_decayed": len(decayed)},
             success=True,
         )
+
+    def _current_valence(self) -> float:
+        """Current emotional valence as a signed scalar in [-1, 1].
+
+        Positive emotions contribute positively, negative ones
+        negatively; used by the recall scorer.
+        """
+        emotions = self.emotion.to_dict()
+        positive = sum(emotions.get(k, 0.0) for k in ("satisfaction", "confidence", "curiosity"))
+        negative = sum(emotions.get(k, 0.0) for k in ("frustration", "urgency", "uncertainty"))
+        total = positive + negative
+        if total <= 0:
+            return 0.0
+        return (positive - negative) / total
 
     def get_state(self) -> Dict[str, Any]:
         """Get a snapshot of the current brain state."""

@@ -58,6 +58,7 @@ class ConceptGraph:
         self._graph: nx.DiGraph = nx.DiGraph()
         self._concepts: Dict[str, Concept] = {}
         self._name_index: Dict[str, str] = {}  # name -> concept_id
+        self._relation_ids: Dict[str, str] = {}  # "source_id|target_id" -> relation_id
 
     def add_concept(self, concept: Concept) -> None:
         """Add a concept to the graph."""
@@ -102,7 +103,6 @@ class ConceptGraph:
         """Add a directed relation between two concepts."""
         if source_id not in self._concepts or target_id not in self._concepts:
             return False
-
         self._graph.add_edge(
             source_id,
             target_id,
@@ -111,6 +111,47 @@ class ConceptGraph:
             confidence=confidence,
         )
         return True
+
+    def update_relation_weight(self, relation_id: str, weight: float) -> bool:
+        """Update the weight of an existing relation by its persistent ID.
+
+        The persistent ``relation_id`` is stored on the graph nodes' edge
+        metadata when relations are restored from the database (see
+        ``load_relations``), allowing Hebbian weight updates to round-trip
+        to the persistence layer.
+
+        Args:
+            relation_id: The persistent database relation ID.
+            weight: The new edge weight.
+
+        Returns:
+            True if a matching edge was updated.
+        """
+        for source_id, target_id, data in self._graph.edges(data=True):
+            if data.get("relation_id") == relation_id:
+                self._graph[source_id][target_id]["weight"] = float(weight)
+                return True
+        return False
+
+    def load_relations(self, relations: List[Dict[str, Any]]) -> None:
+        """Restore relations from the database with their persistent IDs.
+
+        Args:
+            relations: List of relation dicts as returned by
+                ``Database.load_relations``.
+        """
+        for rel in relations:
+            src, tgt = rel["source_id"], rel["target_id"]
+            if src not in self._concepts or tgt not in self._concepts:
+                continue
+            self._graph.add_edge(
+                src,
+                tgt,
+                relation_type=rel["relation_type"],
+                weight=float(rel.get("weight", 1.0)),
+                confidence=float(rel.get("confidence", 1.0)),
+                relation_id=rel.get("relation_id"),
+            )
 
     def get_relations(
         self,
@@ -172,6 +213,13 @@ class ConceptGraph:
         neighbors.update(self._graph.successors(concept_id))
         neighbors.update(self._graph.predecessors(concept_id))
         return list(neighbors)
+
+    def set_edge_weight(self, source_id: str, target_id: str, weight: float) -> None:
+        """Update an existing edge's weight by its node pair (in place)."""
+        if source_id not in self._concepts or target_id not in self._concepts:
+            return
+        if self._graph.has_edge(source_id, target_id):
+            self._graph[source_id][target_id]["weight"] = float(weight)
 
     @property
     def graph(self) -> nx.DiGraph:
