@@ -4,14 +4,17 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import { BrainMonitor } from "@/components/brain-monitor/BrainMonitor";
 import { ActivityFeed } from "@/components/brain-monitor/ActivityFeed";
 import { ChatInterface } from "@/components/chat/ChatInterface";
+import { AvatarPanel } from "@/components/avatar/AvatarPanel";
 import { BrainWebSocket } from "@/lib/websocket";
-import { BrainState, BrainEvent } from "@/types";
+import { BrainState, BrainEvent, ChatMessage } from "@/types";
 import { getBrainState } from "@/lib/api";
 
 export default function Home() {
   const [brainState, setBrainState] = useState<BrainState | null>(null);
   const [events, setEvents] = useState<BrainEvent[]>([]);
   const [connected, setConnected] = useState(false);
+  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
   const wsRef = useRef<BrainWebSocket | null>(null);
 
   const handleBrainEvent = useCallback((event: BrainEvent) => {
@@ -77,9 +80,20 @@ export default function Home() {
 
       {/* Main Content */}
       <div className="flex w-full pt-14">
-        {/* Left Panel - Chat */}
-        <div className="w-1/2 h-full border-r border-neural-border">
-          <ChatInterface onBrainStateUpdate={handleBrainStateUpdate} />
+        {/* Left Panel - Avatar + Chat */}
+        <div className="w-1/2 h-full border-r border-neural-border flex flex-col overflow-hidden">
+          <AvatarPanel
+            messages={chatMessages}
+            brainState={brainState}
+            processing={isLoading}
+          />
+          <div className="flex-1 overflow-hidden">
+            <ChatInterface
+              onBrainStateUpdate={handleBrainStateUpdate}
+              onMessagesChange={setChatMessages}
+              onProcessingChange={setIsLoading}
+            />
+          </div>
         </div>
 
         {/* Right Panel - Brain Monitor */}

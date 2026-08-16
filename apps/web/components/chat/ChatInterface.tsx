@@ -7,9 +7,16 @@ import { sendMessage } from "@/lib/api";
 
 interface ChatInterfaceProps {
   onBrainStateUpdate: (state: BrainState) => void;
+  /** Lifted state so the avatar panel can derive expressions from messages. */
+  onMessagesChange?: (messages: ChatMessageType[]) => void;
+  onProcessingChange?: (processing: boolean) => void;
 }
 
-export function ChatInterface({ onBrainStateUpdate }: ChatInterfaceProps) {
+export function ChatInterface({
+  onBrainStateUpdate,
+  onMessagesChange,
+  onProcessingChange,
+}: ChatInterfaceProps) {
   const [messages, setMessages] = useState<ChatMessageType[]>([]);
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
@@ -34,9 +41,14 @@ export function ChatInterface({ onBrainStateUpdate }: ChatInterfaceProps) {
       timestamp: Date.now() / 1000,
     };
 
-    setMessages((prev) => [...prev, userMessage]);
+    setMessages((prev) => {
+      const next = [...prev, userMessage];
+      onMessagesChange?.(next);
+      return next;
+    });
     setInput("");
     setIsLoading(true);
+    onProcessingChange?.(true);
 
     try {
       const response = await sendMessage(userMessage.content);
@@ -51,7 +63,11 @@ export function ChatInterface({ onBrainStateUpdate }: ChatInterfaceProps) {
         cycle_count: response.cycle_count,
       };
 
-      setMessages((prev) => [...prev, assistantMessage]);
+      setMessages((prev) => {
+        const next = [...prev, assistantMessage];
+        onMessagesChange?.(next);
+        return next;
+      });
       onBrainStateUpdate(response.brain_state);
     } catch {
       const errorMessage: ChatMessageType = {
@@ -61,9 +77,14 @@ export function ChatInterface({ onBrainStateUpdate }: ChatInterfaceProps) {
           "Unable to connect to MISTY brain. Please ensure the backend is running.",
         timestamp: Date.now() / 1000,
       };
-      setMessages((prev) => [...prev, errorMessage]);
+      setMessages((prev) => {
+        const next = [...prev, errorMessage];
+        onMessagesChange?.(next);
+        return next;
+      });
     } finally {
       setIsLoading(false);
+      onProcessingChange?.(false);
     }
   };
 
