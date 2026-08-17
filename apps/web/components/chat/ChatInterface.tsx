@@ -75,6 +75,10 @@ export function ChatInterface({
         brain_state: response.brain_state,
         processing_time: response.processing_time,
         cycle_count: response.cycle_count,
+        thought_trace: response.thought_trace,
+        self_model: response.self_model,
+        grounding: response.grounding,
+        phase_timings_ms: response.phase_timings_ms,
       };
 
       setMessages((prev) => {

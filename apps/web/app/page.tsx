@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef } from "react";
 import { BrainMonitor } from "@/components/brain-monitor/BrainMonitor";
+import { CognitiveTrace } from "@/components/brain-monitor/CognitiveTrace";
 import { ActivityFeed } from "@/components/brain-monitor/ActivityFeed";
 import { ChatInterface } from "@/components/chat/ChatInterface";
 import { AvatarPanel } from "@/components/avatar/AvatarPanel";
@@ -16,6 +17,7 @@ export default function Home() {
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const wsRef = useRef<BrainWebSocket | null>(null);
+  const latestAssistantMessage = [...chatMessages].reverse().find((message) => message.role === "assistant");
 
   const handleBrainEvent = useCallback((event: BrainEvent) => {
     setEvents((prev) => [event, ...prev].slice(0, 100));
@@ -98,8 +100,9 @@ export default function Home() {
 
         {/* Right Panel - Brain Monitor */}
         <div className="w-1/2 h-full flex flex-col overflow-hidden">
-          <div className="flex-1 overflow-y-auto p-4">
+          <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-4">
             <BrainMonitor brainState={brainState} />
+            <CognitiveTrace message={latestAssistantMessage} />
           </div>
           <div className="h-1/3 border-t border-neural-border">
             <ActivityFeed events={events} />

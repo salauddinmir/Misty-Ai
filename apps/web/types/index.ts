@@ -44,6 +44,33 @@ export interface Relation {
   weight: number;
 }
 
+export interface ThoughtTrace {
+  focus: string;
+  intent: string;
+  evidence_count: number;
+  hypothesis_count: number;
+  confidence: number;
+  uncertainty: number;
+  decision: string;
+}
+
+export interface SelfModel {
+  identity?: string;
+  capabilities?: string[];
+  uncertainty?: number;
+  [key: string]: unknown;
+}
+
+export interface Grounding {
+  raw_input?: string;
+  intent?: string;
+  confidence?: number;
+  evidence_count?: number;
+  hypothesis_count?: number;
+  strategy?: string;
+  [key: string]: unknown;
+}
+
 export interface ChatMessage {
   id: string;
   role: "user" | "assistant";
@@ -52,6 +79,10 @@ export interface ChatMessage {
   brain_state?: BrainState;
   processing_time?: number;
   cycle_count?: number;
+  thought_trace?: ThoughtTrace;
+  self_model?: SelfModel;
+  grounding?: Grounding;
+  phase_timings_ms?: Record<string, number>;
 }
 
 export interface ChatResponse {
@@ -61,6 +92,10 @@ export interface ChatResponse {
   cycle_count: number;
   active_concepts: Record<string, number>;
   emotional_state: EmotionalState;
+  thought_trace?: ThoughtTrace;
+  self_model?: SelfModel;
+  grounding?: Grounding;
+  phase_timings_ms?: Record<string, number>;
 }
 
 export type BrainEventType =
