@@ -34,6 +34,7 @@ from brain.nlu.parser import IntentType, NLUParser, ParseResult
 from brain.planner.planner import Planner
 from brain.reasoning.inference import InferenceEngine
 from brain.reflection.reflection import ReflectionEngine
+from brain.sensors import SensorEvent, SensorHub
 from brain.synapses.plasticity import PlasticityManager
 from brain.world import WorldModel
 
@@ -95,6 +96,8 @@ class Brain:
         self.world = WorldModel()
         # Phase 6: goal-driven behavior (hierarchical decomposition)
         self.goal_manager = GoalManager()
+        # Phase 9: hardware sensor abstraction (transport-agnostic)
+        self.sensors = SensorHub()
 
         # Meta-cognition
         self.reflection = ReflectionEngine()
@@ -182,15 +185,40 @@ class Brain:
 
     def process(self, text_input: str) -> Dict[str, Any]:
         """Process a text input through the full cognitive cycle.
-
         This is the main entry point for interacting with the brain.
-
         Args:
             text_input: Natural language input (Bengali or English).
-
         Returns:
             Dictionary with response, brain state, and processing details.
         """
+        return self._run_cycle(text_input=text_input, source="text")
+
+    def process_sensor_event(self, event: SensorEvent) -> Dict[str, Any]:
+        """Process a hardware sensor reading through the cognitive cycle.
+
+        The event is rendered as a structured statement (e.g. "sensor
+        distance 0.35") so sensors feed the same learning path as
+        language. The percept is also registered in the world model.
+        """
+        self.world.add_entity(
+            entity_id=f"sensor:{event.sensor_id}",
+            entity_type="sensor",
+            attributes={
+                "event_type": event.event_type,
+                "unit": event.unit,
+                "last_value": event.value,
+                "last_seen": event.timestamp,
+            },
+        )
+        return self._run_cycle(text_input=event.text_input, source="sensor", sensor_event=event)
+
+    def _run_cycle(
+        self,
+        text_input: str,
+        source: str = "text",
+        sensor_event: SensorEvent | None = None,
+    ) -> Dict[str, Any]:
+        """Shared cognitive-cycle implementation for text and sensor input."""
         start_time = time_module.time()
         self.state.last_input = text_input
 
