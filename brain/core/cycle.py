@@ -58,11 +58,13 @@ class CognitiveCycle:
 
     current_phase: CognitivePhase = CognitivePhase.IDLE
     phase_results: List[CycleResult] = field(default_factory=list)
+    phase_timings_ms: Dict[str, float] = field(default_factory=dict)
     cycle_count: int = 0
 
     def start_cycle(self) -> CognitivePhase:
         """Start a new cognitive cycle."""
         self.phase_results = []
+        self.phase_timings_ms = {}
         self.current_phase = CognitivePhase.OBSERVE
         return self.current_phase
 

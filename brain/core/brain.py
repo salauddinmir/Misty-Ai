@@ -334,13 +334,19 @@ class Brain:
         # Start cognitive cycle
         self.cycle.start_cycle()
 
+        def run_phase(phase_fn, *args, **kwargs):
+            phase_started = time_module.perf_counter()
+            result = phase_fn(*args, **kwargs)
+            elapsed_ms = round((time_module.perf_counter() - phase_started) * 1000, 3)
+            self.cycle.phase_timings_ms[result.phase.value] = elapsed_ms
+            self.cycle.advance(result)
+            return result
+
         # Phase 1: OBSERVE
-        observe_result = self._phase_observe(text_input)
-        self.cycle.advance(observe_result)
+        run_phase(self._phase_observe, text_input)
 
         # Phase 2: INTERPRET
-        interpret_result = self._phase_interpret(text_input, source=source)
-        self.cycle.advance(interpret_result)
+        interpret_result = run_phase(self._phase_interpret, text_input, source=source)
         # Phase 5: compare actual intent against the prediction; the
         # resulting prediction error is stored in the brain state and can
         # feed downstream learners.
@@ -360,40 +366,33 @@ class Brain:
                             self.world.add_entity(item, "concept")
 
         # Phase 3: RECALL
-        recall_result = self._phase_recall(interpret_result.data.get("parse_result"))
-        self.cycle.advance(recall_result)
+        recall_result = run_phase(self._phase_recall, interpret_result.data.get("parse_result"))
 
         # Phase 4: ASSOCIATE
-        associate_result = self._phase_associate(interpret_result.data.get("parse_result"))
-        self.cycle.advance(associate_result)
+        associate_result = run_phase(self._phase_associate, interpret_result.data.get("parse_result"))
 
         # Phase 5: REASON
-        reason_result = self._phase_reason(interpret_result.data.get("parse_result"))
-        self.cycle.advance(reason_result)
+        run_phase(self._phase_reason, interpret_result.data.get("parse_result"))
 
         # Phase 6: PLAN
-        plan_result = self._phase_plan(interpret_result.data.get("parse_result"))
-        self.cycle.advance(plan_result)
+        run_phase(self._phase_plan, interpret_result.data.get("parse_result"))
 
         # Phase 7: ACT
-        act_result = self._phase_act(
+        act_result = run_phase(
+            self._phase_act,
             interpret_result.data.get("parse_result"),
             recall_result.data,
             associate_result.data,
         )
-        self.cycle.advance(act_result)
 
         # Phase 8: EVALUATE
-        evaluate_result = self._phase_evaluate(act_result)
-        self.cycle.advance(evaluate_result)
+        evaluate_result = run_phase(self._phase_evaluate, act_result)
 
         # Phase 9: LEARN
-        learn_result = self._phase_learn(interpret_result.data.get("parse_result"), act_result)
-        self.cycle.advance(learn_result)
+        run_phase(self._phase_learn, interpret_result.data.get("parse_result"), act_result)
 
         # Phase 10: CONSOLIDATE
-        consolidate_result = self._phase_consolidate()
-        self.cycle.advance(consolidate_result)
+        run_phase(self._phase_consolidate)
 
         # Update state
         processing_time = time_module.time() - start_time
@@ -460,6 +459,7 @@ class Brain:
             "thought_trace": thought_trace.to_dict(),
             "self_model": self.self_model.summary(),
             "grounding": grounded_utterance.to_dict(),
+            "phase_timings_ms": dict(self.cycle.phase_timings_ms),
         }
 
     def _phase_observe(self, text_input: str) -> CycleResult:
