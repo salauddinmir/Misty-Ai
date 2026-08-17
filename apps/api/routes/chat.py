@@ -112,11 +112,7 @@ async def chat(request: Request, body: ChatRequest) -> ChatResponse:
     # Persist training-derived semantic facts so they survive restarts.
     # Concepts and relations are already saved above; facts stored only in
     # semantic memory are flushed here as episodes with a training marker.
-    training_keys = [
-        key
-        for key, fact in brain.semantic_memory.facts.items()
-        if fact.source == "training"
-    ]
+    training_keys = [key for key, fact in brain.semantic_memory.facts.items() if fact.source == "training"]
     for key in training_keys:
         fact = brain.semantic_memory.facts[key]
         try:

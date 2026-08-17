@@ -52,9 +52,7 @@ class TestBrainInitialization:
         assert misty is not None
         pixline = brain.concept_graph.get_concept_by_name("Pixline Incorporate")
         assert pixline is not None
-        founder = brain.semantic_memory.query(
-            subject="Pixline Incorporate", predicate="founder"
-        )
+        founder = brain.semantic_memory.query(subject="Pixline Incorporate", predicate="founder")
         assert len(founder) > 0
         assert founder[0].obj == "Salauddin Mir"
 

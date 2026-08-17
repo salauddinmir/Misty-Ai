@@ -151,8 +151,7 @@ class Brain:
         created_concepts: Dict[str, str] = {}  # name -> concept_id
         for entry in package.concepts:
             name = entry["name"]
-            if name not in created_concepts and \
-                    self.concept_graph.get_concept_by_name(name) is None:
+            if name not in created_concepts and self.concept_graph.get_concept_by_name(name) is None:
                 concept = self.concept_graph.create_concept(
                     name=name,
                     concept_type=entry.get("type", "Entity"),
@@ -163,8 +162,7 @@ class Brain:
         for entry in package.relations:
             for endpoint in ("source", "target"):
                 name = entry[endpoint]
-                if name not in created_concepts and \
-                        self.concept_graph.get_concept_by_name(name) is None:
+                if name not in created_concepts and self.concept_graph.get_concept_by_name(name) is None:
                     concept = self.concept_graph.create_concept(
                         name=name,
                         concept_type="Entity",
