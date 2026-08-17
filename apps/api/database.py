@@ -14,6 +14,7 @@ Schema is applied on startup from database/schema.sql (SQLite) or
 database/schema_postgres.sql (PostgreSQL).
 """
 
+import asyncio
 import json
 import os
 import time as time_module
@@ -69,6 +70,11 @@ class Database:
         self.db_path = db_path or DEFAULT_DB_PATH
         self._url = db_url or _db_url()
         self._connection: Any = None
+        # asyncpg connections cannot run overlapping operations; a single
+        # lock serializes all queries when several tasks (chat route,
+        # consolidation sink, sensor ingestion) share one connection.
+
+        self._lock = asyncio.Lock()
 
     async def initialize(self) -> None:
         """Connect and apply the appropriate schema."""
@@ -107,13 +113,15 @@ class Database:
     async def execute(self, sql: str, params: Tuple[Any, ...] = ()) -> Any:
         """Driver-uniform statement execution."""
         if DRIVER == "postgres":
-            return await self._connection.execute(sql, *params)
+            async with self._lock:
+                return await self._connection.execute(sql, *params)
         return await self._connection.execute(sql, params)
 
     async def fetchall(self, sql: str, params: Tuple[Any, ...] = ()) -> List[Any]:
         """Driver-uniform fetch of all rows."""
         if DRIVER == "postgres":
-            return await self._connection.fetch(sql, *params)
+            async with self._lock:
+                return await self._connection.fetch(sql, *params)
         cursor = await self._connection.execute(sql, params)
         return await cursor.fetchall()
 
@@ -132,22 +140,55 @@ class Database:
         created_at = created_at or time_module.time()
         metadata_json = json.dumps(metadata or {})
 
-        base = UPSERT_POSTGRES if DRIVER == "postgres" else UPSERT_SQLITE
+        if DRIVER == "postgres":
+            # ``concepts`` has both a PRIMARY KEY (concept_id) and a UNIQUE
+            # constraint on (name). A memory concept loaded from the database
+            # keeps its original concept_id, so a plain ON CONFLICT
+            # (concept_id) upsert fails with UniqueViolation when a *new*
+            # concept happens to carry a name that already exists under a
+            # different id. Update the existing row by name instead.
+            try:
+                async with self._lock:
+                    await self._connection.execute(
+                        "INSERT INTO concepts "
+                        "(concept_id, name, concept_type, activation_level, "
+                        "created_at, metadata) "
+                        f"VALUES ({_placeholders(6)}) "
+                        "ON CONFLICT (concept_id) DO UPDATE SET "
+                        "name = EXCLUDED.name, concept_type = EXCLUDED.concept_type, "
+                        "activation_level = EXCLUDED.activation_level, "
+                        "created_at = EXCLUDED.created_at, metadata = EXCLUDED.metadata",
+                        concept_id, name, concept_type, activation_level, created_at, metadata_json,
+                    )
+            except asyncpg.UniqueViolationError:
+                # A row with this name exists under a *different* concept_id.
+                # Keep its concept_id so relation edges (FK'd to it) are not
+                # orphaned; merge the metadata under the existing row.
+                async with self._lock:
+                    existing = await self._connection.fetchrow(
+                        "SELECT concept_id, metadata FROM concepts WHERE name = $1", name,
+                    )
+                    if existing is None:
+                        raise
+                    existing_meta = json.loads(existing["metadata"]) if existing["metadata"] else {}
+                    existing_meta.update(json.loads(metadata_json))
+                    await self._connection.execute(
+                        "UPDATE concepts SET "
+                        "concept_type = $2, activation_level = $3, "
+                        "created_at = $4, metadata = $5 "
+                        "WHERE name = $1",
+                        name, concept_type, activation_level, created_at, json.dumps(existing_meta),
+                    )
+            return
         sql = (
-            f"{base} INTO concepts "
+            f"{UPSERT_SQLITE} INTO concepts "
             f"(concept_id, name, concept_type, activation_level, created_at, metadata) "
             f"VALUES ({_placeholders(6)})"
         )
-        if DRIVER == "postgres":
-            sql += (
-                " ON CONFLICT (concept_id) DO UPDATE SET "
-                "name = EXCLUDED.name, concept_type = EXCLUDED.concept_type, "
-                "activation_level = EXCLUDED.activation_level, "
-                "created_at = EXCLUDED.created_at, metadata = EXCLUDED.metadata"
-            )
-        await self.execute(sql, (concept_id, name, concept_type, activation_level, created_at, metadata_json))
-        if DRIVER != "postgres":
-            await self._connection.commit()
+        await self._connection.execute(
+            sql, (concept_id, name, concept_type, activation_level, created_at, metadata_json),
+        )
+        await self._connection.commit()
 
     async def load_concepts(self) -> List[Dict[str, Any]]:
         """Load all concepts from the database."""
