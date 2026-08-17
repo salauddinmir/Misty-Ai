@@ -49,6 +49,20 @@ class TestNewIntentTypes:
         assert result.intent != IntentType.NAME_DECLARATION
 
 
+class TestCapabilityAndRecognitionIntents:
+    def test_bengali_capability_query(self) -> None:
+        result = _parse("তুমি অঙ্ক শিখেছো?")
+        assert result.intent == IntentType.CAPABILITY_QUERY
+
+    def test_bengali_recognition_query(self) -> None:
+        result = _parse("তুমি কি আমাকে চিনতে পারো?")
+        assert result.intent == IntentType.RECOGNITION_QUERY
+
+    def test_english_capability_query(self) -> None:
+        result = _parse("Can you learn mathematics?")
+        assert result.intent == IntentType.CAPABILITY_QUERY
+
+
 class TestFacts:
     def test_bn_holo_facts(self) -> None:
         result = _parse("সূর্য হলো তারা")

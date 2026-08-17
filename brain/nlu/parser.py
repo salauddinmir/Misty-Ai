@@ -33,6 +33,8 @@ class IntentType(str, Enum):
     GREETING = "greeting"
     MATH = "math"
     PHYSICS = "physics"
+    CAPABILITY_QUERY = "capability_query"
+    RECOGNITION_QUERY = "recognition_query"
     UNKNOWN = "unknown"
 
 
@@ -139,6 +141,11 @@ class NLUParser:
         self._bn_greeting_patterns = [
             re.compile(r"(হ্যালো|হাই|নমস্কার|আসসালামু|সালাম)", re.UNICODE),
         ]
+        self._bn_capability_pattern = re.compile(r"(?:তুমি|আপনি|মিস্টি).*(?:শিখেছ|জানো|পারো).*[?\uFF1F]?$", re.UNICODE)
+        self._bn_recognition_pattern = re.compile(
+            r"(?:তুমি|আপনি|মিস্টি)\s+(?:কি|কী)\s+আমাকে\s+চিনতে\s+পারো\s*[?\uFF1F]?$",
+            re.UNICODE,
+        )
 
         # Bengali correction signals that start a turn (highest priority in
         # Bengali path). Examples: "না, ভুল হয়েছে", "আসলে মিস্টি",
@@ -221,6 +228,14 @@ class NLUParser:
         self._en_greeting_patterns = [
             re.compile(r"^(hello|hi|hey|greetings)\b", re.IGNORECASE),
         ]
+        self._en_capability_pattern = re.compile(
+            r"^(?:can|do)\s+(?:you|misty)\b.*\b(?:learn|know|do|understand)\b.*\??$",
+            re.IGNORECASE,
+        )
+        self._en_recognition_pattern = re.compile(
+            r"^(?:do\s+you\s+)?remember\s+me\??$|^do\s+you\s+recognize\s+me\??$",
+            re.IGNORECASE,
+        )
 
         # English correction signals that start a turn.
         self._en_correction_patterns = [
@@ -342,6 +357,19 @@ class NLUParser:
                 entities={"math_text": text},
                 raw_text=text,
                 confidence=0.98,
+            )
+
+        if self._bn_recognition_pattern.search(text):
+            return ParseResult(
+                intent=IntentType.RECOGNITION_QUERY,
+                raw_text=text,
+                confidence=0.92,
+            )
+        if self._bn_capability_pattern.search(text):
+            return ParseResult(
+                intent=IntentType.CAPABILITY_QUERY,
+                raw_text=text,
+                confidence=0.88,
             )
 
         # Check greetings
@@ -556,6 +584,19 @@ class NLUParser:
                 entities={"math_text": text},
                 raw_text=text,
                 confidence=0.98,
+            )
+
+        if self._en_recognition_pattern.search(text):
+            return ParseResult(
+                intent=IntentType.RECOGNITION_QUERY,
+                raw_text=text,
+                confidence=0.92,
+            )
+        if self._en_capability_pattern.search(text):
+            return ParseResult(
+                intent=IntentType.CAPABILITY_QUERY,
+                raw_text=text,
+                confidence=0.88,
             )
 
         # Check greetings

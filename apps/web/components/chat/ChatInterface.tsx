@@ -20,7 +20,20 @@ export function ChatInterface({
   const [messages, setMessages] = useState<ChatMessageType[]>([]);
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+  const [loadingStartedAt, setLoadingStartedAt] = useState<number | null>(null);
+  const [loadingSeconds, setLoadingSeconds] = useState(0);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (loadingStartedAt === null) {
+      setLoadingSeconds(0);
+      return;
+    }
+    const timer = window.setInterval(() => {
+      setLoadingSeconds((Date.now() - loadingStartedAt) / 1000);
+    }, 100);
+    return () => window.clearInterval(timer);
+  }, [loadingStartedAt]);
 
   const scrollToBottom = useCallback(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -48,6 +61,7 @@ export function ChatInterface({
     });
     setInput("");
     setIsLoading(true);
+    setLoadingStartedAt(Date.now());
     onProcessingChange?.(true);
 
     try {
@@ -84,6 +98,7 @@ export function ChatInterface({
       });
     } finally {
       setIsLoading(false);
+      setLoadingStartedAt(null);
       onProcessingChange?.(false);
     }
   };
@@ -123,7 +138,9 @@ export function ChatInterface({
               <span className="w-1.5 h-1.5 bg-neural-accent rounded-full animate-bounce [animation-delay:150ms]" />
               <span className="w-1.5 h-1.5 bg-neural-accent rounded-full animate-bounce [animation-delay:300ms]" />
             </div>
-            <span className="text-xs">Processing...</span>
+            <span className="text-xs">
+              Processing cognitive cycle{loadingSeconds >= 1 ? ` · ${loadingSeconds.toFixed(1)}s` : "..."}
+            </span>
           </div>
         )}
         <div ref={messagesEndRef} />

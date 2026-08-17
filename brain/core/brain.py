@@ -825,6 +825,12 @@ class Brain:
         elif parse_result.intent == IntentType.CONTINUATION:
             response, confidence = self._act_continuation(parse_result)
 
+        elif parse_result.intent == IntentType.CAPABILITY_QUERY:
+            response, confidence = self._act_capability(parse_result)
+
+        elif parse_result.intent == IntentType.RECOGNITION_QUERY:
+            response, confidence = self._act_recognition(parse_result)
+
         elif parse_result.intent == IntentType.GREETING:
             name_part = f", {self.user_name}" if self.user_name else ""
             response = (
@@ -1013,6 +1019,54 @@ class Brain:
         self.emotion.update_from_outcome(success=False)
         return (f"I do not have information about who has '{relation}' relation with {target_name}."), 0.3
 
+    def _act_capability(self, parse_result: ParseResult) -> tuple:
+        """Explain currently implemented capabilities without overstating them."""
+        is_bengali = any("\u0980" <= char <= "\u09ff" for char in parse_result.raw_text)
+        if is_bengali:
+            return (
+                "হ্যাঁ, আমি এখন deterministic Mathematics ও Physics engine-এর মাধ্যমে "
+                "অঙ্কের হিসাব, algebra, geometry, statistics এবং mechanics/kinematics-এর "
+                "নির্দিষ্ট সূত্র সমাধান করতে পারি। বাংলা ও ইংরেজি বাক্য parse করে ধারণা, "
+                "সম্পর্ক, স্মৃতি ও learning event-এ রাখি। তবে আমি সব প্রশ্নের উত্তর জানি না; "
+                'নতুন তথ্য আপনি "মনে রাখো: ..." বা "X হলো Y" আকারে শেখালে তা বর্তমান '
+                "knowledge graph-এ যুক্ত হয়। আমার অনুভূতিগুলো এখন computational state—"
+                "যেমন curiosity, confidence ও uncertainty—মানবসদৃশ চেতনা নয়।"
+            ), 0.9
+        return (
+            "Yes. I currently use deterministic Mathematics and Physics engines for "
+            "supported arithmetic, algebra, geometry, statistics, mechanics, and kinematics. "
+            "I also parse Bengali and English, retain concepts and relations, and learn "
+            "explicit facts. My emotion values are computational state signals such as "
+            "curiosity, confidence, and uncertainty—not human consciousness."
+        ), 0.9
+
+    def _act_recognition(self, parse_result: ParseResult) -> tuple:
+        """Answer whether the dialogue context contains a known user identity."""
+        is_bengali = any("\u0980" <= char <= "\u09ff" for char in parse_result.raw_text)
+        if self.user_name:
+            if is_bengali:
+                return (
+                    f"হ্যাঁ, এই conversation-এ আপনি আগে আপনার নাম {self.user_name} বলেছেন; "
+                    f"তাই আমি আপনাকে {self.user_name} হিসেবে মনে রেখেছি।",
+                    0.9,
+                )
+            return (
+                f"Yes. In this conversation you told me your name is {self.user_name}, "
+                f"so I remember you as {self.user_name}.",
+                0.9,
+            )
+        if is_bengali:
+            return (
+                "আমি এই conversation-এর আগের বার্তা মনে রাখি, কিন্তু আপনার নাম এখনো শেখানো হয়নি। "
+                '"আমার নাম X" বললে আমি এই session-এ আপনাকে X হিসেবে মনে রাখব।',
+                0.7,
+            )
+        return (
+            "I can use the current conversation context, but you have not taught me your name yet. "
+            'Say "My name is X" and I will remember you during this session.',
+            0.7,
+        )
+
     def _act_unknown(self, parse_result: ParseResult) -> tuple:
         """Handle inputs the brain cannot yet understand.
 
@@ -1025,13 +1079,20 @@ class Brain:
         self.emotion.update_from_outcome(success=False)
         # Remember the unknown input as a learning opportunity
         self.working_memory.store("unknown_input", raw)
+        is_bengali = any("\u0980" <= char <= "\u09ff" for char in raw)
+        if is_bengali:
+            return (
+                "আমি আপনার কথাটি বুঝতে চেষ্টা করেছি, কিন্তু এই বাক্যের intent এখনো "
+                'নির্ভুলভাবে parse করতে পারিনি। আপনি চাইলে "মনে রাখো: ...", "X হলো Y", '
+                '"আমার নাম X", অথবা নির্দিষ্ট math/physics format ব্যবহার করে শেখাতে পারেন। '
+                "আমি এই অজানা input-টি learning opportunity হিসেবে working memory-তে রেখেছি।"
+            ), 0.35
         response = (
-            "I heard you, but I am still learning and cannot fully "
-            "understand that yet. You can teach me things like "
-            '"আমার নাম X", "আমি Y-এর creator", or ask '
-            '"Y কে তৈরি করেছে?"'
+            "I heard you, but I could not resolve the intent yet. You can teach me with "
+            '"remember that ...", "X is Y", or ask a supported mathematics or physics question. '
+            "I have retained this unknown input as a learning opportunity."
         )
-        return response, 0.3
+        return response, 0.35
 
     def _act_query_self(self, parse_result: ParseResult) -> tuple:
         """Answer identity questions about MISTY herself.
