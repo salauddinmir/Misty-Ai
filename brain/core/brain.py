@@ -12,6 +12,15 @@ from typing import Any, Dict, List
 import numpy as np
 
 from brain.actuators import ActuatorBridge
+from brain.cognition import (
+    AppraisalEvent,
+    CognitiveEvent,
+    Evidence,
+    GlobalWorkspace,
+    HypothesisRecord,
+    SelfModel,
+    ThoughtTraceSummary,
+)
 from brain.core.cycle import CognitiveCycle, CognitivePhase, CycleResult
 from brain.core.state import BrainState
 from brain.dialogue.context import DialogueContext
@@ -121,6 +130,11 @@ class Brain:
 
         # State
         self.state = BrainState()
+
+        # Global cognitive workspace: a bounded, inspectable blackboard shared
+        # by perception, memory, reasoning, appraisal, and language phases.
+        self.workspace = GlobalWorkspace(capacity=32)
+        self.self_model = SelfModel()
 
         # Neural simulation (Phase 1)
         self._neural_sim_engine = None
@@ -295,6 +309,15 @@ class Brain:
         """Shared cognitive-cycle implementation for text and sensor input."""
         start_time = time_module.time()
         self.state.last_input = text_input
+        self.workspace.reset_cycle(goal="answer" if source == "text" else "monitor")
+        self.workspace.broadcast_event(
+            CognitiveEvent(
+                content=text_input,
+                source=source,
+                event_type="sensor_reading" if source == "sensor" else "utterance",
+                metadata={"sensor_id": sensor_event.sensor_id} if sensor_event else {},
+            )
+        )
 
         # Record the user turn in the dialogue context so later turns
         # can resolve pronouns ("সে", "it", "its") back to this turn.
@@ -368,6 +391,16 @@ class Brain:
         processing_time = time_module.time() - start_time
         response = act_result.data.get("response", "")
         self.state.last_output = response
+        workspace_summary = self.workspace.summary()
+        thought_trace = ThoughtTraceSummary(
+            focus=self.workspace.focus,
+            intent=interpret_result.data.get("intent", "unknown"),
+            evidence_count=len(self.workspace.evidence),
+            hypothesis_count=len(self.workspace.hypotheses),
+            confidence=float(act_result.data.get("confidence", 0.5)),
+            uncertainty=max(0.0, 1.0 - float(act_result.data.get("confidence", 0.5))),
+            decision="respond" if response else "request_clarification",
+        )
         # Keep the interpreted intent accessible to API consumers.
         intent_value = interpret_result.data.get("intent", "unknown") if interpret_result is not None else "unknown"
 
@@ -387,6 +420,7 @@ class Brain:
 
         # Phase 5: expose prediction outcome in the returned state.
         self.state.last_prediction_error = intent_outcome.get("error", 0.0)
+        self.self_model.update_uncertainty(self.state.last_prediction_error)
         # Record performance
         self.reflection.record_performance(
             input_type=interpret_result.data.get("intent", "unknown"),
@@ -405,6 +439,9 @@ class Brain:
             "emotional_state": self.emotion.to_dict(),
             "intent": intent_value,
             "confidence": act_result.data.get("confidence", 0.5),
+            "cognitive_workspace": workspace_summary,
+            "thought_trace": thought_trace.to_dict(),
+            "self_model": self.self_model.summary(),
         }
 
     def _phase_observe(self, text_input: str) -> CycleResult:
@@ -414,6 +451,16 @@ class Brain:
 
         is_question = "?" in text_input or "\u0995\u09c7" in text_input or "\u0995\u09bf" in text_input
         self.emotion.update_from_input(is_question=is_question, is_new_info=True)
+        appraisal = AppraisalEvent(
+            trigger="question" if is_question else "new_input",
+            appraisal="epistemic_demand" if is_question else "novelty_check",
+            intensity=0.7 if is_question else 0.4,
+            affected_dimensions={
+                "curiosity": 0.08 if is_question else 0.04,
+                "uncertainty": 0.06 if is_question else 0.02,
+            },
+        )
+        self.workspace.appraise(appraisal)
 
         return CycleResult(
             phase=CognitivePhase.OBSERVE,
@@ -688,6 +735,25 @@ class Brain:
         """REASON phase: Apply inference rules."""
         self.state.current_phase = "reason"
         derived: List[Dict[str, Any]] = []
+
+        if parse_result:
+            intent_name = parse_result.intent.value
+            hypothesis = HypothesisRecord(
+                statement=f"Interpret input as {intent_name}",
+                goal="answer" if intent_name != IntentType.STATEMENT.value else "understand",
+                premises=[parse_result.raw_text],
+                confidence=parse_result.confidence,
+                uncertainty=max(0.0, 1.0 - parse_result.confidence),
+            )
+            hypothesis.add_evidence(
+                Evidence(
+                    source="nlu",
+                    content={"intent": intent_name, "entities": parse_result.entities},
+                    confidence=parse_result.confidence,
+                )
+            )
+            hypothesis.mark_tested(parse_result.confidence > 0.3)
+            self.workspace.propose(hypothesis)
 
         if parse_result and parse_result.intent == IntentType.QUERY_WHO:
             target_name = parse_result.query.get("target", "")
