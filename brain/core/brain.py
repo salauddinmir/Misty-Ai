@@ -13,6 +13,7 @@ import numpy as np
 
 from brain.actuators import ActuatorBridge
 from brain.cognition import (
+    AppraisalEngine,
     AppraisalEvent,
     CognitiveEvent,
     Evidence,
@@ -136,6 +137,7 @@ class Brain:
         # by perception, memory, reasoning, appraisal, and language phases.
         self.workspace = GlobalWorkspace()
         self.perception = PerceptionPipeline()
+        self.appraisal_engine = AppraisalEngine()
         self.self_model = SelfModel()
 
         # Neural simulation (Phase 1)
@@ -467,6 +469,8 @@ class Brain:
             },
         )
         self.workspace.appraise(appraisal)
+        drives = self.appraisal_engine.appraise(percept, self.emotion)
+        self.working_memory.store("drive_priorities", [drive.to_dict() for drive in drives])
 
         return CycleResult(
             phase=CognitivePhase.OBSERVE,
@@ -474,6 +478,7 @@ class Brain:
                 "input": percept.event.content,
                 "is_question": is_question,
                 "percept": percept.to_dict(),
+                "drive_priorities": [drive.to_dict() for drive in drives],
             },
             success=True,
         )

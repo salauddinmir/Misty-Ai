@@ -1,13 +1,16 @@
 """Tests for MISTY's inspectable cognitive workspace primitives."""
 
 from brain.cognition import (
+    AppraisalEngine,
     AppraisalEvent,
     CognitiveEvent,
     Evidence,
     GlobalWorkspace,
     HypothesisRecord,
+    PerceptionPipeline,
     ThoughtTraceSummary,
 )
+from brain.emotion.state import EmotionalState
 
 
 def test_workspace_broadcasts_event_and_returns_bounded_summary() -> None:
@@ -78,3 +81,27 @@ def test_thought_trace_is_json_safe() -> None:
     )
 
     assert trace.to_dict()["decision"] == "respond"
+
+
+def test_appraisal_prioritizes_answer_for_questions() -> None:
+    percept = PerceptionPipeline().perceive("তুমি কীভাবে কাজ করো?")
+    drives = AppraisalEngine().appraise(percept, EmotionalState())
+
+    assert drives[0].name == "answer"
+    assert drives[0].value > drives[1].value
+
+
+def test_appraisal_prioritizes_protection_for_urgent_input() -> None:
+    percept = PerceptionPipeline().perceive("জরুরি বিপদ")
+    drives = AppraisalEngine().appraise(percept, EmotionalState())
+
+    assert drives[0].name == "protect"
+    assert drives[0].value > 0.7
+
+
+def test_prediction_error_increases_uncertainty() -> None:
+    emotion = EmotionalState(uncertainty=0.2)
+    percept = PerceptionPipeline().perceive("নতুন তথ্য")
+    AppraisalEngine().appraise(percept, emotion, prediction_error=1.0)
+
+    assert emotion.uncertainty > 0.2
