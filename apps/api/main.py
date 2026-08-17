@@ -9,7 +9,9 @@ Run with:
     uvicorn apps.api.main:app --reload
 """
 
+import asyncio
 import json
+import os
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 
@@ -25,6 +27,7 @@ from apps.api.routes.sensors import router as sensors_router
 from apps.api.routes.voice import router as voice_router
 from apps.api.routes.voice_stream import router as voice_stream_router
 from apps.api.websocket.brain_stream import router as ws_router
+from brain.cognition import AutonomousInnerLoop, InnerLoopConfig
 from brain.core.brain import Brain
 from brain.learning.consolidation import ConsolidationEvent
 from brain.memory.procedural import Procedure
@@ -186,10 +189,25 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     app.state.brain = brain
     app.state.database = database
 
-    yield
+    autonomous_task = None
+    autonomy_enabled = os.getenv("MISTY_AUTONOMY_ENABLED", "true").casefold() == "true"
+    if autonomy_enabled:
+        interval = max(30.0, float(os.getenv("MISTY_AUTONOMY_INTERVAL_SECONDS", "300")))
+        inner_loop = AutonomousInnerLoop(
+            brain.autonomous_reflection_tick,
+            InnerLoopConfig(interval_seconds=interval, max_tick_seconds=1.0),
+        )
+        app.state.inner_loop = inner_loop
+        autonomous_task = asyncio.create_task(inner_loop.run())
 
-    # Shutdown: Close database connection
-    await database.close()
+    try:
+        yield
+    finally:
+        if autonomous_task is not None:
+            autonomous_task.cancel()
+            await asyncio.gather(autonomous_task, return_exceptions=True)
+        # Shutdown: Close database connection
+        await database.close()
 
 
 # Create FastAPI application

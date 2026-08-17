@@ -1450,6 +1450,53 @@ class Brain:
             return 0.0
         return (positive - negative) / total
 
+    async def autonomous_reflection_tick(self) -> None:
+        """Run one bounded internal reflection step without user I/O.
+
+        This is deliberately not a second chat response. It reviews current
+        uncertainty and goals, proposes a testable internal task, and records
+        provenance in the global workspace for the next user-facing cycle.
+        """
+        active_goal = self.goal_manager.active_goal()
+        goal_text = active_goal.description if active_goal else "review unresolved knowledge"
+        uncertainty = self.self_model.uncertainty
+        focus = self.workspace.focus or "recent cognitive state"
+        self.workspace.reset_cycle(goal=goal_text)
+        event = CognitiveEvent(
+            content=f"internal reflection: {focus[:120]}",
+            source="autonomy",
+            event_type="internal_review",
+            salience=max(0.2, uncertainty),
+            reliability=1.0,
+            metadata={"cycle": self.cycle.cycle_count, "goal": goal_text},
+        )
+        self.workspace.broadcast_event(event)
+        hypothesis = HypothesisRecord(
+            statement=f"Review whether the current model is sufficient for: {goal_text}",
+            goal="self_review",
+            premises=[f"current uncertainty={uncertainty:.3f}"],
+            predictions=["retain the goal if no contradiction is found"],
+            confidence=max(0.1, 1.0 - uncertainty),
+            uncertainty=uncertainty,
+        )
+        hypothesis.add_evidence(
+            Evidence(
+                source="self_model",
+                content={"focus": focus, "active_goal": goal_text},
+                confidence=max(0.1, 1.0 - uncertainty),
+            )
+        )
+        self.workspace.propose(hypothesis)
+        self.workspace.appraise(
+            AppraisalEvent(
+                trigger="internal_reflection",
+                appraisal="goal_review",
+                intensity=max(0.1, uncertainty),
+                affected_dimensions={"curiosity": 0.03, "attention": 0.02},
+            )
+        )
+        self.working_memory.store("last_autonomous_reflection", self.workspace.summary())
+
     def get_state(self) -> Dict[str, Any]:
         """Get a snapshot of the current brain state."""
         state_dict = {
