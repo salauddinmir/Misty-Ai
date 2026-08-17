@@ -33,6 +33,7 @@ from brain.graph.concepts import ConceptGraph
 from brain.graph.hebbian import HebbianLearner
 from brain.learning.consolidation import MemoryConsolidator
 from brain.learning.curiosity import CuriosityExplorer
+from brain.learning.induction import EvidenceGatedInducer
 from brain.learning.reinforcement import ReinforcementLearner
 from brain.learning.reward import RewardSignal
 from brain.math_engine import MATH_ENGINE
@@ -102,6 +103,7 @@ class Brain:
         self.learner = ReinforcementLearner()
         self.reward_system = RewardSignal()
         self.consolidator = MemoryConsolidator()
+        self.inducer = EvidenceGatedInducer()
         # Phase 4: associative learning depth
         self.hebbian = HebbianLearner()
         self.recall_scorer = WeightedRecall()
@@ -1398,6 +1400,21 @@ class Brain:
             emotional_valence=reward,
             importance=confidence,
         )
+        induced_candidates = []
+        if parse_result and parse_result.relations:
+            for relation in parse_result.relations:
+                subject = relation.get("subject") or parse_result.entities.get("subject")
+                predicate = relation.get("predicate") or relation.get("relation")
+                obj = relation.get("object") or relation.get("obj")
+                if subject and predicate and obj:
+                    self.inducer.observe(
+                        subject,
+                        predicate,
+                        obj,
+                        confidence=confidence,
+                        source=state_key,
+                    )
+            induced_candidates = self.inducer.promote_ready(self.semantic_memory)
         # Phase 6: advance the active goal's plan progress. Root goals
         # only achieve once their children are done, so drive progress on
         # the deepest (leaf) active goal each cycle.
@@ -1413,7 +1430,12 @@ class Brain:
             )
         return CycleResult(
             phase=CognitivePhase.LEARN,
-            data={"reward": reward, "goal_update": goal_update},
+            data={
+                "reward": reward,
+                "goal_update": goal_update,
+                "induced_candidates": induced_candidates,
+                "pending_learning": len(self.inducer.pending()),
+            },
             success=True,
         )
 
@@ -1446,6 +1468,8 @@ class Brain:
                 "consolidated_keys": consolidated,
                 "hebbian_decayed": len(decayed),
                 "goal_stats": goal_stats,
+                "pending_learning": len(self.inducer.pending()),
+                "promoted_learning": self.inducer.promoted_count,
                 "pruned_terminal_goals": pruned,
             },
             success=True,
