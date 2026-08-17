@@ -50,3 +50,24 @@
 Perception encoder গুলো পুরোটাই pure NumPy — কোনো ML মডেল ডিপেন্ডেন্সি নেই, তাই `requirements.txt` অপরিবর্তিত। Pillow ইনস্টল থাকলে আসল PNG/JPEG ডিকোড হয়, না থাকলে নির্দিষ্ট (deterministic) raw-byte fallback চালু হয়। production-grade embedding (CLIP/Whisper) পরে subclass করে প্লাগ করা যাবে।
 
 ### পরবর্তী: Phase 3 — Language & Dialogue Depth (context memory, coreference, Bengali dialogue improvements) এবাং speech I/O সূচনা
+
+
+## Phase 11-13: Identity, Mathematics, Physics ও Bengali Literature expansion — বর্তমান milestone
+
+| ডোমেইন | অবস্থা | বাস্তবায়ন |
+|---|---|---|
+| Identity | সমাপ্ত | MISTY, Pixline Incorporate, Salauddin Mir/Netvai এবং LLM-independent identity facts |
+| Mathematics | সমাপ্ত foundation | deterministic arithmetic, algebra, geometry ও statistics engine; NLU/Brain integration |
+| Physics | সমাপ্ত foundation module | deterministic velocity, force, work, kinetic energy, momentum ও gravitational potential energy; token-boundary regression fix; sensor telemetry isolation |
+| Bengali Literature | foundation package সমাপ্ত | ২২ concepts, ১৩ relations, ২০ factual metadata records; Charyapada, medieval genres, modern authors ও canonical works |
+| Verification | সবুজ | **385 tests passed**; changed-file Ruff checks passed |
+
+### Bengali Literature scope note
+
+এই milestone-এ পূর্ণ গ্রন্থের copyrighted corpus নয়, বরং source-backed metadata, author–work relations, যুগবিভাগ, genre এবং সংক্ষিপ্ত summaries যোগ করা হয়েছে। বিস্তৃত public-domain corpus ingest করার আগে edition ও jurisdiction-level rights/provenance যাচাই করা আবশ্যক। বিস্তারিত বাংলা report: `docs/misty_completion_report_bn.md`।
+
+### Production action
+
+Vercel-এর git-linked frontend project-এ Root Directory `apps/web` সেট করতে হবে। Render backend `main` branch auto-deploy করবে; Supabase PgBouncer transaction mode-এর জন্য `statement_cache_size=0` অপরিবর্তিত রাখতে হবে।
+
+---

@@ -16,6 +16,7 @@ from enum import Enum
 from typing import Any, Dict, List
 
 from brain.math_engine import MATH_ENGINE
+from brain.physics_engine import PHYSICS_ENGINE
 
 
 class IntentType(str, Enum):
@@ -31,6 +32,7 @@ class IntentType(str, Enum):
     CONTINUATION = "continuation"
     GREETING = "greeting"
     MATH = "math"
+    PHYSICS = "physics"
     UNKNOWN = "unknown"
 
 
@@ -324,6 +326,15 @@ class NLUParser:
                     confidence=0.8,
                 )
 
+        # Deterministic Physics takes priority over generic questions.
+        if PHYSICS_ENGINE.solve(text) is not None:
+            return ParseResult(
+                intent=IntentType.PHYSICS,
+                entities={"physics_text": text},
+                raw_text=text,
+                confidence=0.98,
+            )
+
         # Deterministic mathematics takes priority over generic questions.
         if MATH_ENGINE.looks_mathematical(text):
             return ParseResult(
@@ -529,6 +540,15 @@ class NLUParser:
                     confidence=0.8,
                 )
         """Try English pattern matching."""
+        # Deterministic Physics takes priority over generic questions.
+        if PHYSICS_ENGINE.solve(text) is not None:
+            return ParseResult(
+                intent=IntentType.PHYSICS,
+                entities={"physics_text": text},
+                raw_text=text,
+                confidence=0.98,
+            )
+
         # Deterministic mathematics takes priority over generic questions.
         if MATH_ENGINE.looks_mathematical(text):
             return ParseResult(

@@ -33,6 +33,7 @@ from brain.memory.working import WorkingMemory
 from brain.neurons.populations import NeuronPopulation
 from brain.nlu.coreference import resolve_entities
 from brain.nlu.parser import IntentType, NLUParser, ParseResult
+from brain.physics_engine import PHYSICS_ENGINE
 from brain.planner.planner import Planner
 from brain.reasoning.inference import InferenceEngine
 from brain.reflection.reflection import ReflectionEngine
@@ -307,7 +308,7 @@ class Brain:
         self.cycle.advance(observe_result)
 
         # Phase 2: INTERPRET
-        interpret_result = self._phase_interpret(text_input)
+        interpret_result = self._phase_interpret(text_input, source=source)
         self.cycle.advance(interpret_result)
         # Phase 5: compare actual intent against the prediction; the
         # resulting prediction error is stored in the brain state and can
@@ -420,10 +421,13 @@ class Brain:
             success=True,
         )
 
-    def _phase_interpret(self, text_input: str) -> CycleResult:
+    def _phase_interpret(self, text_input: str, source: str = "text") -> CycleResult:
         """INTERPRET phase: Parse input using NLU."""
         self.state.current_phase = "interpret"
         parse_result = self.nlu.parse(text_input)
+        if source == "sensor" and parse_result.intent == IntentType.PHYSICS:
+            parse_result.intent = IntentType.STATEMENT
+            parse_result.confidence = 0.8
 
         # Phase 3 coreference resolution: map pronoun-targeted queries and
         # pronoun-only inputs to the most salient entity from the ongoing
@@ -764,6 +768,8 @@ class Brain:
             plan = "greet_back"
         elif parse_result.intent == IntentType.MATH:
             plan = "solve_mathematics"
+        elif parse_result.intent == IntentType.PHYSICS:
+            plan = "solve_physics"
         elif parse_result.intent in (IntentType.TEACH, IntentType.STATEMENT, IntentType.CORRECTION):
             plan = "absorb_knowledge"
         elif parse_result.intent == IntentType.CONTINUATION:
@@ -830,6 +836,9 @@ class Brain:
         elif parse_result.intent == IntentType.MATH:
             response, confidence = self._act_math(parse_result)
 
+        elif parse_result.intent == IntentType.PHYSICS:
+            response, confidence = self._act_physics(parse_result)
+
         else:
             # Unknown/unsupported input: give a contextual fallback instead
             # of a flat "I don't know" so the user understands the brain's
@@ -855,11 +864,27 @@ class Brain:
         result = MATH_ENGINE.solve(text)
         if result is None:
             return (
-                "আমি এই mathematical format-টি এখনো সমর্থন করি না। "
-                "উদাহরণ: calculate 2 + 2 অথবা 2x + 4 = 10 সমাধান করো।",
+                "আমি এই mathematical format-টি এখনো সমর্থন করি না। উদাহরণ: calculate 2 + 2 অথবা 2x + 4 = 10 সমাধান করো।",
                 0.3,
             )
         self.state.context["last_math_result"] = {
+            "category": result.category,
+            "exact": result.exact,
+            "steps": list(result.steps),
+        }
+        return result.answer, result.confidence
+
+    def _act_physics(self, parse_result: ParseResult) -> tuple:
+        """Solve a supported Physics query without an LLM."""
+        text = parse_result.entities.get("physics_text", parse_result.raw_text)
+        result = PHYSICS_ENGINE.solve(text)
+        if result is None:
+            return (
+                "এই Physics format-টি এখনো সমর্থিত নয়। উদাহরণ: velocity distance 100 time 20 "
+                "অথবা force mass 5 acceleration 2।",
+                0.3,
+            )
+        self.state.context["last_physics_result"] = {
             "category": result.category,
             "exact": result.exact,
             "steps": list(result.steps),

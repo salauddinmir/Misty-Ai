@@ -76,6 +76,115 @@ IDENTITY_FACTS: List[Dict[str, str]] = [
 ]
 
 # ---------------------------------------------------------------------------
+# Bengali Literature: structured, source-backed metadata
+# ---------------------------------------------------------------------------
+
+LITERATURE_CONCEPTS: List[Dict[str, str]] = [
+    {"name": "Bengali Literature", "type": "Literary Tradition"},
+    {"name": "Charyapada", "type": "Ancient Bengali Poetry"},
+    {"name": "Vaishnava Padavali", "type": "Medieval Lyric Poetry"},
+    {"name": "Mangalkavya", "type": "Medieval Narrative Poetry"},
+    {"name": "Bengali Translation Literature", "type": "Literary Movement"},
+    {"name": "Bengali Novel", "type": "Literary Genre"},
+    {"name": "Bengali Short Story", "type": "Literary Genre"},
+    {"name": "Bengali Drama", "type": "Literary Genre"},
+    {"name": "Rabindranath Tagore", "type": "Author"},
+    {"name": "Bankim Chandra Chattopadhyay", "type": "Author"},
+    {"name": "Michael Madhusudan Dutt", "type": "Author"},
+    {"name": "Sarat Chandra Chattopadhyay", "type": "Author"},
+    {"name": "Kazi Nazrul Islam", "type": "Author"},
+    {"name": "Krittibas Ojha", "type": "Author"},
+    {"name": "Kashiram Das", "type": "Author"},
+    {"name": "Srikrishnakirtan", "type": "Medieval Bengali Text"},
+    {"name": "Sri Krishna Vijay", "type": "Medieval Bengali Text"},
+    {"name": "Gitanjali", "type": "Poetry Collection"},
+    {"name": "Meghnad Badh Kavya", "type": "Epic Poem"},
+    {"name": "Anandamath", "type": "Historical Novel"},
+    {"name": "Devdas", "type": "Novel"},
+    {"name": "Bidrohi", "type": "Poem"},
+]
+
+LITERATURE_RELATIONS: List[Dict[str, str]] = [
+    {"source": "Bengali Literature", "target": "Charyapada", "type": "includes"},
+    {"source": "Bengali Literature", "target": "Vaishnava Padavali", "type": "includes"},
+    {"source": "Bengali Literature", "target": "Mangalkavya", "type": "includes"},
+    {"source": "Bengali Literature", "target": "Bengali Novel", "type": "includes"},
+    {"source": "Bengali Literature", "target": "Bengali Short Story", "type": "includes"},
+    {"source": "Bengali Literature", "target": "Bengali Drama", "type": "includes"},
+    {"source": "Rabindranath Tagore", "target": "Gitanjali", "type": "wrote"},
+    {"source": "Bankim Chandra Chattopadhyay", "target": "Anandamath", "type": "wrote"},
+    {"source": "Michael Madhusudan Dutt", "target": "Meghnad Badh Kavya", "type": "wrote"},
+    {"source": "Sarat Chandra Chattopadhyay", "target": "Devdas", "type": "wrote"},
+    {"source": "Kazi Nazrul Islam", "target": "Bidrohi", "type": "wrote"},
+    {"source": "Krittibas Ojha", "target": "Bengali Ramayana", "type": "translated"},
+    {"source": "Kashiram Das", "target": "Bengali Mahabharata", "type": "translated"},
+]
+
+LITERATURE_FACTS: List[Dict[str, str]] = [
+    {"subject": "Bengali Literature", "predicate": "periods", "obj": "ancient, medieval, and modern"},
+    {"subject": "Bengali Literature", "predicate": "ancient_period", "obj": "approximately 650-1200"},
+    {"subject": "Bengali Literature", "predicate": "medieval_period", "obj": "approximately 1200-1800"},
+    {"subject": "Bengali Literature", "predicate": "modern_period", "obj": "from approximately 1800 onward"},
+    {
+        "subject": "Charyapada",
+        "predicate": "description",
+        "obj": "earliest extant specimens of ancient Bangla devotional verse",
+    },
+    {"subject": "Vaishnava Padavali", "predicate": "theme", "obj": "Radha and Krishna devotional lyrics"},
+    {
+        "subject": "Mangalkavya",
+        "predicate": "description",
+        "obj": "medieval narrative poems praising deities and depicting social life",
+    },
+    {
+        "subject": "Krittibas Ojha",
+        "predicate": "contribution",
+        "obj": "early influential Bengali rendering of the Ramayana",
+    },
+    {
+        "subject": "Kashiram Das",
+        "predicate": "contribution",
+        "obj": "widely influential Bengali rendering of the Mahabharata",
+    },
+    {
+        "subject": "Rabindranath Tagore",
+        "predicate": "literary_roles",
+        "obj": "poet, novelist, dramatist, short-story writer, and essayist",
+    },
+    {
+        "subject": "Michael Madhusudan Dutt",
+        "predicate": "contribution",
+        "obj": "pioneered Bengali blank verse and modern epic drama",
+    },
+    {
+        "subject": "Bankim Chandra Chattopadhyay",
+        "predicate": "contribution",
+        "obj": "major pioneer of the modern Bengali novel",
+    },
+    {
+        "subject": "Sarat Chandra Chattopadhyay",
+        "predicate": "contribution",
+        "obj": "known for accessible novels and social realism",
+    },
+    {
+        "subject": "Kazi Nazrul Islam",
+        "predicate": "contribution",
+        "obj": "poet and writer associated with rebellion, equality, and humanism",
+    },
+    {"subject": "Gitanjali", "predicate": "genre", "obj": "poetry collection by Rabindranath Tagore"},
+    {
+        "subject": "Meghnad Badh Kavya",
+        "predicate": "genre",
+        "obj": "modern Bengali epic poem by Michael Madhusudan Dutt",
+    },
+    {"subject": "Anandamath", "predicate": "genre", "obj": "historical novel by Bankim Chandra Chattopadhyay"},
+    {"subject": "Devdas", "predicate": "genre", "obj": "novel by Sarat Chandra Chattopadhyay"},
+    {"subject": "Bidrohi", "predicate": "genre", "obj": "revolutionary Bengali poem by Kazi Nazrul Islam"},
+    {"subject": "Misty", "predicate": "has_domain", "obj": "structured Bengali Literature metadata and summaries"},
+]
+
+
+# ---------------------------------------------------------------------------
 # General training knowledge — baseline world knowledge
 # ---------------------------------------------------------------------------
 
@@ -131,15 +240,27 @@ def general_training_package() -> TrainingPackage:
     return TrainingPackage(facts=TRAINING_FACTS)
 
 
+def literature_package() -> TrainingPackage:
+    """Return structured Bengali Literature metadata and summaries."""
+    return TrainingPackage(
+        concepts=LITERATURE_CONCEPTS,
+        relations=LITERATURE_RELATIONS,
+        facts=LITERATURE_FACTS,
+    )
+
+
 def combined_package() -> TrainingPackage:
-    """Return identity, general, and mathematics training data."""
+    """Return identity, general, mathematics, Physics, and literature data."""
     from brain.math_engine import mathematics_package
+    from brain.physics_engine import physics_package
 
     identity = identity_package()
     general = general_training_package()
+    literature = literature_package()
     math_concepts, math_relations, math_facts = mathematics_package()
+    physics_concepts, physics_relations, physics_facts = physics_package()
     return TrainingPackage(
-        concepts=identity.concepts + math_concepts,
-        relations=identity.relations + math_relations,
-        facts=identity.facts + general.facts + math_facts,
+        concepts=identity.concepts + literature.concepts + math_concepts + physics_concepts,
+        relations=identity.relations + literature.relations + math_relations + physics_relations,
+        facts=identity.facts + general.facts + literature.facts + math_facts + physics_facts,
     )
