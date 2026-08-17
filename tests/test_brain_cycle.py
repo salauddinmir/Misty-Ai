@@ -300,3 +300,36 @@ class TestCognitivePhases:
         assert "cycle_count" in result
         assert "active_concepts" in result
         assert "emotional_state" in result
+
+
+class TestAutonomousReflection:
+    """Tests for bounded active evidence gathering."""
+
+    def test_autonomous_tick_gathers_relevant_semantic_evidence(self) -> None:
+        import asyncio
+
+        brain = Brain()
+        brain.workspace.focus = "Misty Pixline"
+        asyncio.run(brain.autonomous_reflection_tick())
+
+        assert brain.last_autonomous_tick is not None
+        assert brain.last_autonomous_tick["outcome"] == "hypothesis_supported"
+        assert brain.last_autonomous_tick["hypothesis_status"] == "supported"
+        assert brain.last_autonomous_tick["evidence_count"] > 0
+        assert brain.workspace.summary()["evidence_count"] > 0
+        assert brain.workspace.best_hypothesis() is not None
+
+    def test_autonomous_tick_records_no_evidence_without_fabrication(self) -> None:
+        import asyncio
+
+        from brain.memory.semantic import SemanticMemory
+
+        brain = Brain()
+        brain.semantic_memory = SemanticMemory()
+        brain.workspace.focus = "qzxv unknown signal"
+        asyncio.run(brain.autonomous_reflection_tick())
+
+        assert brain.last_autonomous_tick is not None
+        assert brain.last_autonomous_tick["outcome"] == "no_evidence"
+        assert brain.last_autonomous_tick["evidence_count"] == 0
+        assert brain.workspace.summary()["evidence_count"] == 0

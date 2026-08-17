@@ -105,3 +105,24 @@ def test_prediction_error_increases_uncertainty() -> None:
     AppraisalEngine().appraise(percept, emotion, prediction_error=1.0)
 
     assert emotion.uncertainty > 0.2
+
+
+def test_hypothesis_tracks_contradiction_and_falsification() -> None:
+    hypothesis = HypothesisRecord(
+        statement="the stored preference is stable",
+        confidence=0.7,
+        uncertainty=0.3,
+    )
+    hypothesis.mark_contradicted(
+        Evidence(
+            source="user_correction",
+            content={"preference": "different"},
+            confidence=0.9,
+        )
+    )
+
+    assert hypothesis.status == "rejected"
+    assert hypothesis.test_count == 1
+    assert hypothesis.contradiction_count == 1
+    assert hypothesis.evidence[0].polarity == "contradict"
+    assert hypothesis.confidence < 0.7

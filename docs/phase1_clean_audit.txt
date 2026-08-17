@@ -1,0 +1,447 @@
+=== tracked source ===
+.dockerignore
+.github/workflows/ci.yml
+.gitignore
+Dockerfile
+Procfile
+README.md
+apps/__init__.py
+apps/api/__init__.py
+apps/api/database.py
+apps/api/main.py
+apps/api/requirements.txt
+apps/api/routes/__init__.py
+apps/api/routes/actuators.py
+apps/api/routes/brain.py
+apps/api/routes/chat.py
+apps/api/routes/media.py
+apps/api/routes/sensors.py
+apps/api/routes/voice.py
+apps/api/routes/voice_stream.py
+apps/api/websocket/__init__.py
+apps/api/websocket/brain_stream.py
+apps/web/.env.production
+apps/web/.gitignore
+apps/web/app/globals.css
+apps/web/app/layout.tsx
+apps/web/app/page.tsx
+apps/web/components/avatar/Avatar.tsx
+apps/web/components/avatar/AvatarPanel.tsx
+apps/web/components/brain-monitor/ActivityFeed.tsx
+apps/web/components/brain-monitor/BrainMonitor.tsx
+apps/web/components/brain-monitor/CognitiveTrace.tsx
+apps/web/components/chat/ChatInterface.tsx
+apps/web/components/chat/ChatMessage.tsx
+apps/web/lib/api.ts
+apps/web/lib/websocket.ts
+apps/web/next-env.d.ts
+apps/web/next.config.js
+apps/web/package-lock.json
+apps/web/package.json
+apps/web/postcss.config.js
+apps/web/tailwind.config.ts
+apps/web/tsconfig.json
+apps/web/types/index.ts
+apps/web/vercel.json
+brain/__init__.py
+brain/actuators/__init__.py
+brain/actuators/control.py
+brain/cognition/__init__.py
+brain/cognition/appraisal.py
+brain/cognition/inner_loop.py
+brain/cognition/language.py
+brain/cognition/perception.py
+brain/cognition/self_model.py
+brain/cognition/workspace.py
+brain/config.py
+brain/core/__init__.py
+brain/core/brain.py
+brain/core/cycle.py
+brain/core/state.py
+brain/dialogue/__init__.py
+brain/dialogue/context.py
+brain/emotion/__init__.py
+brain/emotion/state.py
+brain/encoding/__init__.py
+brain/encoding/concept_encoder.py
+brain/encoding/decoder.py
+brain/encoding/text_encoder.py
+brain/goals/__init__.py
+brain/goals/manager.py
+brain/graph/__init__.py
+brain/graph/activation.py
+brain/graph/concepts.py
+brain/graph/hebbian.py
+brain/graph/relations.py
+brain/knowledge/training.py
+brain/learning/__init__.py
+brain/learning/consolidation.py
+brain/learning/curiosity.py
+brain/learning/induction.py
+brain/learning/reinforcement.py
+brain/learning/reward.py
+brain/math_engine.py
+brain/memory/__init__.py
+brain/memory/episodic.py
+brain/memory/procedural.py
+brain/memory/semantic.py
+brain/memory/weighted_recall.py
+brain/memory/working.py
+brain/neurons/__init__.py
+brain/neurons/binary_neuron.py
+brain/neurons/lif.py
+brain/neurons/populations.py
+brain/neurons/vectorized.py
+brain/nlu/__init__.py
+brain/nlu/coreference.py
+brain/nlu/parser.py
+brain/perception/__init__.py
+brain/perception/audio.py
+brain/perception/encoder.py
+brain/perception/gateway.py
+brain/perception/image.py
+brain/physics_engine.py
+brain/planner/__init__.py
+brain/planner/evaluator.py
+brain/planner/goals.py
+brain/planner/planner.py
+brain/reasoning/__init__.py
+brain/reasoning/confidence.py
+brain/reasoning/inference.py
+brain/reasoning/rules.py
+brain/reflection/__init__.py
+brain/reflection/reflection.py
+brain/regions/__init__.py
+brain/regions/association.py
+brain/regions/memory_region.py
+brain/regions/prefrontal.py
+brain/regions/region.py
+brain/regions/reward_region.py
+brain/regions/sensory.py
+brain/sensors/__init__.py
+brain/sensors/channel.py
+brain/simulation/__init__.py
+brain/simulation/config.py
+brain/simulation/engine.py
+brain/simulation/recorder.py
+brain/speech/__init__.py
+brain/speech/stt.py
+brain/speech/tts.py
+brain/synapses/__init__.py
+brain/synapses/network.py
+brain/synapses/plasticity.py
+brain/synapses/stdp.py
+brain/synapses/synapse.py
+brain/world/__init__.py
+brain/world/model.py
+database/schema.sql
+database/schema_postgres.sql
+docs/deployment.md
+docs/misty_autonomous_cognition_blueprint_bn.md
+docs/misty_completion_report_bn.md
+docs/phase-plan-progress.md
+docs/phase-plan.md
+docs_bengali_literature_sources.md
+experiments/__init__.py
+experiments/benchmark_neurons.py
+experiments/test_association.py
+pyproject.toml
+render.yaml
+requirements.txt
+tests/__init__.py
+tests/test_actuators.py
+tests/test_brain_cycle.py
+tests/test_cognitive_workspace.py
+tests/test_coreference.py
+tests/test_dialogue_context.py
+tests/test_encoding.py
+tests/test_extended_intents.py
+tests/test_goal_manager.py
+tests/test_graph.py
+tests/test_inner_loop.py
+tests/test_language_grounding.py
+tests/test_learning_improvements.py
+tests/test_learning_induction.py
+tests/test_math_engine.py
+tests/test_media_endpoint.py
+tests/test_memory.py
+tests/test_network.py
+tests/test_neural_runtime.py
+tests/test_neurons.py
+tests/test_nlu_fix.py
+tests/test_perception.py
+tests/test_phase4_learning.py
+tests/test_procedural_persistence.py
+tests/test_regions.py
+tests/test_self_model.py
+tests/test_sensors.py
+tests/test_vectorized.py
+tests/test_voice_endpoint.py
+tests/test_voice_stream.py
+tests/test_world_model.py
+tools/__init__.py
+=== key symbol map ===
+[35mapps/api/database.py[m[36m:[m[32m130[m[36m:[m    [1;31masync def save[m_concept(
+[35mapps/api/database.py[m[36m:[m[32m228[m[36m:[m    [1;31masync def save[m_relation(
+[35mapps/api/database.py[m[36m:[m[32m271[m[36m:[m    [1;31masync def save[m_episode(
+[35mapps/api/database.py[m[36m:[m[32m316[m[36m:[m    [1;31masync def save[m_procedure(
+[35mapps/api/database.py[m[36m:[m[32m367[m[36m:[m    [1;31masync def save[m_brain_state(
+[35mapps/api/main.py[m[36m:[m[32m134[m[36m:[m        task = loop.[1;31mcreate_task[m(coro)
+[35mapps/api/main.py[m[36m:[m[32m201[m[36m:[m        autonomous_task = asyncio.[1;31mcreate_task[m(inner_loop.run())
+[35mapps/api/routes/chat.py[m[36m:[m[32m55[m[36m:[m    [1;31mgrounding[m: Dict[str, Any] = Field(default_factory=dict)
+[35mapps/api/routes/chat.py[m[36m:[m[32m161[m[36m:[m    persistence_task = asyncio.[1;31mcreate_task[m(_persist_chat_state(app_state, database, brain, body.message, result))
+[35mapps/api/routes/chat.py[m[36m:[m[32m172[m[36m:[m        [1;31mgrounding[m=result.get("[1;31mgrounding[m", {}),
+[35mapps/web/components/brain-monitor/CognitiveTrace.tsx[m[36m:[m[32m14[m[36m:[m  const trace = message?.[1;31mthought_trace[m;
+[35mapps/web/components/brain-monitor/CognitiveTrace.tsx[m[36m:[m[32m15[m[36m:[m  const model = message?.[1;31mself_model[m;
+[35mapps/web/components/brain-monitor/CognitiveTrace.tsx[m[36m:[m[32m16[m[36m:[m  const [1;31mgrounding[m = message?.[1;31mgrounding[m;
+[35mapps/web/components/brain-monitor/CognitiveTrace.tsx[m[36m:[m[32m17[m[36m:[m  const timings = message?.[1;31mphase_timings_ms[m;
+[35mapps/web/components/brain-monitor/CognitiveTrace.tsx[m[36m:[m[32m34[m[36m:[m            <div><span className="text-neural-muted">Evidence</span><p className="text-slate-300">{trace.[1;31mevidence[m_count}</p></div>
+[35mapps/web/components/brain-monitor/CognitiveTrace.tsx[m[36m:[m[32m35[m[36m:[m            <div><span className="text-neural-muted">Hypotheses</span><p className="text-slate-300">{trace.[1;31mhypothes[mis_count}</p></div>
+[35mapps/web/components/brain-monitor/CognitiveTrace.tsx[m[36m:[m[32m40[m[36m:[m            <div className="flex justify-between"><span className="text-neural-muted">Grounding</span><span className="text-slate-300">{[1;31mgrounding[m?.strategy || "workspace [1;31mevidence[m"}</span></div>
+[35mapps/web/components/chat/ChatInterface.tsx[m[36m:[m[32m78[m[36m:[m        [1;31mthought_trace[m: response.[1;31mthought_trace[m,
+[35mapps/web/components/chat/ChatInterface.tsx[m[36m:[m[32m79[m[36m:[m        [1;31mself_model[m: response.[1;31mself_model[m,
+[35mapps/web/components/chat/ChatInterface.tsx[m[36m:[m[32m80[m[36m:[m        [1;31mgrounding[m: response.[1;31mgrounding[m,
+[35mapps/web/components/chat/ChatInterface.tsx[m[36m:[m[32m81[m[36m:[m        [1;31mphase_timings_ms[m: response.[1;31mphase_timings_ms[m,
+[35mapps/web/types/index.ts[m[36m:[m[32m50[m[36m:[m  [1;31mevidence[m_count: number;
+[35mapps/web/types/index.ts[m[36m:[m[32m51[m[36m:[m  [1;31mhypothes[mis_count: number;
+[35mapps/web/types/index.ts[m[36m:[m[32m68[m[36m:[m  [1;31mevidence[m_count?: number;
+[35mapps/web/types/index.ts[m[36m:[m[32m69[m[36m:[m  [1;31mhypothes[mis_count?: number;
+[35mapps/web/types/index.ts[m[36m:[m[32m82[m[36m:[m  [1;31mthought_trace[m?: ThoughtTrace;
+[35mapps/web/types/index.ts[m[36m:[m[32m83[m[36m:[m  [1;31mself_model[m?: SelfModel;
+[35mapps/web/types/index.ts[m[36m:[m[32m84[m[36m:[m  [1;31mgrounding[m?: Grounding;
+[35mapps/web/types/index.ts[m[36m:[m[32m85[m[36m:[m  [1;31mphase_timings_ms[m?: Record<string, number>;
+[35mapps/web/types/index.ts[m[36m:[m[32m95[m[36m:[m  [1;31mthought_trace[m?: ThoughtTrace;
+[35mapps/web/types/index.ts[m[36m:[m[32m96[m[36m:[m  [1;31mself_model[m?: SelfModel;
+[35mapps/web/types/index.ts[m[36m:[m[32m97[m[36m:[m  [1;31mgrounding[m?: Grounding;
+[35mapps/web/types/index.ts[m[36m:[m[32m98[m[36m:[m  [1;31mphase_timings_ms[m?: Record<string, number>;
+[35mbrain/cognition/__init__.py[m[36m:[m[32m7[m[36m:[mfrom brain.cognition.[1;31mself_model[m import SelfModel
+[35mbrain/cognition/inner_loop.py[m[36m:[m[32m22[m[36m:[m[1;31mclass AutonomousInnerLoop[m:
+[35mbrain/cognition/language.py[m[36m:[m[32m1[m[36m:[m"""Deterministic language [1;31mgrounding[m and compositional response metadata."""
+[35mbrain/cognition/language.py[m[36m:[m[32m9[m[36m:[m    """A response plus the cognitive [1;31mevidence[m used to compose it."""
+[35mbrain/cognition/language.py[m[36m:[m[32m44[m[36m:[m        [1;31mevidence[m_count: int,
+[35mbrain/cognition/language.py[m[36m:[m[32m45[m[36m:[m        [1;31mhypothes[mis_count: int,
+[35mbrain/cognition/language.py[m[36m:[m[32m50[m[36m:[m        if [1;31mevidence[m_count:
+[35mbrain/cognition/language.py[m[36m:[m[32m51[m[36m:[m            claims.append("workspace_[1;31mevidence[m")
+[35mbrain/cognition/language.py[m[36m:[m[32m52[m[36m:[m        if [1;31mhypothes[mis_count:
+[35mbrain/cognition/language.py[m[36m:[m[32m53[m[36m:[m            claims.append("workspace_[1;31mhypothes[mis")
+[35mbrain/cognition/self_model.py[m[36m:[m[32m10[m[36m:[m[1;31mclass SelfModel[m:
+[35mbrain/cognition/self_model.py[m[36m:[m[32m28[m[36m:[m            "cognition": "bounded event appraisal, [1;31mhypothes[mis testing, and world modeling",
+[35mbrain/cognition/self_model.py[m[36m:[m[32m35[m[36m:[m            "can be uncertain when no grounded [1;31mevidence[m is available",
+[35mbrain/cognition/self_model.py[m[36m:[m[32m62[m[36m:[m    [1;31mdef learn[m_belief(self, subject: str, predicate: str, value: Any, confidence: float) -> None:
+[35mbrain/cognition/workspace.py[m[36m:[m[32m40[m[36m:[m    """A provenance-carrying item used to support or challenge a [1;31mhypothes[mis."""
+[35mbrain/cognition/workspace.py[m[36m:[m[32m46[m[36m:[m    [1;31mevidence[m_id: str = field(default_factory=lambda: _id("ev"))
+[35mbrain/cognition/workspace.py[m[36m:[m[32m53[m[36m:[m[1;31mclass Hypothesis[mRecord:
+[35mbrain/cognition/workspace.py[m[36m:[m[32m60[m[36m:[m    [1;31mevidence[m: List[Evidence] = field(default_factory=list)
+[35mbrain/cognition/workspace.py[m[36m:[m[32m64[m[36m:[m    [1;31mhypothes[mis_id: str = field(default_factory=lambda: _id("hyp"))
+[35mbrain/cognition/workspace.py[m[36m:[m[32m66[m[36m:[m    def add_[1;31mevidence[m(self, [1;31mevidence[m: Evidence) -> None:
+[35mbrain/cognition/workspace.py[m[36m:[m[32m67[m[36m:[m        self.[1;31mevidence[m.append([1;31mevidence[m)
+[35mbrain/cognition/workspace.py[m[36m:[m[32m80[m[36m:[m        if not self.[1;31mevidence[m:
+[35mbrain/cognition/workspace.py[m[36m:[m[32m82[m[36m:[m        support = [item.confidence for item in self.[1;31mevidence[m if item.polarity == "support"]
+[35mbrain/cognition/workspace.py[m[36m:[m[32m83[m[36m:[m        contradiction = [item.confidence for item in self.[1;31mevidence[m if item.polarity == "contradict"]
+[35mbrain/cognition/workspace.py[m[36m:[m[32m91[m[36m:[m        payload["[1;31mevidence[m"] = [item.to_dict() for item in self.[1;31mevidence[m]
+[35mbrain/cognition/workspace.py[m[36m:[m[32m101[m[36m:[m    [1;31mevidence[m_count: int
+[35mbrain/cognition/workspace.py[m[36m:[m[32m102[m[36m:[m    [1;31mhypothes[mis_count: int
+[35mbrain/cognition/workspace.py[m[36m:[m[32m126[m[36m:[m[1;31mclass GlobalWorkspace[m:
+[35mbrain/cognition/workspace.py[m[36m:[m[32m138[m[36m:[m        self.[1;31mevidence[m: Deque[Evidence] = deque(maxlen=capacity)
+[35mbrain/cognition/workspace.py[m[36m:[m[32m139[m[36m:[m        self.[1;31mhypothes[mes: Deque[HypothesisRecord] = deque(maxlen=capacity)
+[35mbrain/cognition/workspace.py[m[36m:[m[32m146[m[36m:[m        self.[1;31mevidence[m.clear()
+[35mbrain/cognition/workspace.py[m[36m:[m[32m147[m[36m:[m        self.[1;31mhypothes[mes.clear()
+[35mbrain/cognition/workspace.py[m[36m:[m[32m156[m[36m:[m    def broadcast_[1;31mevidence[m(self, [1;31mevidence[m: Evidence) -> None:
+[35mbrain/cognition/workspace.py[m[36m:[m[32m157[m[36m:[m        self.[1;31mevidence[m.append([1;31mevidence[m)
+[35mbrain/cognition/workspace.py[m[36m:[m[32m159[m[36m:[m    def propose(self, [1;31mhypothes[mis: HypothesisRecord) -> None:
+[35mbrain/cognition/workspace.py[m[36m:[m[32m160[m[36m:[m        self.[1;31mhypothes[mes.append([1;31mhypothes[mis)
+[35mbrain/cognition/workspace.py[m[36m:[m[32m165[m[36m:[m    def best_[1;31mhypothes[mis(self) -> HypothesisRecord | None:
+[35mbrain/cognition/workspace.py[m[36m:[m[32m166[m[36m:[m        if not self.[1;31mhypothes[mes:
+[35mbrain/cognition/workspace.py[m[36m:[m[32m168[m[36m:[m        return max(self.[1;31mhypothes[mes, key=lambda item: item.confidence - item.uncertainty * 0.25)
+[35mbrain/cognition/workspace.py[m[36m:[m[32m171[m[36m:[m        best = self.best_[1;31mhypothes[mis()
+[35mbrain/cognition/workspace.py[m[36m:[m[32m176[m[36m:[m            "[1;31mevidence[m_count": len(self.[1;31mevidence[m),
+[35mbrain/cognition/workspace.py[m[36m:[m[32m177[m[36m:[m            "[1;31mhypothes[mis_count": len(self.[1;31mhypothes[mes),
+[35mbrain/cognition/workspace.py[m[36m:[m[32m179[m[36m:[m            "best_[1;31mhypothes[mis": best.to_dict() if best else None,
+[35mbrain/cognition/workspace.py[m[36m:[m[32m186[m[36m:[m            "[1;31mevidence[m": [item.to_dict() for item in self.[1;31mevidence[m],
+[35mbrain/cognition/workspace.py[m[36m:[m[32m187[m[36m:[m            "[1;31mhypothes[mes": [item.to_dict() for item in self.[1;31mhypothes[mes],
+[35mbrain/cognition/workspace.py[m[36m:[m[32m192[m[36m:[m    def add_[1;31mevidence[m_many(self, records: Iterable[Evidence]) -> None:
+[35mbrain/cognition/workspace.py[m[36m:[m[32m194[m[36m:[m            self.broadcast_[1;31mevidence[m(record)
+[35mbrain/core/brain.py[m[36m:[m[32m145[m[36m:[m        self.[1;31mself_model[m = SelfModel()
+[35mbrain/core/brain.py[m[36m:[m[32m341[m[36m:[m            self.cycle.[1;31mphase_timings_ms[m[result.phase.value] = elapsed_ms
+[35mbrain/core/brain.py[m[36m:[m[32m402[m[36m:[m        [1;31mthought_trace[m = ThoughtTraceSummary(
+[35mbrain/core/brain.py[m[36m:[m[32m405[m[36m:[m            [1;31mevidence[m_count=len(self.workspace.[1;31mevidence[m),
+[35mbrain/core/brain.py[m[36m:[m[32m406[m[36m:[m            [1;31mhypothes[mis_count=len(self.workspace.[1;31mhypothes[mes),
+[35mbrain/core/brain.py[m[36m:[m[32m418[m[36m:[m            [1;31mevidence[m_count=len(self.workspace.[1;31mevidence[m),
+[35mbrain/core/brain.py[m[36m:[m[32m419[m[36m:[m            [1;31mhypothes[mis_count=len(self.workspace.[1;31mhypothes[mes),
+[35mbrain/core/brain.py[m[36m:[m[32m439[m[36m:[m        self.[1;31mself_model[m.update_uncertainty(self.state.last_prediction_error)
+[35mbrain/core/brain.py[m[36m:[m[32m459[m[36m:[m            "[1;31mthought_trace[m": [1;31mthought_trace[m.to_dict(),
+[35mbrain/core/brain.py[m[36m:[m[32m460[m[36m:[m            "[1;31mself_model[m": self.[1;31mself_model[m.summary(),
+[35mbrain/core/brain.py[m[36m:[m[32m461[m[36m:[m            "[1;31mgrounding[m": grounded_utterance.to_dict(),
+[35mbrain/core/brain.py[m[36m:[m[32m462[m[36m:[m            "[1;31mphase_timings_ms[m": dict(self.cycle.[1;31mphase_timings_ms[m),
+[35mbrain/core/brain.py[m[36m:[m[32m770[m[36m:[m            [1;31mhypothes[mis = HypothesisRecord(
+[35mbrain/core/brain.py[m[36m:[m[32m777[m[36m:[m            [1;31mhypothes[mis.add_[1;31mevidence[m(
+[35mbrain/core/brain.py[m[36m:[m[32m784[m[36m:[m            [1;31mhypothes[mis.mark_tested(parse_result.confidence > 0.3)
+[35mbrain/core/brain.py[m[36m:[m[32m785[m[36m:[m            self.workspace.propose([1;31mhypothes[mis)
+[35mbrain/core/brain.py[m[36m:[m[32m1504[m[36m:[m    [1;31masync def autonomous[m_reflection_tick(self) -> None:
+[35mbrain/core/brain.py[m[36m:[m[32m1513[m[36m:[m        uncertainty = self.[1;31mself_model[m.uncertainty
+[35mbrain/core/brain.py[m[36m:[m[32m1525[m[36m:[m        [1;31mhypothes[mis = HypothesisRecord(
+[35mbrain/core/brain.py[m[36m:[m[32m1533[m[36m:[m        [1;31mhypothes[mis.add_[1;31mevidence[m(
+[35mbrain/core/brain.py[m[36m:[m[32m1535[m[36m:[m                source="[1;31mself_model[m",
+[35mbrain/core/brain.py[m[36m:[m[32m1540[m[36m:[m        self.workspace.propose([1;31mhypothes[mis)
+[35mbrain/core/cycle.py[m[36m:[m[32m61[m[36m:[m    [1;31mphase_timings_ms[m: Dict[str, float] = field(default_factory=dict)
+[35mbrain/core/cycle.py[m[36m:[m[32m67[m[36m:[m        self.[1;31mphase_timings_ms[m = {}
+[35mbrain/learning/consolidation.py[m[36m:[m[32m26[m[36m:[m[1;31mclass Memory[mConsolidator:
+[35mbrain/learning/consolidation.py[m[36m:[m[32m40[m[36m:[m    [1;31mdef consolid[mate(
+[35mbrain/learning/induction.py[m[36m:[m[32m31[m[36m:[m    """Promote candidates only after repeated, sufficiently confident [1;31mevidence[m."""
+[35mbrain/learning/induction.py[m[36m:[m[32m70[m[36m:[m                    source="induced_repeated_[1;31mevidence[m",
+[35mbrain/memory/working.py[m[36m:[m[32m15[m[36m:[m[1;31mclass Memory[mItem:
+[35mbrain/regions/memory_region.py[m[36m:[m[32m16[m[36m:[m[1;31mclass Memory[mRegion(BrainRegion):
+[35mbrain/regions/prefrontal.py[m[36m:[m[32m163[m[36m:[m        the decision threshold, indicating enough [1;31mevidence[m has
+[35mbrain/world/model.py[m[36m:[m[32m57[m[36m:[m[1;31mclass WorldModel[m:
+[35mdocs/misty_autonomous_cognition_blueprint_bn.md[m[36m:[m[32m9[m[36m:[mMISTY-এর লক্ষ্য হবে lookup-oriented chatbot থেকে একটি autonomous, inspectable এবং measurable digital cognitive system-এ উন্নীত হওয়া। এখানে “ডিজিটাল ব্রেইন” বলতে এমন software architecture বোঝানো হচ্ছে যার নিজস্ব persistent self-model, world-model, working memory, episodic memory, semantic memory, internal drives, [1;31mhypothes[mis workspace, attention policy, learning loop এবং language [1;31mgrounding[m থাকবে। প্রতিটি উত্তর কেবল stored sentence retrieval হবে না; MISTY input-এর অর্থ, context, uncertainty, goals এবং memory [1;31mevidence[m একত্র করে intermediate cognitive state তৈরি করবে, candidate explanations বা actions গঠন করবে, সেগুলো যাচাই করবে এবং তারপর উত্তর দেবে।
+[35mdocs/misty_autonomous_cognition_blueprint_bn.md[m[36m:[m[32m13[m[36m:[m> **Design principle:** MISTY should not merely retrieve an answer; it should expose the [1;31mevidence[m, internal state, [1;31mhypothes[mis, confidence, and action that produced the answer.
+[35mdocs/misty_autonomous_cognition_blueprint_bn.md[m[36m:[m[32m19[m[36m:[mএই ভিত্তিতে MISTY-এর architecture হবে **Hybrid Predictive-Cognitive Workspace**: deterministic symbolic engines, lightweight neural representations, event-driven memory, causal/[1;31mhypothes[mis reasoning, affective appraisal এবং global workspace broadcast একসঙ্গে কাজ করবে। এটি LLM-independent থাকবে; language generation প্রথম পর্যায়ে compositional templates, grammar, concept-to-language realization এবং learned phrase patterns থেকে হবে। কোনো external commercial LLM hidden dependency হিসেবে যোগ করা হবে না।
+[35mdocs/misty_autonomous_cognition_blueprint_bn.md[m[36m:[m[32m27[m[36m:[m| Workspace | global cognitive broadcast | active [1;31mhypothes[mes, goals, memories ও affect share করা | cycle state আছে | bounded blackboard with provenance |
+[35mdocs/misty_autonomous_cognition_blueprint_bn.md[m[36m:[m[32m35[m[36m:[m| Language realization | Bengali/English planner and renderer | thought graph থেকে grounded response তৈরি | fallback-heavy | compositional, [1;31mevidence[m-aware response generation |
+[35mdocs/misty_autonomous_cognition_blueprint_bn.md[m[36m:[m[32m45[m[36m:[m3. **Retrieve:** working, episodic, semantic এবং self-memory থেকে [1;31mevidence[m আনা হবে।
+[35mdocs/misty_autonomous_cognition_blueprint_bn.md[m[36m:[m[32m46[m[36m:[m4. **Broadcast:** selected [1;31mevidence[m global workspace-এ প্রকাশিত হবে।
+[35mdocs/misty_autonomous_cognition_blueprint_bn.md[m[36m:[m[32m48[m[36m:[m6. **Predict:** প্রতিটি [1;31mhypothes[mis থেকে expected result ও uncertainty নির্ধারণ হবে।
+[35mdocs/misty_autonomous_cognition_blueprint_bn.md[m[36m:[m[32m49[m[36m:[m7. **Test:** deterministic math/physics rules, known facts, contradiction checks এবং memory [1;31mevidence[m দিয়ে [1;31mhypothes[mis যাচাই হবে।
+[35mdocs/misty_autonomous_cognition_blueprint_bn.md[m[36m:[m[32m53[m[36m:[m11. **Learn:** নতুন fact, failed [1;31mhypothes[mis, user correction এবং outcome আলাদা confidence-সহ সংরক্ষিত হবে।
+[35mdocs/misty_autonomous_cognition_blueprint_bn.md[m[36m:[m[32m58[m[36m:[mMISTY-এর thought কোনো hidden text stream নয়; এটি typed, inspectable data structure হবে। প্রতিটি thought record-এ `thought_id`, `trigger_event`, `goal`, `premises`, `[1;31mhypothes[mis`, `prediction`, `[1;31mevidence[m`, `counter_[1;31mevidence[m`, `confidence`, `uncertainty`, `status`, `chosen_action` এবং `created_at` থাকবে। এতে UI-তে raw chain-of-thought প্রকাশ না করেও নিরাপদ summary দেখানো যাবে: “আমি তিনটি [1;31mevidence[m মিলিয়েছি; একটি contradiction পেয়েছি; confidence 0.62; তাই clarification চাইছি।”
+[35mdocs/misty_autonomous_cognition_blueprint_bn.md[m[36m:[m[32m60[m[36m:[mHypothesis engine প্রথমে পাঁচটি deterministic operation দেবে: analogy, deduction, induction, abduction এবং contradiction resolution। Formula শেখার ক্ষেত্রে MISTY observed examples থেকে symbolic variables ও candidate relation তৈরি করবে, তারপর নতুন sample দিয়ে falsification করবে। কোনো rule শুধু একবারের coincidence-এ semantic memory-তে স্থায়ী হবে না; repeated [1;31mevidence[m, source quality এবং successful prediction লাগবে।
+[35mdocs/misty_autonomous_cognition_blueprint_bn.md[m[36m:[m[32m68[m[36m:[m| নতুন অজানা concept | সামান্য কম | বাড়ে | বাড়ে | প্রশ্ন করে বা exploratory [1;31mhypothes[mis তৈরি করে |
+[35mdocs/misty_autonomous_cognition_blueprint_bn.md[m[36m:[m[32m69[m[36m:[m| verified formula prediction | বাড়ে | মাঝারি | কমে | result এবং [1;31mevidence[m প্রকাশ করে |
+[35mdocs/misty_autonomous_cognition_blueprint_bn.md[m[36m:[m[32m76[m[36m:[mMISTY user request-এর বাইরে সীমিত background cycle চালাবে। এই cycle নিজে থেকে internet-এ unrestricted browsing করবে না এবং নিজের knowledge silently overwrite করবে না। সে তিন ধরনের safe internal work করবে: memory consolidation, unresolved-question review এবং goal-directed replay। প্রতিটি autonomous cycle-এর budget থাকবে—maximum duration, maximum new [1;31mhypothes[mes, maximum database writes এবং confidence threshold। external learning হলে source, timestamp, license/status এবং provenance আবশ্যিক হবে।
+[35mdocs/misty_autonomous_cognition_blueprint_bn.md[m[36m:[m[32m102[m[36m:[mA bounded blackboard তৈরি হবে। সব memory একসঙ্গে prompt-like context-এ ঢুকবে না; salience ও goal অনুযায়ী [1;31mevidence[m নির্বাচন হবে। Working memory-তে decay, rehearsal, chunking এবং turn-level binding যুক্ত হবে।
+[35mdocs/misty_autonomous_cognition_blueprint_bn.md[m[36m:[m[32m106[m[36m:[mCandidate explanation তৈরি, score, deterministic test, counter-[1;31mevidence[m, revision এবং final selection-এর loop তৈরি হবে। Math/Physics engines isolated calculators না থেকে [1;31mhypothes[mis tester এবং verifier হিসেবে workspace-এ যুক্ত হবে।
+[35mdocs/misty_autonomous_cognition_blueprint_bn.md[m[36m:[m[32m110[m[36m:[mScalar emotion UI-কে event-driven appraisal model-এ রূপান্তর করা হবে। Curiosity unresolved uncertainty ও novelty থেকে; confidence prediction success ও [1;31mevidence[m quality থেকে; frustration repeated failed policy থেকে; satisfaction goal completion থেকে আসবে।
+[35mdocs/misty_autonomous_cognition_blueprint_bn.md[m[36m:[m[32m114[m[36m:[mUser teaching, correction, experiment result এবং autonomous replay আলাদা learning channels হবে। New rule promote করার আগে confidence threshold, repeated [1;31mevidence[m, contradiction check এবং provenance validation থাকবে। Nightly বা low-frequency consolidation semantic memory-কে episodic memory থেকে update করবে।
+[35mdocs/misty_autonomous_cognition_blueprint_bn.md[m[36m:[m[32m118[m[36m:[mResponse planner প্রথমে semantic intent graph তৈরি করবে: answer, [1;31mevidence[m, uncertainty, affect, next question। Renderer সেটি Bengali বা English-এ প্রকাশ করবে। Unknown query-তে generic apology নয়; MISTY বলবে কী বুঝেছে, কী জানে, কোন [1;31mevidence[m আছে এবং কী জানতে চায়।
+[35mdocs/misty_autonomous_cognition_blueprint_bn.md[m[36m:[m[32m122[m[36m:[mGoal manager unresolved questions ও curiosity queue তৈরি করবে। Worker replay, [1;31mhypothes[mis testing, memory consolidation এবং self-reflection চালাবে। Pause/resume, write budget, audit log, source policy এবং emergency kill switch থাকবে।
+[35mdocs/misty_autonomous_cognition_blueprint_bn.md[m[36m:[m[32m126[m[36m:[mLatency tracing-এ NLU, retrieval, [1;31mhypothes[mis, persistence, rendering এবং network প্রতিটি phase আলাদা measure হবে। Queue/backpressure, cache invalidation, optimistic UI, streaming progress, database indexes এবং circuit breakers যোগ হবে।
+[35mdocs/misty_autonomous_cognition_blueprint_bn.md[m[36m:[m[32m130[m[36m:[mAblation test-এ memory, affect, [1;31mhypothes[mis বা self-model একেকটি বন্ধ করে behavior compare করা হবে। Adversarial tests contradiction, prompt injection, false teaching, identity manipulation এবং Bengali ambiguity পরীক্ষা করবে। একই test set-এ baseline chatbot ও upgraded MISTY-এর ফল সংরক্ষিত হবে।
+[35mdocs/misty_autonomous_cognition_blueprint_bn.md[m[36m:[m[32m140[m[36m:[mMISTY-কে উন্নত বলা হবে না শুধু কারণ dashboard-এ emotion numbers নড়েছে। Minimum success criteria হবে: একই identity ও self-model বজায় রাখা; [1;31mevidence[m ছাড়া confidence না বাড়ানো; user correction থেকে measurable memory update; formula বা rule নতুন উদাহরণে predict করা; contradiction detect করে উত্তর বদলানো; idle cycle-এ safe consolidation চালানো; Bengali ও English-এ একই semantic thought প্রকাশ করা; এবং প্রতিটি answer-এর latency phase-by-phase explain করা।
+[35mdocs/misty_autonomous_cognition_blueprint_bn.md[m[36m:[m[32m156[m[36m:[mপ্রথম foundational sprint-এ `brain/cognition/workspace.py` এবং `brain/cognition/[1;31mself_model[m.py` যুক্ত হয়েছে। `GlobalWorkspace` bounded event, [1;31mevidence[m, [1;31mhypothes[mis এবং appraisal records broadcast করে; `HypothesisRecord` NLU [1;31mevidence[m-এর ভিত্তিতে confidence ও uncertainty update করে; `ThoughtTraceSummary` user-facing safe summary দেয়, private chain-of-thought নয়। `SelfModel` MISTY-এর identity, capabilities, limitations, active goals, learned beliefs এবং prediction-error-driven uncertainty ধরে রাখে। Brain API response-এ এখন `cognitive_workspace`, `[1;31mthought_trace[m` এবং `[1;31mself_model[m` state প্রকাশিত হয়।
+[35mdocs/misty_autonomous_cognition_blueprint_bn.md[m[36m:[m[32m170[m[36m:[mMISTY-এর autonomy-কে human consciousness হিসেবে দাবি করা হবে না। লক্ষ্য হলো externally measurable cognition: নিজে focus নির্বাচন, uncertainty-সহ [1;31mhypothes[mis তৈরি, [1;31mevidence[m যাচাই, contradiction record, safe memory consolidation, pending question রাখা এবং নতুন cycle-এ prior state ব্যবহার করা।
+[35mdocs/misty_completion_report_bn.md[m[36m:[m[32m45[m[36m:[mMISTY-এর cognitive cycle এখন `[1;31mthought_trace[m`, `[1;31mself_model[m`, `[1;31mgrounding[m` এবং `[1;31mphase_timings_ms[m` payload-এ প্রকাশ করে। ফলে প্রতিটি উত্তর কোন intent-এ, কত [1;31mevidence[m/[1;31mhypothes[mis-এর ভিত্তিতে, কী confidence-এ এবং কোন decision strategy-তে তৈরি হয়েছে তা inspectable থাকে। Frontend-এর Brain Monitor-এ সর্বশেষ assistant turn-এর জন্য এই trace, self uncertainty, [1;31mgrounding[m strategy এবং phase-wise latency live panel হিসেবে যুক্ত হয়েছে।
+[35mdocs/misty_completion_report_bn.md[m[36m:[m[32m91[m[36m:[mThe deterministic Physics module is integrated with NLU and Brain dispatch, and the full repository reports **408 passing tests**. Bengali Literature is represented as a structured metadata package rather than a copied corpus. MISTY now exposes per-turn thought traces, self-model uncertainty, [1;31mgrounding[m provenance, and phase timings to the frontend. Chat persistence is decoupled from the response-critical path while remaining PostgreSQL-backed. JSON and SSE production smoke tests passed; Render health was healthy and the Vercel production deployment was `READY`. No commercial LLM dependency was introduced.
+[35mtests/test_cognitive_workspace.py[m[36m:[m[32m36[m[36m:[mdef test_[1;31mhypothes[mis_updates_from_support_and_rejection() -> None:
+[35mtests/test_cognitive_workspace.py[m[36m:[m[32m37[m[36m:[m    [1;31mhypothes[mis = HypothesisRecord(
+[35mtests/test_cognitive_workspace.py[m[36m:[m[32m42[m[36m:[m    [1;31mhypothes[mis.add_[1;31mevidence[m(Evidence(source="nlu", content="capability", confidence=0.9))
+[35mtests/test_cognitive_workspace.py[m[36m:[m[32m43[m[36m:[m    assert [1;31mhypothes[mis.confidence > 0.5
+[35mtests/test_cognitive_workspace.py[m[36m:[m[32m44[m[36m:[m    initial_uncertainty = [1;31mhypothes[mis.uncertainty
+[35mtests/test_cognitive_workspace.py[m[36m:[m[32m46[m[36m:[m    [1;31mhypothes[mis.mark_tested(False)
+[35mtests/test_cognitive_workspace.py[m[36m:[m[32m47[m[36m:[m    assert [1;31mhypothes[mis.status == "rejected"
+[35mtests/test_cognitive_workspace.py[m[36m:[m[32m48[m[36m:[m    assert [1;31mhypothes[mis.confidence < 0.9
+[35mtests/test_cognitive_workspace.py[m[36m:[m[32m49[m[36m:[m    assert [1;31mhypothes[mis.uncertainty > initial_uncertainty
+[35mtests/test_cognitive_workspace.py[m[36m:[m[32m52[m[36m:[mdef test_workspace_selects_best_[1;31mhypothes[mis() -> None:
+[35mtests/test_cognitive_workspace.py[m[36m:[m[32m68[m[36m:[m    assert workspace.best_[1;31mhypothes[mis() is strong
+[35mtests/test_cognitive_workspace.py[m[36m:[m[32m69[m[36m:[m    assert workspace.summary()["best_[1;31mhypothes[mis"]["statement"] == "strong"
+[35mtests/test_cognitive_workspace.py[m[36m:[m[32m72[m[36m:[mdef test_[1;31mthought_trace[m_is_json_safe() -> None:
+[35mtests/test_cognitive_workspace.py[m[36m:[m[32m76[m[36m:[m        [1;31mevidence[m_count=2,
+[35mtests/test_cognitive_workspace.py[m[36m:[m[32m77[m[36m:[m        [1;31mhypothes[mis_count=1,
+[35mtests/test_inner_loop.py[m[36m:[m[32m57[m[36m:[m    task = asyncio.[1;31mcreate_task[m(loop.run())
+[35mtests/test_language_grounding.py[m[36m:[m[32m1[m[36m:[m"""Tests for deterministic language [1;31mgrounding[m metadata."""
+[35mtests/test_language_grounding.py[m[36m:[m[32m6[m[36m:[mdef test_bengali_math_[1;31mgrounding[m_exposes_engine_claim() -> None:
+[35mtests/test_language_grounding.py[m[36m:[m[32m12[m[36m:[m        [1;31mevidence[m_count=1,
+[35mtests/test_language_grounding.py[m[36m:[m[32m13[m[36m:[m        [1;31mhypothes[mis_count=1,
+[35mtests/test_language_grounding.py[m[36m:[m[32m22[m[36m:[mdef test_english_unknown_[1;31mgrounding[m_is_bounded() -> None:
+[35mtests/test_language_grounding.py[m[36m:[m[32m24[m[36m:[m        "I need more [1;31mevidence[m.",
+[35mtests/test_language_grounding.py[m[36m:[m[32m28[m[36m:[m        [1;31mevidence[m_count=0,
+[35mtests/test_language_grounding.py[m[36m:[m[32m29[m[36m:[m        [1;31mhypothes[mis_count=0,
+[35mtests/test_learning_induction.py[m[36m:[m[32m1[m[36m:[m"""Tests for [1;31mevidence[m-gated autonomous semantic learning."""
+[35mtests/test_learning_induction.py[m[36m:[m[32m7[m[36m:[mdef test_candidate_waits_for_repeated_[1;31mevidence[m() -> None:
+[35mtests/test_learning_induction.py[m[36m:[m[32m18[m[36m:[m    assert memory.query(subject="water", predicate="is_a")[0].source == "induced_repeated_[1;31mevidence[m"
+[35mtests/test_self_model.py[m[36m:[m[32m6[m[36m:[mdef test_[1;31mself_model[m_has_identity_and_capabilities() -> None:
+[35mtests/test_self_model.py[m[36m:[m[32m15[m[36m:[mdef test_[1;31mself_model[m_tracks_goals_and_beliefs() -> None:
+=== dependency/runtime ===
+[build-system]
+requires = ["setuptools>=68.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "misty-brain"
+version = "0.1.0"
+description = "MISTY - An LLM-independent Artificial Cognitive System"
+requires-python = ">=3.9"
+dependencies = [
+    "fastapi>=0.104.0",
+    "uvicorn>=0.24.0",
+    "websockets>=12.0",
+    "networkx>=3.1",
+    "numpy>=1.24.0",
+    "scipy>=1.10.0",
+    "pydantic>=2.0.0",
+    "aiosqlite>=0.19.0",
+    "asyncpg>=0.29.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.4.0",
+    "pytest-asyncio>=0.21.0",
+]
+
+[tool.setuptools.packages.find]
+include = ["brain*", "tools*", "database*", "apps*"]
+
+[tool.ruff]
+line-length = 120
+target-version = "py310"
+
+[tool.ruff.lint]
+# Focus CI on real bugs and clarity; annotation style rules (UP006, UP035,
+# FA100) are excluded because the codebase predates Python 3.9 generics.
+select = [
+    "E",    # pycodestyle errors
+    "F",    # pyflakes
+    "W",    # pycodestyle warnings
+    "I",    # isort
+    "N",    # pep8-naming
+    "UP",   # pyupgrade
+    "B",    # bugbear
+    "PERF", # performance
+    "RUF",  # ruff-specific
+]
+ignore = [
+    "UP006",  # non-pep585-annotation
+    "UP035",  # deprecated-import
+    "FA100",  # future-rewritable-type-annotation
+    "N818",   # error-suffix-on-exception-name
+    "PERF203",# try-except-in-loop
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+# MISTY API Dependencies
+# All included in pyproject.toml - this file is for reference
+
+fastapi>=0.104.0
+uvicorn>=0.24.0
+websockets>=12.0
+aiosqlite>=0.19.0
+pydantic>=2.0.0
+networkx>=3.1
+numpy>=1.24.0
+{
+  "name": "misty-web",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint"
+  },
+  "dependencies": {
+    "next": "14.2.21",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.0",
+    "@types/react": "^18.2.0",
+    "@types/react-dom": "^18.2.0",
+    "autoprefixer": "^10.4.17",
+    "postcss": "^8.4.33",
+    "tailwindcss": "^3.4.1",
+    "typescript": "^5.3.3"
+  }
+}

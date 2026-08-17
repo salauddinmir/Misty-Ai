@@ -1,0 +1,157 @@
+=== DB URL references ===
+[35mDockerfile[m[36m:[m[32m2[m[36m:[m# PostgreSQL is selected automatically when [1;31mMISTY_DB_URL[m starts with
+[35mDockerfile[m[36m:[m[32m24[m[36m:[m# data/ is where SQLite lives when [1;31mMISTY_DB_URL[m is not postgresql.
+[35mapps/api/database.py[m[36m:[m[32m6[m[36m:[m[1;31mMISTY_DB_URL[m environment variable:
+[35mapps/api/database.py[m[36m:[m[32m29[m[36m:[mif os.environ.get("[1;31mMISTY_DB_URL[m", "").startswith("postgresql"):
+[35mapps/api/database.py[m[36m:[m[32m48[m[36m:[m    return os.environ.get("[1;31mMISTY_DB_URL[m") or f"sqlite:///{DEFAULT_DB_PATH}"
+[35mapps/api/main.py[m[36m:[m[32m102[m[36m:[m    database = [1;31mDatabase([m)
+[35mdatabase/schema_postgres.sql[m[36m:[m[32m2[m[36m:[m-- Used when [1;31mMISTY_DB_URL[m points at a PostgreSQL server (e.g. Supabase).
+[35mdocs/deployment.md[m[36m:[m[32m6[m[36m:[m(`apps/api/database.py`) inspects the `[1;31mMISTY_DB_URL[m` environment variable:
+[35mdocs/deployment.md[m[36m:[m[32m8[m[36m:[m| `[1;31mMISTY_DB_URL[m` value | Backend driver | Use case |
+[35mdocs/deployment.md[m[36m:[m[32m54[m[36m:[m| `[1;31mMISTY_DB_URL[m` | Supabase direct connection string (see above) |
+[35mdocs/deployment.md[m[36m:[m[32m94[m[36m:[mthe SQLite backend (no `[1;31mMISTY_DB_URL[m`), which is sufficient because the
+[35mrender.yaml[m[36m:[m[32m10[m[36m:[m      - key: [1;31mMISTY_DB_URL[m
+[35mtests/test_procedural_persistence.py[m[36m:[m[32m13[m[36m:[m    db = [1;31mDatabase([mdb_path=tmp.name)
+=== chat response tests ===
+=== autonomous tests ===
+"""Tests for the bounded autonomous inner loop."""
+
+import asyncio
+
+import pytest
+
+from brain.cognition import AutonomousInnerLoop, InnerLoopConfig
+
+
+@pytest.mark.asyncio
+async def test_inner_loop_respects_tick_budget() -> None:
+    calls: list[int] = []
+
+    async def tick() -> None:
+        calls.append(1)
+
+    loop = AutonomousInnerLoop(
+        tick,
+        InnerLoopConfig(interval_seconds=0.0, max_ticks=3, max_tick_seconds=0.2),
+    )
+
+    await loop.run()
+
+    assert len(calls) == 3
+    assert loop.tick_count == 3
+    assert loop.last_error is None
+
+
+@pytest.mark.asyncio
+async def test_inner_loop_isolates_tick_errors() -> None:
+    async def tick() -> None:
+        raise RuntimeError("test failure")
+
+    loop = AutonomousInnerLoop(
+        tick,
+        InnerLoopConfig(interval_seconds=0.0, max_ticks=1, max_tick_seconds=0.2),
+    )
+
+    await loop.run()
+
+    assert loop.tick_count == 1
+    assert loop.last_error == "RuntimeError: test failure"
+
+
+@pytest.mark.asyncio
+async def test_inner_loop_can_be_cancelled() -> None:
+    started = asyncio.Event()
+
+    async def tick() -> None:
+        started.set()
+        await asyncio.sleep(10)
+
+    loop = AutonomousInnerLoop(
+        tick,
+        InnerLoopConfig(interval_seconds=0.0, max_tick_seconds=20.0),
+    )
+    task = asyncio.create_task(loop.run())
+    await started.wait()
+    task.cancel()
+
+    with pytest.raises(asyncio.CancelledError):
+        await task
+=== schemas ===
+-- MISTY Brain Database Schema (PostgreSQL dialect)
+-- Used when MISTY_DB_URL points at a PostgreSQL server (e.g. Supabase).
+-- Semantically identical to schema.sql; SQLite-specific syntax replaced.
+
+-- Concepts table: stores nodes in the knowledge graph
+CREATE TABLE IF NOT EXISTS concepts (
+    concept_id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    concept_type TEXT NOT NULL DEFAULT 'generic',
+    activation_level REAL DEFAULT 0.0,
+    created_at REAL NOT NULL,
+    metadata TEXT DEFAULT '{}',
+    UNIQUE(name)
+);
+
+-- Relations table: stores edges in the knowledge graph
+CREATE TABLE IF NOT EXISTS relations (
+    relation_id TEXT PRIMARY KEY,
+    source_id TEXT NOT NULL,
+    target_id TEXT NOT NULL,
+    relation_type TEXT NOT NULL,
+    weight REAL DEFAULT 1.0,
+    confidence REAL DEFAULT 1.0,
+    created_at REAL NOT NULL,
+    metadata TEXT DEFAULT '{}',
+    FOREIGN KEY (source_id) REFERENCES concepts(concept_id),
+    FOREIGN KEY (target_id) REFERENCES concepts(concept_id)
+);
+
+-- Episodes table: stores episodic memories
+CREATE TABLE IF NOT EXISTS episodes (
+    episode_id TEXT PRIMARY KEY,
+    content TEXT NOT NULL,
+    context TEXT DEFAULT '{}',
+    timestamp REAL NOT NULL,
+    emotional_valence REAL DEFAULT 0.0,
+    importance REAL DEFAULT 0.5,
+    access_count INTEGER DEFAULT 0
+);
+
+-- Brain states table: stores snapshots of brain state for analysis.
+-- PostgreSQL has no AUTOINCREMENT: a SERIAL column is used instead.
+CREATE TABLE IF NOT EXISTS brain_states (
+    state_id SERIAL PRIMARY KEY,
+    cycle_count INTEGER NOT NULL,
+    current_phase TEXT NOT NULL,
+    active_concepts TEXT DEFAULT '{}',
+    emotional_state TEXT DEFAULT '{}',
+    last_input TEXT DEFAULT '',
+    last_output TEXT DEFAULT '',
+    timestamp REAL NOT NULL
+);
+
+-- Procedures table: stores learned procedural rules (Phase 2)
+CREATE TABLE IF NOT EXISTS procedures (
+    procedure_id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    condition TEXT NOT NULL,
+    action TEXT NOT NULL,
+    strength REAL DEFAULT 0.5,
+    use_count INTEGER DEFAULT 0,
+    success_count INTEGER DEFAULT 0,
+    created_at REAL NOT NULL
+);
+
+-- Indexes for performance
+CREATE INDEX IF NOT EXISTS idx_concepts_name ON concepts(name);
+CREATE INDEX IF NOT EXISTS idx_concepts_type ON concepts(concept_type);
+CREATE INDEX IF NOT EXISTS idx_relations_source ON relations(source_id);
+CREATE INDEX IF NOT EXISTS idx_relations_target ON relations(target_id);
+CREATE INDEX IF NOT EXISTS idx_relations_type ON relations(relation_type);
+CREATE INDEX IF NOT EXISTS idx_episodes_timestamp ON episodes(timestamp);
+CREATE INDEX IF NOT EXISTS idx_brain_states_timestamp ON brain_states(timestamp);
+CREATE INDEX IF NOT EXISTS idx_procedures_name ON procedures(name);
+=== environment templates ===
+./apps/web/.env.production
+./render.yaml
+./.dockerignore

@@ -6,6 +6,7 @@ processes input through the cognitive cycle. This is the primary
 entry point for the cognitive system.
 """
 
+import re
 import time as time_module
 from typing import Any, Dict, List
 
@@ -143,6 +144,7 @@ class Brain:
         self.perception = PerceptionPipeline()
         self.appraisal_engine = AppraisalEngine()
         self.self_model = SelfModel()
+        self.last_autonomous_tick: Dict[str, Any] | None = None
 
         # Neural simulation (Phase 1)
         self._neural_sim_engine = None
@@ -1504,14 +1506,17 @@ class Brain:
     async def autonomous_reflection_tick(self) -> None:
         """Run one bounded internal reflection step without user I/O.
 
-        This is deliberately not a second chat response. It reviews current
-        uncertainty and goals, proposes a testable internal task, and records
-        provenance in the global workspace for the next user-facing cycle.
+        The tick is intentionally deterministic and read-only with respect to
+        durable knowledge. It selects a small internal question, gathers
+        relevant evidence from existing semantic memory, records provenance,
+        and stores a structured audit snapshot for the next user-facing cycle.
+        No unsupported fact is promoted automatically.
         """
         active_goal = self.goal_manager.active_goal()
         goal_text = active_goal.description if active_goal else "review unresolved knowledge"
         uncertainty = self.self_model.uncertainty
         focus = self.workspace.focus or "recent cognitive state"
+        question = f"Is the current model sufficient for: {goal_text}?"
         self.workspace.reset_cycle(goal=goal_text)
         event = CognitiveEvent(
             content=f"internal reflection: {focus[:120]}",
@@ -1519,34 +1524,94 @@ class Brain:
             event_type="internal_review",
             salience=max(0.2, uncertainty),
             reliability=1.0,
-            metadata={"cycle": self.cycle.cycle_count, "goal": goal_text},
+            metadata={
+                "cycle": self.cycle.cycle_count,
+                "goal": goal_text,
+                "question": question,
+            },
         )
         self.workspace.broadcast_event(event)
+
+        # Bounded internal retrieval: score at most the semantic-memory facts
+        # using token overlap with the selected question/focus. This creates
+        # genuine evidence gathering without network I/O or hidden generation.
+        query_tokens = {
+            token.casefold() for token in re.findall(r"[\w\u0980-\u09ff]+", f"{goal_text} {focus}") if len(token) > 2
+        }
+        scored_facts: list[tuple[int, Any]] = []
+        for fact in self.semantic_memory.facts.values():
+            haystack = f"{fact.subject} {fact.predicate} {fact.obj}".casefold()
+            overlap = sum(1 for token in query_tokens if token in haystack)
+            scored_facts.append((overlap, fact))
+        scored_facts.sort(key=lambda item: (item[0], item[1].confidence), reverse=True)
+        selected_facts = [fact for overlap, fact in scored_facts[:3] if overlap > 0]
+
+        evidence_records: list[Evidence] = []
+        fact_groups: dict[tuple[str, str], list[Any]] = {}
+        for fact in selected_facts:
+            fact_groups.setdefault((fact.subject, fact.predicate), []).append(fact)
+        for fact in selected_facts:
+            peers = fact_groups[(fact.subject, fact.predicate)]
+            has_conflict = any(peer.obj != fact.obj for peer in peers)
+            strongest = max(peer.confidence for peer in peers)
+            polarity = "contradict" if has_conflict and fact.confidence < strongest else "support"
+            evidence = Evidence(
+                source=f"semantic_memory:{fact.source}",
+                content={
+                    "subject": fact.subject,
+                    "predicate": fact.predicate,
+                    "obj": fact.obj,
+                },
+                confidence=max(0.0, min(1.0, float(fact.confidence))),
+                polarity=polarity,
+            )
+            evidence_records.append(evidence)
+        if evidence_records:
+            self.workspace.add_evidence_many(evidence_records)
+
         hypothesis = HypothesisRecord(
-            statement=f"Review whether the current model is sufficient for: {goal_text}",
+            statement=question,
             goal="self_review",
             premises=[f"current uncertainty={uncertainty:.3f}"],
-            predictions=["retain the goal if no contradiction is found"],
+            predictions=[
+                "relevant semantic evidence should reduce uncertainty"
+                if evidence_records
+                else "no relevant internal evidence is currently available"
+            ],
             confidence=max(0.1, 1.0 - uncertainty),
             uncertainty=uncertainty,
         )
-        hypothesis.add_evidence(
-            Evidence(
-                source="self_model",
-                content={"focus": focus, "active_goal": goal_text},
-                confidence=max(0.1, 1.0 - uncertainty),
-            )
-        )
+        for evidence in evidence_records:
+            hypothesis.add_evidence(evidence)
+        has_contradiction = any(item.polarity == "contradict" for item in evidence_records)
+        if evidence_records:
+            hypothesis.mark_tested(not has_contradiction)
         self.workspace.propose(hypothesis)
         self.workspace.appraise(
             AppraisalEvent(
                 trigger="internal_reflection",
-                appraisal="goal_review",
+                appraisal="evidence_gathered" if evidence_records else "no_evidence",
                 intensity=max(0.1, uncertainty),
                 affected_dimensions={"curiosity": 0.03, "attention": 0.02},
             )
         )
-        self.working_memory.store("last_autonomous_reflection", self.workspace.summary())
+        self.last_autonomous_tick = {
+            "goal": goal_text,
+            "question": question,
+            "evidence_count": len(evidence_records),
+            "evidence_ids": [item.evidence_id for item in evidence_records],
+            "outcome": (
+                "hypothesis_rejected"
+                if has_contradiction
+                else "hypothesis_supported"
+                if evidence_records
+                else "no_evidence"
+            ),
+            "hypothesis_status": hypothesis.status,
+            "uncertainty": hypothesis.uncertainty,
+            "workspace": self.workspace.summary(),
+        }
+        self.working_memory.store("last_autonomous_reflection", self.last_autonomous_tick)
 
     def get_state(self) -> Dict[str, Any]:
         """Get a snapshot of the current brain state."""
@@ -1564,6 +1629,8 @@ class Brain:
             # Phase 5: structured world state and last prediction error.
             "world_entities": list(self.world.entities.keys()),
             "last_prediction_error": self.state.last_prediction_error,
+            # Phase 12+: active autonomous evidence-gathering snapshot.
+            "last_autonomous_tick": self.last_autonomous_tick,
             # Phase 6: goal-driven behavior snapshot.
             "active_goal": (
                 {"goal_id": g.goal_id, "description": g.description, "progress": g.progress, "status": g.status.value}

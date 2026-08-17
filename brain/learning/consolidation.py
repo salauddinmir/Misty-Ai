@@ -4,7 +4,7 @@ Memory Consolidation.
 Transfers important information from working memory to long-term storage.
 """
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any, Callable, Dict, List
 
 from brain.memory.episodic import EpisodicMemory
@@ -20,6 +20,7 @@ class ConsolidationEvent:
     content: Any
     context: Dict[str, Any]
     importance: float
+    source: str = "working_memory"
 
 
 @dataclass
@@ -36,6 +37,7 @@ class MemoryConsolidator:
     consolidation_count: int = 0
     persistence_threshold: float = 0.5
     persistence_sink: Callable[[ConsolidationEvent], None] | None = None
+    consolidated_keys: set[str] = field(default_factory=set)
 
     def consolidate(
         self,
@@ -47,7 +49,7 @@ class MemoryConsolidator:
         consolidated = []
 
         for key, item in list(working_memory.items.items()):
-            if item.activation < self.consolidation_threshold:
+            if key in self.consolidated_keys or item.activation < self.consolidation_threshold:
                 continue
 
             content = item.content
@@ -60,6 +62,7 @@ class MemoryConsolidator:
                             predicate=content["predicate"],
                             obj=content.get("object", content.get("obj", "")),
                             confidence=content.get("confidence", 1.0),
+                            source=content.get("source", "working_memory"),
                         )
                     # Even without an in-memory semantic store, hand the fact
                     # to the persistence sink so it can be flushed elsewhere
@@ -87,6 +90,7 @@ class MemoryConsolidator:
                 self._notify_sink("episode", content, {}, item.activation)
                 consolidated.append(key)
 
+            self.consolidated_keys.add(key)
             self.consolidation_count += 1
 
         return consolidated
@@ -107,6 +111,11 @@ class MemoryConsolidator:
                         content=content,
                         context=context,
                         importance=importance,
+                        source=(
+                            str(content.get("source", "working_memory"))
+                            if isinstance(content, dict)
+                            else "working_memory"
+                        ),
                     )
                 )
             except Exception:

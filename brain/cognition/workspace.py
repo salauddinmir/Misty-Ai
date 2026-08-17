@@ -62,12 +62,27 @@ class HypothesisRecord:
     uncertainty: float = 0.5
     status: str = "proposed"
     hypothesis_id: str = field(default_factory=lambda: _id("hyp"))
+    test_count: int = 0
+    support_count: int = 0
+    contradiction_count: int = 0
+    last_tested_at: float | None = None
 
     def add_evidence(self, evidence: Evidence) -> None:
         self.evidence.append(evidence)
+        if evidence.polarity == "contradict":
+            self.contradiction_count += 1
+        elif evidence.polarity == "support":
+            self.support_count += 1
         self._recalculate()
 
     def mark_tested(self, passed: bool) -> None:
+        """Record a bounded test result and update confidence.
+
+        A hypothesis is never considered supported merely because it was
+        proposed. A contradictory test explicitly moves it to ``rejected``.
+        """
+        self.test_count += 1
+        self.last_tested_at = time.time()
         self.status = "supported" if passed else "rejected"
         if passed:
             self.confidence = min(1.0, self.confidence + 0.12)
@@ -75,6 +90,18 @@ class HypothesisRecord:
         else:
             self.confidence = max(0.0, self.confidence - 0.2)
             self.uncertainty = min(1.0, self.uncertainty + 0.2)
+
+    def mark_contradicted(self, evidence: Evidence) -> None:
+        """Attach falsifying evidence and reject the hypothesis."""
+        if evidence.polarity != "contradict":
+            evidence = Evidence(
+                source=evidence.source,
+                content=evidence.content,
+                confidence=evidence.confidence,
+                polarity="contradict",
+            )
+        self.add_evidence(evidence)
+        self.mark_tested(False)
 
     def _recalculate(self) -> None:
         if not self.evidence:
