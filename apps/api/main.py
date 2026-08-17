@@ -17,6 +17,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from apps.api.database import Database
+from apps.api.routes.actuators import router as actuators_router
 from apps.api.routes.brain import router as brain_router
 from apps.api.routes.chat import router as chat_router
 from apps.api.routes.media import router as media_router
@@ -221,6 +222,7 @@ app.include_router(media_router, prefix="/api")
 app.include_router(voice_router, prefix="/api")
 app.include_router(brain_router, prefix="/api/brain")
 app.include_router(sensors_router, prefix="/api")
+app.include_router(actuators_router, prefix="/api")
 app.include_router(ws_router)
 app.include_router(voice_stream_router)
 

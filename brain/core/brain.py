@@ -11,6 +11,7 @@ from typing import Any, Dict, List
 
 import numpy as np
 
+from brain.actuators import ActuatorBridge
 from brain.core.cycle import CognitiveCycle, CognitivePhase, CycleResult
 from brain.core.state import BrainState
 from brain.dialogue.context import DialogueContext
@@ -98,6 +99,8 @@ class Brain:
         self.goal_manager = GoalManager()
         # Phase 9: hardware sensor abstraction (transport-agnostic)
         self.sensors = SensorHub()
+        # Phase 10: physical robot actuators (safety-gated)
+        self.actuators = ActuatorBridge()
 
         # Meta-cognition
         self.reflection = ReflectionEngine()
