@@ -22,8 +22,11 @@ class TestBrainInitialization:
         """Brain initializes all subsystems without errors."""
         brain = Brain()
         assert brain.user_name is None
-        assert brain.concept_graph.num_concepts == 0
-        assert brain.concept_graph.num_relations == 0
+        # The brain seeds its identity and general training knowledge at
+        # initialization (see brain/knowledge/training.py), so the graph
+        # starts pre-populated rather than empty.
+        assert brain.concept_graph.num_concepts > 0
+        assert brain.concept_graph.num_relations > 0
         assert brain.working_memory.size == 0
         assert brain.cycle.cycle_count == 0
 
@@ -41,6 +44,48 @@ class TestBrainInitialization:
         assert "emotional_state" in state
         assert "active_concepts" in state
         assert "performance" in state
+
+    def test_brain_knows_own_identity(self) -> None:
+        """The trained brain knows she is Misty, made by Pixline Incorporate."""
+        brain = Brain()
+        misty = brain.concept_graph.get_concept_by_name("Misty")
+        assert misty is not None
+        pixline = brain.concept_graph.get_concept_by_name("Pixline Incorporate")
+        assert pixline is not None
+        founder = brain.semantic_memory.query(
+            subject="Pixline Incorporate", predicate="founder"
+        )
+        assert len(founder) > 0
+        assert founder[0].obj == "Salauddin Mir"
+
+        # Trained identity survives query resolution: asking "who created
+        # Misty?" must answer with the trained founder.
+        result = brain.process("Who created Misty?")
+        assert "Salauddin Mir" in result["response"] or "Netvai" in result["response"]
+        assert result["confidence"] > 0.9
+
+    def test_brain_self_identity_bengali(self) -> None:
+        """Bengali self-identity questions resolve to the trained identity."""
+        brain = Brain()
+        result = brain.process("মিস্টি কে?")
+        assert "Misty" in result["response"]
+        assert "Pixline Incorporate" in result["response"]
+        assert result["confidence"] > 0.9
+
+        who_result = brain.process("তুমি কে তৈরি করেছে?")
+        assert "Salauddin Mir" in who_result["response"] or "Pixline" in who_result["response"]
+        assert who_result["confidence"] > 0.9
+
+    def test_brain_self_identity_english(self) -> None:
+        """English self-identity questions resolve to the trained identity."""
+        brain = Brain()
+        result = brain.process("who are you?")
+        assert "Misty" in result["response"]
+        assert result["confidence"] >= 0.9
+
+        creator = brain.process("who created you?")
+        assert "Pixline Incorporate" in creator["response"]
+        assert creator["confidence"] > 0.9
 
 
 class TestNameDeclaration:

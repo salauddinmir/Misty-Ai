@@ -6,6 +6,7 @@ processes them through the Brain cognitive cycle, and
 returns the response with metadata.
 """
 
+import json
 from typing import Any, Dict
 
 from fastapi import APIRouter, Request
@@ -104,6 +105,32 @@ async def chat(request: Request, body: ChatRequest) -> ChatResponse:
                 relation_type=rel["relation_type"],
                 weight=rel["weight"],
                 confidence=rel["confidence"],
+            )
+        except Exception:
+            pass
+
+    # Persist training-derived semantic facts so they survive restarts.
+    # Concepts and relations are already saved above; facts stored only in
+    # semantic memory are flushed here as episodes with a training marker.
+    training_keys = [
+        key
+        for key, fact in brain.semantic_memory.facts.items()
+        if fact.source == "training"
+    ]
+    for key in training_keys:
+        fact = brain.semantic_memory.facts[key]
+        try:
+            await database.save_episode(
+                content=json.dumps(
+                    {
+                        "type": "semantic_fact",
+                        "subject": fact.subject,
+                        "predicate": fact.predicate,
+                        "obj": fact.obj,
+                    }
+                ),
+                context={"source": "training"},
+                importance=1.0,
             )
         except Exception:
             pass

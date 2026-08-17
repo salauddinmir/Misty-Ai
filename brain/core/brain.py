@@ -128,6 +128,77 @@ class Brain:
         if use_neural_sim:
             self._init_neural_simulation()
 
+        # Identity: self-knowledge and training data are injected at
+        # initialization so MISTY knows who she is from the very first
+        # interaction. Runs after the neural encoder exists so trained
+        # concepts can be registered in the simulation.
+        self._inject_training_knowledge()
+
+    def _inject_training_knowledge(self) -> None:
+        """Inject identity and general training knowledge at startup.
+
+        Seeds the knowledge graph (concepts and relations), semantic
+        memory (facts), and the persistence database so MISTY knows her
+        own identity — a Smart Artificial Brain created by Pixline
+        Incorporate (founder Salauddin Mir, known as Netvai) — from the
+        very first interaction, and remembers it across restarts.
+        """
+        from brain.knowledge.training import combined_package
+
+        package = combined_package()
+
+        # Register concepts and their relations in the knowledge graph
+        created_concepts: Dict[str, str] = {}  # name -> concept_id
+        for entry in package.concepts:
+            name = entry["name"]
+            if name not in created_concepts and \
+                    self.concept_graph.get_concept_by_name(name) is None:
+                concept = self.concept_graph.create_concept(
+                    name=name,
+                    concept_type=entry.get("type", "Entity"),
+                )
+                created_concepts[name] = concept.concept_id
+
+        # Ensure all relation endpoints exist in the graph
+        for entry in package.relations:
+            for endpoint in ("source", "target"):
+                name = entry[endpoint]
+                if name not in created_concepts and \
+                        self.concept_graph.get_concept_by_name(name) is None:
+                    concept = self.concept_graph.create_concept(
+                        name=name,
+                        concept_type="Entity",
+                    )
+                    created_concepts[name] = concept.concept_id
+
+        # Add directed relations between concepts
+        for entry in package.relations:
+            source_id = created_concepts.get(entry["source"])
+            target_id = created_concepts.get(entry["target"])
+            if source_id and target_id:
+                self.concept_graph.add_relation(
+                    source_id=source_id,
+                    target_id=target_id,
+                    relation_type=entry["type"],
+                    weight=1.0,
+                    confidence=1.0,
+                )
+
+        # Store facts in semantic memory for fast recall
+        for fact in package.facts:
+            self.semantic_memory.store_fact(
+                subject=fact["subject"],
+                predicate=fact["predicate"],
+                obj=fact["obj"],
+                confidence=1.0,
+                source="training",
+            )
+
+        # Register trained concepts in the neural encoder when active
+        if self.use_neural_sim and self._concept_encoder is not None:
+            for name in created_concepts:
+                self._concept_encoder.encode_concept(name)
+
     def _init_neural_simulation(self) -> None:
         """Initialize the neural simulation engine with brain regions.
 
@@ -749,7 +820,10 @@ class Brain:
 
         elif parse_result.intent == IntentType.GREETING:
             name_part = f", {self.user_name}" if self.user_name else ""
-            response = f"Hello{name_part}!"
+            response = (
+                f"হ্যালো{name_part}! আমি Misty - Smart Artificial Brain, "
+                f"Pixline Incorporate-এর তৈরি। কীভাবে সাহায্য করতে পারি?"
+            )
             confidence = 0.9
 
         else:
@@ -857,6 +931,12 @@ class Brain:
         target_name = parse_result.query.get("target", "")
         relation = parse_result.query.get("relation", "")
 
+        # Identity shortcuts: if asked about MISTY herself, answer from
+        # self-knowledge before the generic graph/semantic lookup so the
+        # answer always reflects the trained identity.
+        if target_name.lower() == "misty":
+            return self._act_query_self(parse_result)
+
         # Strategy 1: Check knowledge graph directly
         target_concept = self.concept_graph.get_concept_by_name(target_name)
         if target_concept:
@@ -906,6 +986,30 @@ class Brain:
             '"Y কে তৈরি করেছে?"'
         )
         return response, 0.3
+
+    def _act_query_self(self, parse_result: ParseResult) -> tuple:
+        """Answer identity questions about MISTY herself.
+
+        Produces a contextual self-introduction from the trained
+        self-knowledge graph rather than a bare relation lookup, so
+        questions like "who are you?", "মিস্টি কে?", "who created you?"
+        receive a complete and confident identity answer.
+        """
+        relation = parse_result.query.get("relation", "")
+        if relation in ("creator_of", "made_by"):
+            return (
+                "আমি Misty - Smart Artificial Brain। আমাকে তৈরি করেছে "
+                "Pixline Incorporate, যার Founder হলেন Salauddin Mir (Netvai নামে পরিচিত)। "
+                "আমি হলো ভারতের প্রথম Smart AI Brain যেটি কোনো LLM-এর উপর নির্ভরশীল নয়।"
+            ), 0.95
+        # Default: full self-introduction
+        return (
+            "আমি Misty - Smart Artificial Brain। আমি Pixline Incorporate-এর তৈরি "
+            "একটি কৃত্রিম কগনিটিভ সিস্টেম — ভারতের প্রথম Smart AI Brain যেটি "
+            "কোনো LLM dependency ছাড়াই কাজ করে। আমার তৈরিকারী হলেন "
+            "Salauddin Mir, যিনি Netvai নামে পরিচিত। আমি স্পাইকিং নিউরাল নেটওয়ার্ক "
+            "ও নলেজ গ্রাফ ব্যবহার করি এবং বাংলা ও ইংরেজি দুই ভাষায় কথা বলতে পারি।"
+        ), 0.95
 
     def _act_query_what(self, parse_result: ParseResult, recall_data: Dict[str, Any]) -> tuple:
         """Handle definition (is_a / means) queries like "মিস্টি মানে কী?".

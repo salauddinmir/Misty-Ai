@@ -122,6 +122,13 @@ class NLUParser:
                 r"কে\s+([A-Za-z\u0980-\u09FF]+)\s+তৈরি\s+করেছে\s*[?\u0964\uff1f]?",
                 re.UNICODE,
             ),
+            # "তুমি কে?" / "আপনি কে?" / "মিস্টি কে?" — direct identity
+            # question; group 1 captures the addressed entity so the brain
+            # can resolve "তুমি/আপনি" to itself and "মিস্টি" by name.
+            re.compile(
+                r"(তুমি|আপনি|মিস্টি কে|মিস্টি)\s+কে\s*[?\u0964\uff1f]?\s*$",
+                re.UNICODE,
+            ),
         ]
 
         self._bn_greeting_patterns = [
@@ -200,6 +207,10 @@ class NLUParser:
             re.compile(r"who\s+is\s+(?:the\s+)?creator\s+of\s+(\w+)\s*\??", re.IGNORECASE),
             # "what is X?"
             re.compile(r"what\s+is\s+(\w+)\s*\??", re.IGNORECASE),
+            # "who are you?" / "who created you?" / "who made you?" —
+            # self-identity questions; group 1 captures the addressed word
+            # so the brain can resolve it to itself (Misty) as the target.
+            re.compile(r"^who\s+(?:are|created|made|built)\s+(you)\??\s*$", re.IGNORECASE),
         ]
 
         self._en_greeting_patterns = [
@@ -344,6 +355,10 @@ class NLUParser:
             match = pattern.search(text)
             if match:
                 target = match.group(1).strip("\u0964. ")
+                # Self-identity phrasings: "তুমি কে?", "আপনি কে?", "মিস্টি কে?"
+                # resolve to the brain itself (Misty) as the query target.
+                if (target or "").strip() in {"তুমি", "আপনি", "মিস্টি", "মিস্টি কে"}:
+                    target = "Misty"
                 return ParseResult(
                     intent=IntentType.QUERY_WHO,
                     query={
@@ -542,6 +557,9 @@ class NLUParser:
             match = pattern.search(text)
             if match:
                 target = match.group(1)
+                # Self-identity phrasings resolve to the brain itself.
+                if (target or "").lower() == "you":
+                    target = "Misty"
                 if "created" in text.lower() or "creator" in text.lower():
                     relation = "creator_of"
                     query_type = "who"
