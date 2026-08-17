@@ -2,6 +2,7 @@
 
 import numpy as np
 
+from brain.cognition import PerceptionPipeline
 from brain.perception.audio import AudioEncoder
 from brain.perception.gateway import MultimodalGateway
 from brain.perception.image import ImageEncoder
@@ -104,3 +105,27 @@ class TestMultimodalGateway:
         gw.register(AudioEncoder())
         assert gw.feature_size("audio") == 64
         assert gw.feature_size("unknown") == 64
+
+
+def test_bengali_question_receives_epistemic_attention() -> None:
+    percept = PerceptionPipeline().perceive("তুমি কীভাবে অঙ্ক সমাধান করো?")
+
+    assert percept.question_demand == 0.8
+    assert percept.attention_weight > 0.4
+    assert percept.event.event_type == "utterance"
+    assert percept.event.reliability == 0.9
+
+
+def test_urgent_input_receives_high_urgency() -> None:
+    percept = PerceptionPipeline().perceive("জরুরি সাহায্য দরকার")
+
+    assert percept.urgency == 0.9
+    assert percept.attention_weight > 0.4
+
+
+def test_sensor_percept_is_marked_less_reliable_than_text() -> None:
+    percept = PerceptionPipeline().perceive("temperature=22", source="sensor")
+
+    assert percept.event.event_type == "sensor_percept"
+    assert percept.event.reliability == 0.75
+    assert percept.event.source == "sensor"

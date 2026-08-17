@@ -18,6 +18,7 @@ from brain.cognition import (
     Evidence,
     GlobalWorkspace,
     HypothesisRecord,
+    PerceptionPipeline,
     SelfModel,
     ThoughtTraceSummary,
 )
@@ -133,7 +134,8 @@ class Brain:
 
         # Global cognitive workspace: a bounded, inspectable blackboard shared
         # by perception, memory, reasoning, appraisal, and language phases.
-        self.workspace = GlobalWorkspace(capacity=32)
+        self.workspace = GlobalWorkspace()
+        self.perception = PerceptionPipeline()
         self.self_model = SelfModel()
 
         # Neural simulation (Phase 1)
@@ -447,24 +449,32 @@ class Brain:
     def _phase_observe(self, text_input: str) -> CycleResult:
         """OBSERVE phase: Register incoming input."""
         self.state.current_phase = "observe"
-        self.working_memory.store("current_input", text_input)
+        percept = self.perception.perceive(text_input)
+        self.working_memory.store("current_input", percept.event.content)
+        self.working_memory.store("current_percept", percept.to_dict())
+        self.workspace.broadcast_event(percept.event)
 
-        is_question = "?" in text_input or "\u0995\u09c7" in text_input or "\u0995\u09bf" in text_input
+        is_question = percept.question_demand >= 0.7
         self.emotion.update_from_input(is_question=is_question, is_new_info=True)
         appraisal = AppraisalEvent(
             trigger="question" if is_question else "new_input",
             appraisal="epistemic_demand" if is_question else "novelty_check",
-            intensity=0.7 if is_question else 0.4,
+            intensity=max(0.4, percept.attention_weight),
             affected_dimensions={
                 "curiosity": 0.08 if is_question else 0.04,
                 "uncertainty": 0.06 if is_question else 0.02,
+                "attention": percept.attention_weight * 0.05,
             },
         )
         self.workspace.appraise(appraisal)
 
         return CycleResult(
             phase=CognitivePhase.OBSERVE,
-            data={"input": text_input, "is_question": is_question},
+            data={
+                "input": percept.event.content,
+                "is_question": is_question,
+                "percept": percept.to_dict(),
+            },
             success=True,
         )
 
