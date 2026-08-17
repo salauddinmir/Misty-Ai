@@ -40,6 +40,14 @@ Banglapedia-র literary-history overview অনুযায়ী বাংল�
 
 এই records knowledge graph ও semantic memory initialization-এর existing path দিয়ে boot-time training package-এর সঙ্গে inject হয়। ফলে MISTY metadata-level প্রশ্নে recall ও relation traversal করতে পারে; তবে natural-language literary criticism, full-text quotation, ছন্দ বিশ্লেষণ, এবং বৃহৎ corpus generation এখনো আলাদা feature হিসেবে implement করা হয়নি।
 
+## Autonomous cognition ও production hardening
+
+MISTY-এর cognitive cycle এখন `thought_trace`, `self_model`, `grounding` এবং `phase_timings_ms` payload-এ প্রকাশ করে। ফলে প্রতিটি উত্তর কোন intent-এ, কত evidence/hypothesis-এর ভিত্তিতে, কী confidence-এ এবং কোন decision strategy-তে তৈরি হয়েছে তা inspectable থাকে। Frontend-এর Brain Monitor-এ সর্বশেষ assistant turn-এর জন্য এই trace, self uncertainty, grounding strategy এবং phase-wise latency live panel হিসেবে যুক্ত হয়েছে।
+
+Production chat latency-এর একটি গুরুত্বপূর্ণ bottleneck সরানো হয়েছে। Supabase/PostgreSQL persistence আগে response-critical path-এ awaited হওয়ায় database/network stall হলে deterministic cognitive response-ও আটকে যেত। এখন state, নতুন concepts, relations ও facts failure-isolated background task-এ persist হয়; response path brain cycle শেষ হলেই payload ফেরত দেয়। Persistence task reference-tracked, lock-protected এবং exception-isolated, তাই process stability বজায় থাকে। এটি PostgreSQL-কে primary store রেখেই করা হয়েছে; SQLite production path হিসেবে ব্যবহার করা হয়নি।
+
+SSE `/api/chat/stream` এবং JSON `/api/chat` production smoke test-এ HTTP 200 দিয়েছে। Render `/health` endpoint healthy; cold-start latency প্রায় 5–6 seconds, কিন্তু brain cognitive processing time প্রায় 1–4 milliseconds। Vercel-এর `misty-ai-web` production deployment `READY` অবস্থায় আছে, এবং frontend build successful হয়েছে।
+
 ## Verification ফলাফল
 
 Physics regression fix এবং Literature package integration-এর পর repository test suite সফল হয়েছে। Ruff changed-file checks-ও সফল হয়েছে। একটি existing async persistence test-এ RuntimeWarning দেখা যায়—`Database.save_procedure` coroutine-এর scheduling path—কিন্তু test failure নয় এবং এই report-এর Literature/Physics changes-এর সঙ্গে সম্পর্কিত নয়।
@@ -47,15 +55,20 @@ Physics regression fix এবং Literature package integration-এর পর re
 | Check | ফলাফল |
 |---|---|
 | Targeted Physics/NLU/Sensor tests | সফল |
-| Full pytest suite | **385 passed** |
+| Full pytest suite | **408 passed** |
 | Changed-file Ruff check | সফল |
 | Full-repository format check | একটি pre-existing `brain/math_engine.py` formatting mismatch আছে; নতুন পরিবর্তনের lint clean |
+| Frontend production build | সফল (`next build`) |
+| JSON chat smoke test | HTTP 200; Bengali ও English input যাচাই |
+| SSE chat smoke test | HTTP 200; status/token/done events যাচাই |
+| Render health | healthy; cold-start প্রায় 5–6s |
+| Vercel production deployment | `READY` |
 | External LLM dependency | যোগ করা হয়নি |
 | Bengali + English NLU | বজায় আছে |
 
 ## Deployment readiness ও user action
 
-Code changes `main` branch-এ commit/push করার জন্য প্রস্তুত। Render backend-এর auto-deploy GitHub `main` থেকে চলবে। Vercel git-linked project-এর ক্ষেত্রে **Root Directory অবশ্যই `apps/web`** সেট করতে হবে; না হলে monorepo root থেকে frontend build ব্যর্থ বা ভুল directory-তে চালু হতে পারে। Vercel Project Settings → General → Root Directory-তে `apps/web` নির্বাচন করে Save করতে হবে।
+সর্বশেষ production hardening এবং dashboard changes `main` branch-এ push করা হয়েছে। গুরুত্বপূর্ণ commits: `bfaa7c3` (SSE response streaming), `9ca6fa5` (database persistence response path থেকে আলাদা), এবং `87b9ccb` (cognitive trace dashboard)। Render backend GitHub `main` থেকে auto-deploy হওয়ার জন্য প্রস্তুত এবং `/health` healthy। Vercel-এর linked `misty-ai-web` production deployment `READY`। Vercel Project Settings-এ monorepo Root Directory `apps/web` থাকা আবশ্যক।
 
 Production verification-এর সময় sandbox-to-Render network flakiness দেখা গেলে সেটিকে application correctness failure হিসেবে ধরে নেওয়া যাবে না; Render dashboard-এর deploy logs এবং `/health` endpoint দিয়ে পুনরায় পরীক্ষা করা উচিত। Supabase PgBouncer transaction mode-এর জন্য existing database configuration-এ `statement_cache_size=0` বজায় রাখতে হবে।
 
@@ -75,4 +88,4 @@ Production verification-এর সময় sandbox-to-Render network flakiness 
 
 ## English technical summary
 
-The deterministic Physics module is integrated with NLU and Brain dispatch and now passes the complete regression suite. Bengali Literature is represented as a structured metadata package rather than a copied corpus: concepts, author–work relations, literary periods, genres, and bounded summaries are injected through the existing combined training package. No commercial LLM dependency was introduced. The repository currently reports **385 passing tests**. Before Vercel redeployment, set the linked project’s Root Directory to `apps/web`.
+The deterministic Physics module is integrated with NLU and Brain dispatch, and the full repository reports **408 passing tests**. Bengali Literature is represented as a structured metadata package rather than a copied corpus. MISTY now exposes per-turn thought traces, self-model uncertainty, grounding provenance, and phase timings to the frontend. Chat persistence is decoupled from the response-critical path while remaining PostgreSQL-backed. JSON and SSE production smoke tests passed; Render health was healthy and the Vercel production deployment was `READY`. No commercial LLM dependency was introduced.
