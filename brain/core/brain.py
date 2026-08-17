@@ -24,6 +24,7 @@ from brain.learning.consolidation import MemoryConsolidator
 from brain.learning.curiosity import CuriosityExplorer
 from brain.learning.reinforcement import ReinforcementLearner
 from brain.learning.reward import RewardSignal
+from brain.math_engine import MATH_ENGINE
 from brain.memory.episodic import EpisodicMemory
 from brain.memory.procedural import ProceduralMemory
 from brain.memory.semantic import SemanticMemory
@@ -761,6 +762,8 @@ class Brain:
             plan = "answer_query"
         elif parse_result.intent == IntentType.GREETING:
             plan = "greet_back"
+        elif parse_result.intent == IntentType.MATH:
+            plan = "solve_mathematics"
         elif parse_result.intent in (IntentType.TEACH, IntentType.STATEMENT, IntentType.CORRECTION):
             plan = "absorb_knowledge"
         elif parse_result.intent == IntentType.CONTINUATION:
@@ -824,6 +827,9 @@ class Brain:
             )
             confidence = 0.9
 
+        elif parse_result.intent == IntentType.MATH:
+            response, confidence = self._act_math(parse_result)
+
         else:
             # Unknown/unsupported input: give a contextual fallback instead
             # of a flat "I don't know" so the user understands the brain's
@@ -842,6 +848,23 @@ class Brain:
             data={"response": response, "confidence": confidence},
             success=confidence > 0.5,
         )
+
+    def _act_math(self, parse_result: ParseResult) -> tuple:
+        """Solve a supported math query without an LLM."""
+        text = parse_result.entities.get("math_text", parse_result.raw_text)
+        result = MATH_ENGINE.solve(text)
+        if result is None:
+            return (
+                "আমি এই mathematical format-টি এখনো সমর্থন করি না। "
+                "উদাহরণ: calculate 2 + 2 অথবা 2x + 4 = 10 সমাধান করো।",
+                0.3,
+            )
+        self.state.context["last_math_result"] = {
+            "category": result.category,
+            "exact": result.exact,
+            "steps": list(result.steps),
+        }
+        return result.answer, result.confidence
 
     def _act_name_declaration(self, parse_result: ParseResult) -> tuple:
         """Handle name declaration intent."""

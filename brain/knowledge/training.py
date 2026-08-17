@@ -132,11 +132,14 @@ def general_training_package() -> TrainingPackage:
 
 
 def combined_package() -> TrainingPackage:
-    """Return identity plus general training data."""
+    """Return identity, general, and mathematics training data."""
+    from brain.math_engine import mathematics_package
+
     identity = identity_package()
     general = general_training_package()
+    math_concepts, math_relations, math_facts = mathematics_package()
     return TrainingPackage(
-        concepts=identity.concepts,
-        relations=identity.relations,
-        facts=identity.facts + general.facts,
+        concepts=identity.concepts + math_concepts,
+        relations=identity.relations + math_relations,
+        facts=identity.facts + general.facts + math_facts,
     )

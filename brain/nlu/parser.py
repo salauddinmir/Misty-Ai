@@ -15,6 +15,8 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any, Dict, List
 
+from brain.math_engine import MATH_ENGINE
+
 
 class IntentType(str, Enum):
     """Types of recognized user intents."""
@@ -28,6 +30,7 @@ class IntentType(str, Enum):
     CORRECTION = "correction"
     CONTINUATION = "continuation"
     GREETING = "greeting"
+    MATH = "math"
     UNKNOWN = "unknown"
 
 
@@ -321,6 +324,15 @@ class NLUParser:
                     confidence=0.8,
                 )
 
+        # Deterministic mathematics takes priority over generic questions.
+        if MATH_ENGINE.looks_mathematical(text):
+            return ParseResult(
+                intent=IntentType.MATH,
+                entities={"math_text": text},
+                raw_text=text,
+                confidence=0.98,
+            )
+
         # Check greetings
         for pattern in self._bn_greeting_patterns:
             if pattern.search(text):
@@ -517,6 +529,15 @@ class NLUParser:
                     confidence=0.8,
                 )
         """Try English pattern matching."""
+        # Deterministic mathematics takes priority over generic questions.
+        if MATH_ENGINE.looks_mathematical(text):
+            return ParseResult(
+                intent=IntentType.MATH,
+                entities={"math_text": text},
+                raw_text=text,
+                confidence=0.98,
+            )
+
         # Check greetings
         for pattern in self._en_greeting_patterns:
             if pattern.search(text):
