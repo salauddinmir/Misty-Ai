@@ -1,5 +1,5 @@
 # MISTY - Artificial Cognitive System
-
+The idea by - Salauddin Mir / Founder of - Mistlook - Ai based Social Network Platform on Google Play
 MISTY is an experimental artificial cognitive system built **without any LLM dependency**. It combines a rule-based natural language understanding layer, a knowledge graph, working/episodic/semantic/procedural memory systems, an emotion engine, reinforcement learning, and a cognitive cycle (Observe → Interpret → Recall → Associate → Reason → Plan → Act → Evaluate → Learn → Consolidate).
 
 > Note: Phase 1 neural simulation research (vectorized LIF populations, spiking encoding, brain regions) lives on the `phase-1-neural-core` branch. It is a research branch and has not yet been merged into `main`.
