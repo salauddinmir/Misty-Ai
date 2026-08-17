@@ -49,6 +49,7 @@ class ChatResponse(BaseModel):
     active_concepts: Dict[str, float]
     emotional_state: Dict[str, float]
     brain_state: Dict[str, Any]
+    grounding: Dict[str, Any] = Field(default_factory=dict)
 
 
 @router.post("/chat", response_model=ChatResponse)
@@ -180,4 +181,5 @@ async def chat(request: Request, body: ChatRequest) -> ChatResponse:
         active_concepts=result["active_concepts"],
         emotional_state=result["emotional_state"],
         brain_state=result["brain_state"],
+        grounding=result.get("grounding", {}),
     )

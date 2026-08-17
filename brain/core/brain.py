@@ -19,6 +19,7 @@ from brain.cognition import (
     Evidence,
     GlobalWorkspace,
     HypothesisRecord,
+    LanguageGrounder,
     PerceptionPipeline,
     SelfModel,
     ThoughtTraceSummary,
@@ -138,6 +139,7 @@ class Brain:
         # Global cognitive workspace: a bounded, inspectable blackboard shared
         # by perception, memory, reasoning, appraisal, and language phases.
         self.workspace = GlobalWorkspace()
+        self.language_grounder = LanguageGrounder()
         self.perception = PerceptionPipeline()
         self.appraisal_engine = AppraisalEngine()
         self.self_model = SelfModel()
@@ -409,6 +411,15 @@ class Brain:
         )
         # Keep the interpreted intent accessible to API consumers.
         intent_value = interpret_result.data.get("intent", "unknown") if interpret_result is not None else "unknown"
+        grounded_utterance = self.language_grounder.ground(
+            response,
+            raw_input=text_input,
+            intent=intent_value,
+            confidence=float(act_result.data.get("confidence", 0.5)),
+            evidence_count=len(self.workspace.evidence),
+            hypothesis_count=len(self.workspace.hypotheses),
+            strategy="deterministic_action_with_workspace_context",
+        )
 
         # Record the brain turn so the next user turn can resolve
         # pronouns back to this exchange.
@@ -448,6 +459,7 @@ class Brain:
             "cognitive_workspace": workspace_summary,
             "thought_trace": thought_trace.to_dict(),
             "self_model": self.self_model.summary(),
+            "grounding": grounded_utterance.to_dict(),
         }
 
     def _phase_observe(self, text_input: str) -> CycleResult:
