@@ -204,12 +204,17 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-# Configure CORS for frontend at localhost:3000
+# Configure CORS for frontends: local dev plus production Vercel deployments
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
         "http://localhost:3000",
         "http://127.0.0.1:3000",
+        "https://misty-ai-web.vercel.app",
+        "https://misty-ai.vercel.app",
+        "https://misty-ai-web-tophyint-9993s-projects.vercel.app",
+        "https://misty-ai-4h0xp8q49-tophyint-9993s-projects.vercel.app",
+        "https://misty-ai-59nxmmfsm-tophyint-9993s-projects.vercel.app",
     ],
     allow_credentials=True,
     allow_methods=["*"],
