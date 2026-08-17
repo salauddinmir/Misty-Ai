@@ -222,7 +222,9 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-# Configure CORS for frontends: local dev plus production Vercel deployments
+# Configure CORS for frontends: local dev, production Vercel deployments,
+# and managed Manus browser previews. The regex is deliberately limited to
+# the Expo web-preview host shape rather than allowing arbitrary origins.
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
@@ -234,6 +236,7 @@ app.add_middleware(
         "https://misty-ai-4h0xp8q49-tophyint-9993s-projects.vercel.app",
         "https://misty-ai-59nxmmfsm-tophyint-9993s-projects.vercel.app",
     ],
+    allow_origin_regex=r"https://8081-[a-z0-9-]+\.sg1\.manus\.computer",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
