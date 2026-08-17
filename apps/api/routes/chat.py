@@ -8,9 +8,12 @@ returns the response with metadata.
 
 import asyncio
 import json
+import re
+from collections.abc import AsyncIterator
 from typing import Any, Dict
 
 from fastapi import APIRouter, Request
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
 router = APIRouter()
@@ -52,23 +55,8 @@ class ChatResponse(BaseModel):
     grounding: Dict[str, Any] = Field(default_factory=dict)
 
 
-@router.post("/chat", response_model=ChatResponse)
-async def chat(request: Request, body: ChatRequest) -> ChatResponse:
-    """Process a message through the Brain cognitive cycle.
-
-    The brain will:
-    1. Parse the input using rule-based NLU
-    2. Run through all cognitive phases (observe, interpret, recall, etc.)
-    3. Create/update concepts and relations as needed
-    4. Generate a response without any LLM
-
-    Args:
-        request: The FastAPI request object (contains app state).
-        body: The chat request with the user's message.
-
-    Returns:
-        ChatResponse with the brain's response and metadata.
-    """
+async def _process_chat_turn(request: Request, body: ChatRequest) -> ChatResponse:
+    """Process one message and persist the resulting cognitive state."""
     brain = request.app.state.brain
     database = request.app.state.database
 
@@ -182,4 +170,61 @@ async def chat(request: Request, body: ChatRequest) -> ChatResponse:
         emotional_state=result["emotional_state"],
         brain_state=result["brain_state"],
         grounding=result.get("grounding", {}),
+    )
+
+
+def _chunk_response_text(text: str, words_per_chunk: int = 4) -> list[str]:
+    """Split a reply at readable word boundaries for progressive rendering."""
+    parts = re.findall(r"\S+\s*", text)
+    if not parts:
+        return []
+    return ["".join(parts[index : index + words_per_chunk]) for index in range(0, len(parts), words_per_chunk)]
+
+
+def _sse(event: str, data: dict[str, Any]) -> str:
+    return f"event: {event}\ndata: {json.dumps(data, ensure_ascii=False)}\n\n"
+
+
+@router.post("/chat", response_model=ChatResponse)
+async def chat(request: Request, body: ChatRequest) -> ChatResponse:
+    """Process a message and return Misty's complete response as JSON."""
+    return await _process_chat_turn(request, body)
+
+
+@router.post("/chat/stream")
+async def chat_stream(request: Request, body: ChatRequest) -> StreamingResponse:
+    """Stream cognitive status followed by progressive response text via SSE."""
+
+    async def event_generator() -> AsyncIterator[str]:
+        yield _sse("status", {"status": "thinking"})
+        # Let the client render the thinking state before the synchronous
+        # cognitive cycle begins.
+        await asyncio.sleep(0)
+
+        try:
+            result = await _process_chat_turn(request, body)
+        except Exception:
+            yield _sse("error", {"message": "Misty could not finish that reply. Please try again."})
+            return
+
+        for chunk in _chunk_response_text(result.response):
+            yield _sse("token", {"text": chunk})
+            await asyncio.sleep(0.018)
+
+        yield _sse(
+            "done",
+            {
+                "processing_time": result.processing_time,
+                "cycle_count": result.cycle_count,
+            },
+        )
+
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
     )
