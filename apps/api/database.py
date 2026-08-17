@@ -73,7 +73,10 @@ class Database:
     async def initialize(self) -> None:
         """Connect and apply the appropriate schema."""
         if DRIVER == "postgres":
-            self._connection = await asyncpg.connect(self._url)
+            # statement_cache_size=0 is required when connecting through Supabase's
+            # PgBouncer transaction-mode pool (port 6543), which cannot share
+            # prepared statements across connections.
+            self._connection = await asyncpg.connect(self._url, statement_cache_size=0)
             schema_path = Path(SCHEMA_POSTGRES)
             if schema_path.exists():
                 await self._connection.execute(schema_path.read_text(encoding="utf-8"))
