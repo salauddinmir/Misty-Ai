@@ -100,14 +100,18 @@ class TestConsolidationSink:
             persistence_sink=lambda e: received.append(e),
         )
         memory = WorkingMemory()
-        item = MemoryItem(content={"subject": "A", "predicate": "is_b", "object": "B"})
-        item.activation = 0.6
+        # The item carries provenance and an observations hint so it passes
+        # the Phase-14 learning gate; the persistence sink still receives it.
+        item = MemoryItem(
+            content={"subject": "A", "predicate": "is_b", "object": "B", "source": "seed", "observations": 3}
+        )
+        item.activation = 0.9
         memory.items["fact"] = item
 
         consolidator.consolidate(memory, *([None, None]))
         assert len(received) == 1
         assert received[0].kind == "fact"
-        assert received[0].importance == 0.6
+        assert received[0].importance == 0.9
 
     def test_sink_ignores_low_importance(self) -> None:
         received: list = []

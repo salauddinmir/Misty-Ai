@@ -145,6 +145,8 @@ class Brain:
         self.appraisal_engine = AppraisalEngine()
         self.self_model = SelfModel()
         self.last_autonomous_tick: Dict[str, Any] | None = None
+        # Phase 14: hard evidence budget per autonomous reflection tick.
+        self.max_evidence_per_tick: int = 4
 
         # Neural simulation (Phase 1)
         self._neural_sim_engine = None
@@ -1512,11 +1514,15 @@ class Brain:
         and stores a structured audit snapshot for the next user-facing cycle.
         No unsupported fact is promoted automatically.
         """
+        started_at = time_module.monotonic()
+        self._tick_index = getattr(self, "_tick_index", 0) + 1
         active_goal = self.goal_manager.active_goal()
         goal_text = active_goal.description if active_goal else "review unresolved knowledge"
         uncertainty = self.self_model.uncertainty
         focus = self.workspace.focus or "recent cognitive state"
         question = f"Is the current model sufficient for: {goal_text}?"
+        # Phase 14: hard evidence budget per autonomous tick.
+        max_evidence_per_tick = max(1, int(getattr(self, "max_evidence_per_tick", 4)))
         self.workspace.reset_cycle(goal=goal_text)
         event = CognitiveEvent(
             content=f"internal reflection: {focus[:120]}",
@@ -1544,7 +1550,7 @@ class Brain:
             overlap = sum(1 for token in query_tokens if token in haystack)
             scored_facts.append((overlap, fact))
         scored_facts.sort(key=lambda item: (item[0], item[1].confidence), reverse=True)
-        selected_facts = [fact for overlap, fact in scored_facts[:3] if overlap > 0]
+        selected_facts = [fact for overlap, fact in scored_facts[:max_evidence_per_tick] if overlap > 0]
 
         evidence_records: list[Evidence] = []
         fact_groups: dict[tuple[str, str], list[Any]] = {}
@@ -1595,9 +1601,12 @@ class Brain:
                 affected_dimensions={"curiosity": 0.03, "attention": 0.02},
             )
         )
+        elapsed_ms = round((time_module.monotonic() - started_at) * 1000.0, 2)
         self.last_autonomous_tick = {
             "goal": goal_text,
             "question": question,
+            "tick_index": self._tick_index,
+            "evidence_budget": max_evidence_per_tick,
             "evidence_count": len(evidence_records),
             "evidence_ids": [item.evidence_id for item in evidence_records],
             "outcome": (
@@ -1610,6 +1619,8 @@ class Brain:
             "hypothesis_status": hypothesis.status,
             "uncertainty": hypothesis.uncertainty,
             "workspace": self.workspace.summary(),
+            "elapsed_ms": elapsed_ms,
+            "quarantined_candidates": list(getattr(self.consolidator, "rejected_candidates", [])),
         }
         self.working_memory.store("last_autonomous_reflection", self.last_autonomous_tick)
 

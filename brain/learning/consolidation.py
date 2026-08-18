@@ -10,6 +10,7 @@ from typing import Any, Callable, Dict, List
 from brain.memory.episodic import EpisodicMemory
 from brain.memory.semantic import SemanticMemory
 from brain.memory.working import WorkingMemory
+from brain.safety.policy import AutonomyPolicy, Decision, evaluate_learning
 
 
 @dataclass
@@ -36,23 +37,69 @@ class MemoryConsolidator:
     consolidation_threshold: float = 0.3
     consolidation_count: int = 0
     persistence_threshold: float = 0.5
+    # Phase 14: per-cycle budget so a single consolidation pass cannot
+    # silently rewrite large parts of durable memory.
+    max_consolidations_per_cycle: int = 8
+    # Phase 14: items above this threshold are routed through the learning
+    # safety gate (evaluate_learning) before entering durable knowledge.
+    safety_gate_threshold: float = 0.5
     persistence_sink: Callable[[ConsolidationEvent], None] | None = None
     consolidated_keys: set[str] = field(default_factory=set)
+    # Phase 14: structured audit of this cycle's gate outcomes.
+    rejected_candidates: List[Dict[str, Any]] = field(default_factory=list)
 
     def consolidate(
         self,
         working_memory: WorkingMemory,
         episodic_memory: EpisodicMemory,
         semantic_memory: SemanticMemory,
+        *,
+        policy: AutonomyPolicy | None = None,
     ) -> List[str]:
-        """Consolidate active working memory items to long-term storage."""
-        consolidated = []
+        """Consolidate active working memory items to long-term storage.
+
+        Phase 14: consolidation is bounded by ``max_consolidations_per_cycle``
+        and candidates whose importance meets ``safety_gate_threshold`` must
+        pass ``evaluate_learning`` before they enter durable knowledge;
+        anything that fails the gate is quarantined in ``rejected_candidates``
+        instead of being stored.
+        """
+        policy = policy or AutonomyPolicy()
+        consolidated: List[str] = []
+        self.rejected_candidates = []
 
         for key, item in list(working_memory.items.items()):
             if key in self.consolidated_keys or item.activation < self.consolidation_threshold:
                 continue
+            # Budget enforcement: stop this cycle once the cap is reached.
+            if len(consolidated) >= self.max_consolidations_per_cycle:
+                break
 
             content = item.content
+            candidate = {
+                "confidence": float(item.activation),
+                "observations": int(
+                    content.get("observations", 1) if isinstance(content, dict) else 1
+                ) + self.consolidation_count,
+                "source_ref": content.get("source") if isinstance(content, dict) else None,
+                "contradicts_existing": bool(isinstance(content, dict) and content.get("contradicts_existing", False)),
+            }
+            gated = item.activation >= self.safety_gate_threshold
+            decision = evaluate_learning(candidate, policy=policy) if gated else None
+            if gated and decision is not None and decision.decision is not Decision.ALLOW:
+                # Quarantine the candidate instead of promoting it; durable
+                # knowledge stays untouched and the rejection is auditable.
+                self.rejected_candidates.append(
+                    {
+                        "key": key,
+                        "candidate": candidate,
+                        "decision": decision.decision.value,
+                        "reason": decision.reason,
+                        "audit_code": decision.audit_code,
+                    }
+                )
+                self.consolidated_keys.add(key)
+                continue
 
             if isinstance(content, dict):
                 if "subject" in content and "predicate" in content:
