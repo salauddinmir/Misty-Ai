@@ -121,4 +121,6 @@ def test_personality_is_stable():
 def test_variator_pick_returns_pool_template(brain):
     replies = _ask(brain, "হ্যালো")
     bn_variants = RESPONSE_POOLS["greeting"]["bn"]
-    assert replies[0] in bn_variants, replies[0]
+    # Phase 25 appends a driver follow-up question to replies, so the
+    # ACT handler's response must START with one of the pool templates.
+    assert any(replies[0].startswith(variant) for variant in bn_variants), replies[0]

@@ -28,6 +28,7 @@ from brain.cognition import (
 from brain.core.cycle import CognitiveCycle, CognitivePhase, CycleResult
 from brain.core.state import BrainState
 from brain.dialogue.context import DialogueContext
+from brain.dialogue.driver import ConversationDriver
 from brain.emotion.state import EmotionalState
 from brain.goals.manager import GoalManager
 from brain.graph.activation import SpreadingActivation
@@ -166,6 +167,10 @@ class Brain:
         # templates are drawn from a per-intent bilingual pool so two
         # consecutive identical inputs cannot produce identical replies.
         self.variator = ResponseVariator()
+
+        # Phase 25: conversation driver — keeps the exchange alive with
+        # empathy, interest expansion, and off-track steering questions.
+        self.conversation_driver = ConversationDriver()
 
         # Neural simulation (Phase 1)
         self._neural_sim_engine = None
@@ -424,6 +429,21 @@ class Brain:
         # Update state
         processing_time = time_module.time() - start_time
         response = act_result.data.get("response", "")
+
+        # Phase 25: let the conversation driver decide whether this reply
+        # should end with a follow-up of its own. The driver respects
+        # cooldown (never two driver questions back-to-back) and closure
+        # (never a question after "বাই"/"goodbye").
+        intent_value = (
+            interpret_result.data.get("intent", "unknown")
+            if interpret_result is not None
+            else "unknown"
+        )
+        driver_plan = self._driver_plan(
+            text_input, response, intent_value, act_result.data.get("confidence", 0.5)
+        )
+        if driver_plan.needs_followup and driver_plan.question and response:
+            response = f"{response} {driver_plan.question}"
         self.state.last_output = response
         workspace_summary = self.workspace.summary()
         thought_trace = ThoughtTraceSummary(
@@ -435,8 +455,8 @@ class Brain:
             uncertainty=max(0.0, 1.0 - float(act_result.data.get("confidence", 0.5))),
             decision="respond" if response else "request_clarification",
         )
-        # Keep the interpreted intent accessible to API consumers.
-        intent_value = interpret_result.data.get("intent", "unknown") if interpret_result is not None else "unknown"
+        # Keep the interpreted intent accessible to API consumers
+        # (intent_value already set earlier for the conversation driver).
         grounded_utterance = self.language_grounder.ground(
             response,
             raw_input=text_input,
@@ -839,6 +859,43 @@ class Brain:
             self.working_memory.store("curiosity_target", suggestion.get("target"))
             self.working_memory.store("curiosity_bonus", suggestion.get("bonus", 0.0))
         return question
+
+    # Phase 25: conversation driver plan — decide the follow-up shape for
+    # this turn before the response is finalized in `process()`.
+    def _driver_plan(
+        self, user_text: str, response: str, intent: str, confidence: float
+    ) -> Any:
+        """Build the conversation-driver plan for this turn.
+
+        Topic knowledge depth (is_a facts about the topic, unexplored
+        neighbors) decides between a continuation nudge and an
+        interest-expansion question; empathy shapes reply to expressed
+        user states; closure greetings suppress follow-ups entirely.
+        """
+        exclude = _current_token_set(user_text)
+        topic = self._prior_topic(exclude=exclude) or self.dialogue_context.topic
+        topic_facts = 0
+        if topic:
+            facts = self.semantic_memory.query(subject=topic, predicate="is_a")
+            topic_facts = len(facts) if facts else 0
+        has_related = False
+        if topic:
+            concept = self.concept_graph.get_concept_by_name(topic)
+            if concept:
+                related = self.concept_graph.find_related(
+                    concept.concept_id, direction="outgoing"
+                )
+                has_related = bool(related)
+
+        return self.conversation_driver.plan_followup(
+            user_text=user_text,
+            response=response,
+            intent=intent,
+            confidence=float(confidence),
+            topic=topic,
+            topic_facts=topic_facts,
+            has_related=has_related,
+        )
 
     _PRONOUN_TOKENS = frozenset(
         {
