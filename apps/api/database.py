@@ -67,8 +67,16 @@ class Database:
     """
 
     def __init__(self, db_path: str | None = None, db_url: str | None = None) -> None:
-        self.db_path = db_path or DEFAULT_DB_PATH
-        self._url = db_url or _db_url()
+        resolved_url = db_url or _db_url()
+        # The on-disk SQLite file path must match the resolved URL, otherwise
+        # the legacy db_path default would silently write to the repo-level
+        # ``data/misty_brain.db`` even when a test or deployment overrides
+        # the URL (for example ``MISTY_DB_URL=sqlite:///test.db``).
+        if resolved_url.startswith("sqlite:///"):
+            self.db_path = db_path or resolved_url[len("sqlite:///"):]
+        else:
+            self.db_path = db_path or DEFAULT_DB_PATH
+        self._url = resolved_url
         self._connection: Any = None
         # asyncpg connections cannot run overlapping operations; a single
         # lock serializes all queries when several tasks (chat route,
