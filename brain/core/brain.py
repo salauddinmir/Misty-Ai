@@ -30,6 +30,7 @@ from brain.core.state import BrainState
 from brain.dialogue.context import DialogueContext
 from brain.dialogue.driver import ConversationDriver
 from brain.emotion.state import EmotionalState
+from brain.emotion.tone import ToneMapper
 from brain.goals.manager import GoalManager
 from brain.graph.activation import SpreadingActivation
 from brain.graph.concepts import ConceptGraph
@@ -171,6 +172,11 @@ class Brain:
         # Phase 25: conversation driver — keeps the exchange alive with
         # empathy, interest expansion, and off-track steering questions.
         self.conversation_driver = ConversationDriver()
+
+        # Phase 26: emotion-driven tone mapping — the internal emotional
+        # state now changes HOW the brain replies (register, length hint,
+        # safe humor, calm responses to anger).
+        self.tone_mapper = ToneMapper()
 
         # Neural simulation (Phase 1)
         self._neural_sim_engine = None
@@ -444,6 +450,16 @@ class Brain:
         )
         if driver_plan.needs_followup and driver_plan.question and response:
             response = f"{response} {driver_plan.question}"
+
+        # Phase 26: emotion-driven tone — apply the style opener and safe
+        # joke from the current emotional state and the user's affect.
+        tone_plan = self.tone_mapper.plan_tone(
+            self.emotion, text_input, response
+        )
+        if tone_plan.joke:
+            response = f"{response} {tone_plan.joke}"
+        if tone_plan.opener and response and not response.startswith(tone_plan.opener):
+            response = f"{tone_plan.opener} {response}"
         self.state.last_output = response
         workspace_summary = self.workspace.summary()
         thought_trace = ThoughtTraceSummary(

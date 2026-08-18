@@ -62,3 +62,12 @@ REMAINING Phase 25: (1) wire into Brain: `self.conversation_driver = Conversatio
 - Backend Render (https://misty-brain.onrender.com), frontend Vercel, Supabase PG; MISTY_DB_URL env; sqlite dev with MISTY_DB_URL=sqlite:///tmp/...
 - All phases end with: ruff, full pytest, smoke_production.py (takes ~50s, cold starts Render), commit, git pull --rebase, push.
 - User wants Bengali reporting eventually (final report phase 16).
+
+---
+
+## Phase 26 status (in progress)
+Phase 25 committed as 83b3f6f (driver.py, tests/test_phase25_conversation_driver.py; 562 tests pass). Phase 26 module `brain/emotion/tone.py` CREATED: `ToneMapper.plan_tone(emotion: EmotionalState, user_text, response) -> TonePlan(opener, length_hint, joke, style)`. Styles: user-anger → calm apology opener (BN/EN); user-humor request → warm + safe joke rotation (idx = int(satisfaction*len) % len); high interest+curiosity (>0.7) → enthusiastic opener + detailed; low attention (<0.4) → short opener; high urgency → short. Safe jokes BN/EN 3 each.
+
+REMAINING Phase 26: (1) wire into Brain: `self.tone_mapper = ToneMapper()` in __init__; in process() after response built: plan = self.tone_mapper.plan_tone(self.emotion, text_input, response); if plan.joke: response += " " + plan.joke; if plan.opener and response: response = f"{plan.opener} {response}" (careful order: opener FIRST only when response exists and not already starting with opener; apply opener before driver question? Driver hook is at line ~437-447 BEFORE grounding; tone hook should go AFTER driver plan append or BEFORE — choose AFTER driver so opener precedes response and joke appended last). (2) tests/test_phase26_tone.py 15+ tests: angry input → calm opener; joke request → safe joke included & opener warm; high-interest brain (set emotion.interest/curiosity=0.9) → enthusiastic opener; joke never insulting (no forbidden words); BN vs EN detection; short tone for low attention. Note: tests set brain.emotion directly. (3) ruff, regression, smoke, commit/push main.
+
+Global: base 562 tests; repo salauddinmir/Misty-Ai main; ruff line-length=120; imports sorted; smoke_production.py ~50s.
