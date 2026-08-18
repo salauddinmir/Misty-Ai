@@ -35,6 +35,7 @@ class IntentType(str, Enum):
     PHYSICS = "physics"
     CAPABILITY_QUERY = "capability_query"
     RECOGNITION_QUERY = "recognition_query"
+    CONVERSATION = "conversation"
     UNKNOWN = "unknown"
 
 
@@ -146,6 +147,14 @@ class NLUParser:
             r"(?:তুমি|আপনি|মিস্টি)\s+(?:কি|কী)\s+আমাকে\s+চিনতে\s+পারো\s*[?\uFF1F]?$",
             re.UNICODE,
         )
+        # Bengali casual/social turns that are neither greetings nor questions
+        # the parser can otherwise resolve: "কি খবর", "ভালো ব্যাপার", "কি
+        # ভাবছো". A short, friendly, deterministic reply is composed in the
+        # brain's conversation act handler instead of the generic echo.
+        self._bn_casual_patterns = [
+            re.compile(r"(কি খবর|কেমন আছো|কেমন আছ|কি খবরে|ভালো ব্যাপার|বেশ হয়েছে)", re.UNICODE),
+            re.compile(r"(তুমি কি ভাবছো|কি ভাবছো|কি করছো|কি করছ)", re.UNICODE),
+        ]
 
         # Bengali correction signals that start a turn (highest priority in
         # Bengali path). Examples: "না, ভুল হয়েছে", "আসলে মিস্টি",
@@ -236,6 +245,13 @@ class NLUParser:
             r"^(?:do\s+you\s+)?remember\s+me\??$|^do\s+you\s+recognize\s+me\??$",
             re.IGNORECASE,
         )
+        # English casual/social turns matching the Bengali ones above:
+        # "how are you", "what are you thinking", "that's good".
+        self._en_casual_patterns = [
+            re.compile(r"(how are you|how's it going|how are things)", re.IGNORECASE),
+            re.compile(r"(what are you thinking|what are you thinking about)", re.IGNORECASE),
+            re.compile(r"(that's good|that is good|nice|sounds good|cool)", re.IGNORECASE),
+        ]
 
         # English correction signals that start a turn.
         self._en_correction_patterns = [
@@ -371,6 +387,17 @@ class NLUParser:
                 raw_text=text,
                 confidence=0.88,
             )
+
+        # Casual/social turns are detected before greetings so friendly
+        # chit-chat ("কি খবর", "তুমি কি ভাবছো") is not reduced to the
+        # generic greeting acknowledgement.
+        for pattern in self._bn_casual_patterns:
+            if pattern.search(text):
+                return ParseResult(
+                    intent=IntentType.CONVERSATION,
+                    raw_text=text,
+                    confidence=0.85,
+                )
 
         # Check greetings
         for pattern in self._bn_greeting_patterns:
@@ -598,6 +625,14 @@ class NLUParser:
                 raw_text=text,
                 confidence=0.88,
             )
+
+        for pattern in self._en_casual_patterns:
+            if pattern.search(text):
+                return ParseResult(
+                    intent=IntentType.CONVERSATION,
+                    raw_text=text,
+                    confidence=0.85,
+                )
 
         # Check greetings
         for pattern in self._en_greeting_patterns:

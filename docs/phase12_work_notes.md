@@ -76,3 +76,83 @@ DONE: (1) brain/learning/consolidation.py — MemoryConsolidator now has max_con
 ## Test count history
 Phase 12: 441 -> Phase 13 (e991c1f): 453 -> Phase 14 (7554e9c): 467 (current main).
 Repo: salauddinmir/Misty-Ai, main branch, all pushes direct to main.
+
+## Phase 15 status (in progress)
+DONE: regression 469 passed (test_brain_state_route.py 2 + test_training_catalog_route 2 + others). apps/api/routes/brain.py — BrainStateResponse now has last_autonomous_tick (None-safe {}); get_brain_state coerces None to {}. Commit 8dc7dbe pushed.
+Smoke results so far: /health 200 {"status":"healthy"}; POST /api/chat BN 200 (correct identity: "আমি Misty - Smart Artificial Brain। আমাকে তৈরি করেছে Pixline Incorporate... Founder Salauddin Mir (Netvai)"); EN 200; /api/chat/stream 200 SSE with event: status thinking -> event: token -> event: done; /api/training/catalog 200 packages=0.
+Vercel: team "tophyint-9993s-projects" (id team_GAiX7z0VlEsPZTxxVMX10AbD); projects: misty-ai (prj_bZoACfsgpF51Z6fpjMQlHOL0mOiL), misty-ai-web (prj_rlHQm5CJ1QROITDww9r8ivfK3Rw2). misty-ai-web production deployments READY (2026-08-17); misty-ai-web.vercel.app HTTP 200 (0.3s). NOTE: frontend production deployment last run 2026-08-17 — no new code pushed to apps/web this cycle, so frontend is as-designed.
+REMAINING: re-run smoke_production.py (brain_state_tick_metrics should PASS now after redeploy; Render cold start ~1-2 min for new build; wait then curl /api/brain/state verify last_autonomous_tick non-empty). Then Phase 16 report.
+
+## Phase 17 (user live-test findings — screenshots 2026-08-18)
+User tested on Vercel frontend + standalone Misty AI Chat app. Gaps found:
+1. "x² - 4 = 0, x =" → "I could not safely solve" — quadratic equation solver MISSING. math_engine._parse_linear_equation only handles linear; regex allows only 0-9xX (no ², no Bengali digits inside equation side).
+2. "১৫ × ৭ কত?" → "আমি এই mathematical format-টি এখনো সমর্থন করি না" — brain.py line ~972 fallback path taken: normalized text has Bengali digits but _extract_expression fails because the math-engine result None → falls back to language fallback (not engine). Actually: ১৫×৭ → _normalize translates digits OK, looks_mathematical: regex \d\s*[+*/] won't match "১৫ × ৭" (× is between digits). After normalize: "15 * 7 কত?" — looks_mathematical marker "কত" matches. Then _extract_expression strips ² non-ascii chars and removes non-ascii; for "15 * 7 কত" regex [^0-9a-zA-Z_+*/().,- ] drops 'কত', leaving "15 * 7" — should parse... BUT order: _parse_linear_equation runs BEFORE expression extraction? No — linear eq runs in parser loop before extract, fullmatch on "[0-9xX+*-/.() ]+=" won't match "15 * 7 কত?" → None. Then extract_expression. Hmm — so why did user get fallback message? Because brain.py calls math engine BEFORE normalizing? Check brain.py around line 972 (the fallback message). Likely brain passes raw text without Bengali normalization, OR math engine path skipped due to 'language' routing. VERIFY by reproducing locally: brain.process("১৫ × ৭ কত?") and brain.process("x² - 4 = 0").
+3. Casual Bengali "কি খবর", "ভালো ব্যাপার", "তুমি কি ভাবছো?" → only echoes "আমি আপনার কথাটি শুনলাম" — intent parser missing conversational intents. Fix: add simple greeting/feelings intents in brain/cognition/language.py (check what exists) returning contextual responses instead of the generic echo.
+
+Fix plan:
+- math_engine.py: (a) normalize input BEFORE anything incl. equation regex — move _normalize to solve; (b) add _parse_quadratic_equation (ax²+bx+c=0 solver with discriminant, Bengali x²/২/² handling); (c) _parse_linear_equation accept Bengali digits (already normalized now); (d) looks_mathematical marker list fine.
+- brain.py line ~972 fallback: make sure fallback message suggests formats incl. Bengali examples.
+- language.py: add intents for কি খবর/কেমন আছো/how are you/good/ভালো → friendly contextual replies.
+- tests: test_math_engine_bengali_digits, test_quadratic (x²-4=0 → x = ±2), test_casual_intents.
+- After: regression, commit+push main, re-verify production chat with BN math + equation.
+
+## Phase 17 root-cause verification (LOCAL REPRO DONE)
+Local repro on current main build:
+- "১৫ × ৭ কত?" → returns "105" (0.98) — WORKS on current build; user screenshot was an older build. NO FIX NEEDED (maybe add test).
+- "x² - 4 = 0" → "I could not safely solve" — CONFIRMED. Quadratic solver missing in math_engine.py. _parse_linear_equation (line 202) regex only [0-9xX+*-/.() ] — no ² or superscript handling; linear eq parser runs BEFORE _extract_expression in solve() parser loop (line 64-73), and _extract_expression strips non-ASCII so x² becomes x → fails anyway.
+- "কি খবর" → generic echo — casual intents missing. Echo text likely in brain/cognition/language.py or brain/core/brain.py ("আমি আপনার কথাটি শুনলাম").
+Plan confirmed: add _parse_quadratic_equation to MathEngine (discriminant, x = ±2 for x²-4=0), add casual conversational intents (কি খবর/কেমন আছো/how are you → friendly replies), add tests, regression, commit+push main.
+
+## Phase 17 implementation details (read parser.py + math_engine.py lines above)
+
+### Findings
+- "১৫ × ৭ কত?" WORKS on current build (user screenshot = older build). Add regression test only.
+- "x² - 4 = 0" fails: math_engine._parse_linear_equation regex class [0-9xX+*-/.() ] has no ²/²/²-style superscripts; linear eq parser runs before _extract_expression which strips ²→x then fails. NO quadratic parser exists.
+- Casual intents missing: parser._bn_greeting_patterns = (হ্যালো|হাই|নমস্কার|আসসালামু|সালাম); "কি খবর"/"কেমন আছো"/"ভালো ব্যাপার"/"তুমি কি ভাবছো" → UNKNOWN → STATEMENT → echo via _act_statement (brain.py line ~1289).
+
+### Fix plan (in brain/math_engine.py)
+1. In solve(), run _parse_quadratic_equation BEFORE _parse_linear_equation in parser loop (parser list order brain/math_engine.py line 64-73).
+2. _parse_quadratic_equation(text): normalize with _normalize (Bengali digits, × → *, ² → **2); regex to find equation pattern containing x and power or x² marker: e.g. r"([0-9xX+\-*().% ]+?)(?:=|=|=)([0-9xX+\-*().% ]+)" with superscript handled via normalize first (² → ²? no — normalize replaces "²"→... need to add "²":"**2" replacement in _normalize). Then compute a,b,c coefficients for ax**2+bx+c=0 (move RHS to LHS), discriminant d=b²-4ac:
+   - d>0: x = (-b±√d)/2a → "x = v1 অথবা x = v2" (Bengali response "x = ±2")
+   - d==0: x = -b/2a
+   - d<0: "কোনো বাস্তব সমাধান নেই" (with complex note)
+   - a==0: fall back to linear solve (a, b, c → bx+c=0).
+3. Quadratic detection: after normalize, if "x" present and ("**2" in side or "x²" marker) → quadratic. Implement by parsing each side into polynomial terms: split on +/− at paren-free top level, term regex r"^([0-9.]*)\*?x(?:\*\*2|\^2|²)?|([0-9.]+)$".
+4. Keep confidence 0.98, category "quadratic_equation", steps include formula.
+5. Also improve _normalize: add "²":"**2", "³":"**3", "¹":"**1" and superscript digits ⁰-⁹ mapping.
+
+### Fix plan (in brain/nlu/parser.py) — new CONVERSATION intent
+1. Add IntentType.CONVERSATION = "conversation".
+2. Add _bn_casual_patterns list:
+   - re.compile(r"(কি খবর|কেমন আছো|কেমন আছ|কি খবরে|ভালো ব্যাপার|বেশ)", re.UNICODE) → covers কি খবর, ভালো ব্যাপার
+   - re.compile(r"(তুমি কি ভাবছো|কি ভাবছো|কি করছো|কি করছ)", re.UNICODE) → "তুমি কি ভাবছো?"
+   - English: re.compile(r"(how are you|how are things|what are you thinking|nice|that's good|that is good)", re.I)
+3. Detect BEFORE name declarations but AFTER greetings (order inside _try_bengali: after _bn_capability, before _bn_greeting? better: greetings remain first; casual AFTER greetings).
+4. In brain.py _phase_act routing (line ~860-960): add branch intent == CONVERSATION → _act_conversation(parse_result).
+5. _act_conversation: pattern-match variants → friendly contextual replies in Bengali with English fallback:
+   - কি খবর → "আমি ভালো আছি! সাম্প্রতিকে আমার working memory-তে ..." (mention salient entity or default "আমি নতুন জ্ঞান শিখছি") — keep deterministic (no invented prose): use salient entities from dialogue_context; fallback "আমি ভালো আছি। আমি মিস্টির নতুন অংশ শিখছি। আপনার কি খবর?"
+   - কেমন আছো → similar
+   - ভালো ব্যাপার → "ধন্যবাদ! আমি খুশি।" (short)
+   - তুমি কি ভাবছো → report from self_model (brain has self_model attr): "আমি আমার নিজের চিন্তা নিয়ে ভাবছি — ..." — simple deterministic: "আমি আমার শেখা নিয়ে ভাবছি; আমার কৌতূহল এখন high।"
+   Keep responses SHORT (1-2 sentences), deterministic, bilingual pair logic.
+6. Update grounding in language.py? intent "conversation" → claims default fine.
+
+### Tests (tests/test_phase17_live_gaps.py)
+- test_bengali_arithmetic_15x7 → "105" in response
+- test_quadratic_x2_minus_4 → response contains "x = 2" and "-2" (or ±2)
+- test_quadratic_perfect_square (x² + 4x + 4 = 0 → x = -2)
+- test_quadratic_no_real (x² + 1 = 0 → no real solution message)
+- test_casual_ki_khobor → not echo "শুনলাম"; contains "ভালো আছি"
+- test_casual_en_how_are_you → friendly reply, not echo
+- test_casual_bhalo_byapar → ধন্যবাদ reply
+- existing 469 regression must stay passing.
+
+### Math engine _normalize note
+Add to replacements: "²":"**2", superscript digit range ⁰-⁹→0-9 translation (make mapping). Ensure looks_mathematical also matches "x²" marker (currently marker "equation"/"সমীকরণ"; regex \d\s*[+*/%=] — x²-4=0 has = so bool re.search("...") will match "="? regex requires \d before operator — "x² - 4 = 0" has "4 = 0": \d\s*[...] matches "4 =". OK.
+
+## Phase 17 progress snapshot (saved before compaction)
+DONE so far: (1) math_engine.py — superscript normalization (_SUPERSCRIPT_DIGITS ⁰-⁹ → **0..**9; caret→**; x² works), _parse_quadratic_equation added before linear in parser loop, _split_terms + _polynomial_coefficients helpers. Verified: x²-4=0 → "x = 2, x = -2"; x²+4x+4=0 → -2; x²+1=0 → no real solution BN message; x²-5x+6=0 → 2,3; x^2+2x+1=0 → -1; 2x+4=10 → linear still works x=3. (2) brain/nlu/parser.py — IntentType.CONVERSATION added; _bn_casual_patterns (কি খবর|কি খবরে|কেমন আছো|কেমন আছ|ভালো ব্যাপার|বেশ হয়েছে; তুমি কি ভাবছো|কি ভাবছো|কি করছো|কি করছ) and _en_casual_patterns (how are you/how's it going/how are things; what are you thinking (about); that's good/that is good/nice/sounds good/cool); both paths return CONVERSATION intent (conf 0.85) before greeting check. (3) brain/core/brain.py PLAN phase — added plan "converse_friendly" for CONVERSATION; ACT routing branch added (response, confidence = self._act_conversation(parse_result)) — NOTE: the ACT-branch insert produced odd indentation (line ~932 "                elif" double-indented + blank line 928) — MUST check with ruff; fix if lint complains.
+TODO next: add _act_conversation method to Brain class (deterministic, pattern-match raw_text lowercase: BN "কি খবর/কেমন আছ" → "আমি ভালো আছি, ধন্যবাদ! আমি মিস্টি — নতুন জ্ঞান শিখছি; আপনার কি খবর?"; "ভালো ব্যাপার/বেশ" → "ধন্যবাদ! আমি খুশি।"; "ভাবছো/করছো" → report self_model.summary short phrase e.g. "আমি আমার নিজের চিন্তা নিয়ে ভাবছি; আমার কৌতূহল এখনো উচ্চ।"; EN equivalents: how are you → "I am doing well, thank you! I am Misty — learning new knowledge; how about you?"; that's good/nice → "Thank you! I am glad."; what are you thinking → self_model report). Also add conversation priority 0.45 in PLAN priority map. Confidence ~0.85.
+Then: tests/test_phase17_live_gaps.py (7 tests per plan above), full regression (expect 469+7), ruff, commit+push main, production smoke verify (curl POST /api/chat with x² - 4 = 0 এব "কি খবর"), delivery.
+Note: user's app screenshots used the OLD build; our local repro showed ১৫×৭ worked already (current build). So no Bengali-arithmetic fix needed — just add test test_bengali_arithmetic_15x7 (expect "105" in response).
+User-facing context: user tests via misty-ai-web.vercel.app এব standalone "Misty AI Chat" app (backend: misty-brain.onrender.com).

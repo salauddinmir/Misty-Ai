@@ -19,6 +19,20 @@ from dataclasses import dataclass
 from typing import ClassVar
 
 _BN_DIGITS = str.maketrans("০১২৩৪৫৬৭৮৯", "0123456789")
+_SUPERSCRIPT_DIGITS = str.maketrans(
+    {
+        "⁰": "**0",
+        "¹": "**1",
+        "²": "**2",
+        "³": "**3",
+        "⁴": "**4",
+        "⁵": "**5",
+        "⁶": "**6",
+        "⁷": "**7",
+        "⁸": "**8",
+        "⁹": "**9",
+    },
+)
 
 
 @dataclass(frozen=True)
@@ -60,11 +74,21 @@ class MathEngine:
         if not self.looks_mathematical(normalized):
             return None
         clean = normalized.rstrip("?.!").strip()
+        # Drop trailing question clauses after a comma so that inputs like
+        # "x² - 4 = 0, x = ?" stay a clean equation: "x² - 4 = 0".
+        # Only strip when an "=" already appeared before the comma and the
+        # clause after it also contains an "=" (a redundant trailing ask).
+        comma_index = clean.find(",")
+        after = clean[comma_index + 1 :] if comma_index != -1 else ""
+        before = clean[:comma_index] if comma_index != -1 else ""
+        if comma_index != -1 and "=" in before and "=" in after:
+            clean = before.strip()
 
         for parser in (
             self._parse_combinatorics,
             self._parse_statistics,
             self._parse_geometry,
+            self._parse_quadratic_equation,
             self._parse_linear_equation,
             self._parse_sequence,
         ):
@@ -147,8 +171,11 @@ class MathEngine:
             "শতাংশ": "%",
         }
         result = text.translate(_BN_DIGITS)
+        result = result.translate(_SUPERSCRIPT_DIGITS)
         for source, target in replacements.items():
             result = result.replace(source, target)
+        # Convert caret notation (x^2) to Python power notation.
+        result = re.sub(r"\^([0-9]+)", r"**\1", result)
         return re.sub(r"\s+", " ", result).strip()
 
     def _extract_expression(self, text: str) -> str | None:
@@ -198,6 +225,128 @@ class MathEngine:
         exact = str(value)
         answer = f"{exact} (প্রায় {value:.10g})" if isinstance(value, float) else exact
         return MathResult(answer, exact, "arithmetic", (f"{expression} = {exact}",))
+
+    def _parse_quadratic_equation(self, text: str) -> MathResult | None:
+        """Solve quadratic equations like "x² - 4 = 0", "x^2 + 2x + 1 = 0".
+
+        Supports Bengali and English phrasings with any digit script after
+        normalization (Bengali digits and superscripts become ASCII). Both
+        sides of the equation are moved to the left side and solved with
+        the quadratic formula. Non-equation inputs (no "=") skip here so the
+        linear/expression solvers keep their chance.
+        """
+        if "x" not in text.lower() or "=" not in text:
+            return None
+        # Equation marker: sides joined by "=" with x present and a squared
+        # term on either side. The normalized "x**2" style is matched too.
+        match = re.match(r"^(.+)\s*=\s*(.+)$", text)
+        if not match:
+            return None
+        left, right = match.group(1).strip(), match.group(2).strip()
+        # Move the right side to the left: negate each of its terms, then
+        # concatenate without introducing parenthesis artifacts that the
+        # coefficient tokenizer cannot handle.
+        right_terms = self._split_terms(right)
+        negated_right = "".join(f"+{term.lstrip('+')}" for term in right_terms)
+        combined = f"{left} {negated_right}"
+        coefficients = self._polynomial_coefficients(combined)
+        if coefficients is None:
+            return None
+        a, b, c = coefficients
+
+        if abs(a) < 1e-12:
+            # Degenerate linear equation; let the linear parser try it.
+            return None
+
+        discriminant = b * b - 4 * a * c
+        steps: list[str] = [
+            f"a = {a:g}, b = {b:g}, c = {c:g}",
+            f"d = b² - 4ac = {discriminant:g}",
+            "x = (-b ± √d) / 2a",
+        ]
+        if abs(discriminant) < 1e-12:
+            root = -b / (2 * a)
+            return MathResult(
+                f"x = {root:g}",
+                f"x = {root:g}",
+                "quadratic_equation",
+                (*tuple(steps), f"x = -b / 2a = {root:g}"),
+            )
+        if discriminant > 0:
+            sqrt_d = math.sqrt(discriminant)
+            root1 = (-b + sqrt_d) / (2 * a)
+            root2 = (-b - sqrt_d) / (2 * a)
+            roots = sorted((root1, root2), key=abs)
+            formatted = ", ".join(f"x = {value:g}" for value in (roots[0], roots[1]))
+            return MathResult(
+                f"{formatted}",
+                formatted,
+                "quadratic_equation",
+                (*tuple(steps), *tuple(f"x{idx} = {value:g}" for idx, value in enumerate((roots[0], roots[1]), 1))),
+            )
+        # Negative discriminant: no real solution (complex roots skipped on
+        # purpose — the engine only claims what it can verify exactly).
+        return MathResult(
+            "এই সমীকরণের কোনো বাস্তব সমাধান নেই (ডিসক্রিমিন্যান্ট ঋণাত্মক)।",
+            "no_real_solution",
+            "quadratic_equation",
+            (*tuple(steps), "d < 0 → no real roots"),
+            confidence=0.7,
+        )
+
+    @staticmethod
+    def _split_terms(expression: str) -> list[str]:
+        """Split a polynomial-like string into signed terms without
+        collapsing spaces ("- 5" must stay "- 5", not "-5")."""
+        normalized = re.sub(r"\s+", "", expression)
+        terms: list[str] = []
+        for part in normalized.split("+"):
+            if not part:
+                continue
+            sub_parts = re.split(r"(?<!\*)-(?=[0-9x])", part)
+            first, rest = sub_parts[0], sub_parts[1:]
+            if first:
+                terms.append(first)
+            terms.extend(f"-{piece}" for piece in rest if piece)
+        return terms
+
+    @staticmethod
+    def _polynomial_coefficients(expression: str) -> tuple[float, float, float] | None:
+        """Parse "ax²+bx+c"-style expressions (normalized to "x**2") into
+        (a, b, c). Returns None if unsupported syntax is encountered."""
+        terms = MathEngine._split_terms(expression)
+        a, b, c = 0.0, 0.0, 0.0
+        for term in terms:
+            term = term.strip()
+            lower = term.lower()
+            if "x**2" in lower or "x²" in lower:
+                coeff = term.split("x")[0].strip()
+                if coeff in ("", "*"):
+                    a += 1.0
+                elif coeff == "-":
+                    a -= 1.0
+                else:
+                    try:
+                        a += float(coeff.rstrip("*"))
+                    except ValueError:
+                        return None
+            elif "x" in lower:
+                coeff = re.split(r"(?i)x", term)[0].strip()
+                if coeff in ("", "*"):
+                    b += 1.0
+                elif coeff == "-":
+                    b -= 1.0
+                else:
+                    try:
+                        b += float(coeff.rstrip("*"))
+                    except ValueError:
+                        return None
+            else:
+                try:
+                    c += float(term)
+                except ValueError:
+                    return None
+        return a, b, c
 
     def _parse_linear_equation(self, text: str) -> MathResult | None:
         match = re.search(

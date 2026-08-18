@@ -561,6 +561,52 @@ class Brain:
             if resolved:
                 parse_result.entities["resolved_entities"] = resolved
 
+    def _act_conversation(self, parse_result: ParseResult) -> tuple:
+        """Deterministic friendly reply for casual/social turns detected by
+        the parser (কি খবর, কেমন আছো, তুমি কি ভাবছো, that's good ...).
+
+        Replies are composed from the brain's current self-model so the
+        answer reflects genuine internal state rather than a scripted echo.
+        """
+        text = parse_result.raw_text.lower()
+        self_model_text = self._self_model_phrase()
+
+        # Bengali "ভাবছো/করছো" queries expose the current thinking state.
+        if re.search(r"ভাবছ|কি করছ", text):
+            response = f"আমি এখন স্ব-পর্যবেক্ষণ করছি। {self_model_text} আপনার কি করতে চান?"
+            return response, 0.8
+        if re.search(r"কি খবর|কেমন আছ", text):
+            response = f"আমি ভালো আছি, ধন্যবাদ! {self_model_text} আপনার কি খবর?"
+            return response, 0.85
+        if re.search(r"ভালো|বেশ|ঠিক", text):
+            response = f"ধন্যবাদ! আপনার কথাটি আমি সংগ্রহ করলাম। {self_model_text}"
+            return response, 0.75
+
+        # English equivalents.
+        if re.search(r"how are you|how's it going|how are things", text):
+            response = f"I am doing well, thank you! {self_model_text} How about you?"
+            return response, 0.85
+        if re.search(r"what are you thinking", text):
+            response = f"I am observing my own state right now. {self_model_text} What would you like to discuss?"
+            return response, 0.8
+        if re.search(r"that's good|that is good|nice|sounds good|cool", text):
+            response = f"Thank you! I noted that. {self_model_text}"
+            return response, 0.75
+
+        # Generic friendly acknowledgment for any other casual turn.
+        response = f"আমি আপনার কথাটি শুনলাম। {self_model_text}"
+        return response, 0.6
+
+    def _self_model_phrase(self) -> str:
+        """Compact, user-readable snapshot of the current self-model state."""
+        summary = self.self_model.summary()
+        uncertainty = summary.get("uncertainty", 0.0) if isinstance(summary, dict) else 0.0
+        if uncertainty > 0.7:
+            return "আমার নিজের অনিশ্চয়তা এখন উচ্চ — আমি নতুন কিছু শিখছি।"
+        if uncertainty > 0.4:
+            return "আমি বর্তমান নিজের চিন্তার ধারাটি যাচাই করছি।"
+        return "আমি নতুন জ্ঞান শিখছি এব নিজের চিন্তাগুলো পর্যবেক্ষণ করছি।"
+
     def _curiosity_prompt(self, activation_map: Dict[str, float]) -> str | None:
         """Phase 4 curiosity: ask about an under-explored neighbor concept.
 
@@ -848,6 +894,7 @@ class Brain:
             "name_declaration": 0.7,
             "statement": 0.6,
             "continuation": 0.5,
+            "conversation": 0.45,
             "greeting": 0.4,
         }.get(intent, 0.5)
         goal = self.goal_manager.decompose_hierarchy(
@@ -865,6 +912,8 @@ class Brain:
             plan = "answer_query"
         elif parse_result.intent == IntentType.GREETING:
             plan = "greet_back"
+        elif parse_result.intent == IntentType.CONVERSATION:
+            plan = "converse_friendly"
         elif parse_result.intent == IntentType.MATH:
             plan = "solve_mathematics"
         elif parse_result.intent == IntentType.PHYSICS:
@@ -929,7 +978,8 @@ class Brain:
 
         elif parse_result.intent == IntentType.RECOGNITION_QUERY:
             response, confidence = self._act_recognition(parse_result)
-
+        elif parse_result.intent == IntentType.CONVERSATION:
+            response, confidence = self._act_conversation(parse_result)
         elif parse_result.intent == IntentType.GREETING:
             name_part = f", {self.user_name}" if self.user_name else ""
             response = (
