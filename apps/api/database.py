@@ -20,7 +20,7 @@ import os
 import time as time_module
 import uuid
 from pathlib import Path
-from typing import Any, Dict, List, Tuple
+from typing import Any, Dict, List, Mapping, Tuple
 
 # ---------------------------------------------------------------------------
 # Driver selection: asyncpg is the production PostgreSQL driver; both
@@ -158,7 +158,12 @@ class Database:
                         "name = EXCLUDED.name, concept_type = EXCLUDED.concept_type, "
                         "activation_level = EXCLUDED.activation_level, "
                         "created_at = EXCLUDED.created_at, metadata = EXCLUDED.metadata",
-                        concept_id, name, concept_type, activation_level, created_at, metadata_json,
+                        concept_id,
+                        name,
+                        concept_type,
+                        activation_level,
+                        created_at,
+                        metadata_json,
                     )
             except asyncpg.UniqueViolationError:
                 # A row with this name exists under a *different* concept_id.
@@ -166,7 +171,8 @@ class Database:
                 # orphaned; merge the metadata under the existing row.
                 async with self._lock:
                     existing = await self._connection.fetchrow(
-                        "SELECT concept_id, metadata FROM concepts WHERE name = $1", name,
+                        "SELECT concept_id, metadata FROM concepts WHERE name = $1",
+                        name,
                     )
                     if existing is None:
                         raise
@@ -177,7 +183,11 @@ class Database:
                         "concept_type = $2, activation_level = $3, "
                         "created_at = $4, metadata = $5 "
                         "WHERE name = $1",
-                        name, concept_type, activation_level, created_at, json.dumps(existing_meta),
+                        name,
+                        concept_type,
+                        activation_level,
+                        created_at,
+                        json.dumps(existing_meta),
                     )
             return
         sql = (
@@ -186,7 +196,8 @@ class Database:
             f"VALUES ({_placeholders(6)})"
         )
         await self._connection.execute(
-            sql, (concept_id, name, concept_type, activation_level, created_at, metadata_json),
+            sql,
+            (concept_id, name, concept_type, activation_level, created_at, metadata_json),
         )
         await self._connection.commit()
 
@@ -408,3 +419,143 @@ class Database:
             }
             for row in rows
         ]
+
+    # ==================== Training Packages (Phase 12) ====================
+
+    async def save_training_package(self, package: Mapping[str, Any]) -> None:
+        """Persist a versioned training package to the durable catalog.
+
+        The catalog is append-friendly: the same ``package_id`` keeps every
+        registered version so the registry can reconstruct full package
+        history after a process restart. Registration succeeds even when
+        persistence is unreachable (the in-memory registry remains the
+        runtime source of truth), but callers should check the returned
+        dict for ``persisted: false``.
+        """
+        package_id: str = str(package.get("package_id", "")).strip()
+        version: int = int(package.get("version", 1))
+        department: str = str(package.get("department", "general") or "general")
+        languages: List[str] = list(package.get("languages", []) or [])
+        provenance: str = str(package.get("provenance", "") or "")
+        source_ref = (package.get("source") or {}) if isinstance(package.get("source"), Mapping) else {}
+        timestamp = time_module.time()
+        payload = dict(package)
+        payload.setdefault("package_id", package_id)
+        payload.setdefault("version", version)
+        payload.setdefault("department", department)
+        payload.setdefault("languages", languages)
+        payload.setdefault("registered_at", timestamp)
+        payload.setdefault("updated_at", timestamp)
+        package_json = json.dumps(payload, ensure_ascii=False)
+        languages_json = json.dumps(languages, ensure_ascii=False)
+        if source_ref.get("url") or source_ref.get("name"):
+            provenance = provenance or str(source_ref.get("url") or source_ref.get("name"))
+        try:
+            if DRIVER == "postgres":
+                async with self._lock:
+                    await self._connection.execute(
+                        "INSERT INTO training_packages "
+                        "(package_id, version, department, languages, package_json, "
+                        "provenance, status, registered_at, updated_at) "
+                        f"VALUES ({_placeholders(9)}) "
+                        "ON CONFLICT (package_id, version) DO UPDATE SET "
+                        "package_json = EXCLUDED.package_json, updated_at = EXCLUDED.updated_at",
+                        package_id,
+                        version,
+                        department,
+                        languages_json,
+                        package_json,
+                        provenance,
+                        "active",
+                        timestamp,
+                        timestamp,
+                    )
+            else:
+                await self.execute(
+                    f"{UPSERT_SQLITE} INTO training_packages "
+                    "(package_id, version, department, languages, package_json, "
+                    "provenance, status, registered_at, updated_at) "
+                    f"VALUES ({_placeholders(9)})",
+                    (
+                        package_id,
+                        version,
+                        department,
+                        languages_json,
+                        package_json,
+                        provenance,
+                        "active",
+                        timestamp,
+                        timestamp,
+                    ),
+                )
+                await self._connection.commit()
+        except Exception:
+            raise
+
+    async def load_training_packages(
+        self,
+        department: str | None = None,
+    ) -> List[Dict[str, Any]]:
+        """Load the durable training package catalog (newest version first)."""
+        base = (
+            "SELECT package_id, version, department, languages, package_json, "
+            "provenance, status, registered_at, updated_at "
+            "FROM training_packages"
+        )
+        if DRIVER == "postgres":
+            sql = f"{base} ORDER BY registered_at DESC"
+            rows = (
+                await self.fetchall(sql)
+                if department is None
+                else await self.fetchall(
+                    f"{base} WHERE department = $1 ORDER BY registered_at DESC",
+                    (department,),
+                )
+            )
+        else:
+            sql = f"{base} ORDER BY registered_at DESC"
+            rows = (
+                await self.fetchall(sql)
+                if department is None
+                else await self.fetchall(
+                    f"{base} WHERE department = ? ORDER BY registered_at DESC",
+                    (department,),
+                )
+            )
+        result: List[Dict[str, Any]] = []
+        for row in rows:
+            parsed = (
+                row
+                if isinstance(row, dict)
+                else {
+                    "package_id": row[0],
+                    "version": row[1],
+                    "department": row[2],
+                    "languages": row[3],
+                    "package_json": row[4],
+                    "provenance": row[5],
+                    "status": row[6],
+                    "registered_at": row[7],
+                    "updated_at": row[8],
+                }
+            )
+            languages = parsed["languages"]
+            if isinstance(languages, str):
+                languages = json.loads(languages)
+            package_json = parsed["package_json"]
+            if isinstance(package_json, str):
+                package_json = json.loads(package_json)
+            result.append(
+                {
+                    "package_id": parsed["package_id"],
+                    "version": int(parsed["version"]),
+                    "department": str(parsed["department"]),
+                    "languages": languages,
+                    "package": package_json,
+                    "provenance": str(parsed["provenance"] or ""),
+                    "status": str(parsed["status"]),
+                    "registered_at": float(parsed["registered_at"]),
+                    "updated_at": float(parsed["updated_at"]),
+                }
+            )
+        return result

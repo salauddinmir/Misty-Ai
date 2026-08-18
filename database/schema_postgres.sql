@@ -63,6 +63,21 @@ CREATE TABLE IF NOT EXISTS procedures (
     created_at REAL NOT NULL
 );
 
+-- Training packages table (Phase 12): durable catalog of versioned
+-- structured knowledge packages registered through the training registry.
+CREATE TABLE IF NOT EXISTS training_packages (
+    package_id TEXT NOT NULL,
+    version INTEGER NOT NULL DEFAULT 1,
+    department TEXT NOT NULL DEFAULT 'general',
+    languages JSONB NOT NULL DEFAULT '[]',
+    package_json JSONB NOT NULL DEFAULT '{}',
+    provenance TEXT NOT NULL DEFAULT '',
+    status TEXT NOT NULL DEFAULT 'active',
+    registered_at DOUBLE PRECISION NOT NULL,
+    updated_at DOUBLE PRECISION NOT NULL,
+    PRIMARY KEY (package_id, version)
+);
+
 -- Indexes for performance
 CREATE INDEX IF NOT EXISTS idx_concepts_name ON concepts(name);
 CREATE INDEX IF NOT EXISTS idx_concepts_type ON concepts(concept_type);

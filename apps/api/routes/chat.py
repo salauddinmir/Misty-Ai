@@ -228,3 +228,16 @@ async def chat_stream(request: Request, body: ChatRequest) -> StreamingResponse:
             "X-Accel-Buffering": "no",
         },
     )
+
+
+@router.get("/training/catalog")
+async def training_catalog(request: Request) -> Dict[str, Any]:
+    """Read-only view of the durable versioned training package catalog."""
+    database = getattr(request.app.state, "database", None)
+    if database is None:
+        return {"packages": [], "count": 0, "source": "not_ready"}
+    try:
+        packages = await database.load_training_packages()
+    except Exception:
+        packages = []
+    return {"packages": packages, "count": len(packages), "source": "catalog"}
