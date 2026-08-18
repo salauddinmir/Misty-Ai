@@ -27,6 +27,10 @@ class BrainStateResponse(BaseModel):
     emotional_state: Dict[str, float]
     active_concepts: Dict[str, float]
     performance: Dict[str, Any]
+    # Phase 14: latest autonomous reflection tick audit snapshot
+    # (tick_index, evidence_budget, evidence_count, elapsed_ms, outcome,
+    # quarantined_candidates). Absent until the first tick has run.
+    last_autonomous_tick: Dict[str, Any]
 
 
 class ConceptResponse(BaseModel):
@@ -64,6 +68,8 @@ async def get_brain_state(request: Request) -> BrainStateResponse:
     """Get the current brain state snapshot."""
     brain = request.app.state.brain
     state = brain.get_state()
+    tick = state.get("last_autonomous_tick")
+    state["last_autonomous_tick"] = tick if isinstance(tick, dict) else {}
     return BrainStateResponse(**state)
 
 

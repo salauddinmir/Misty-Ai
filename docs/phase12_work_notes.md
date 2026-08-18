@@ -62,3 +62,17 @@ DONE: `brain/evaluation/benchmark_generator.py` written. It imports `brain.knowl
 NEXT: write tests/test_benchmark_generator.py (coverage counts, determinism, case shape, curriculum_cases unknown dept returns empty, all_acceptance_cases includes default_bilingual_cases), ruff + full pytest (currently 441 passing), commit/push.
 REMAINING PHASES: 14 harden active hypothesis loop (brain/cognition/inner_loop.py tick budget + metrics; brain/core/brain.py autonomous tick integration; tests), 15 production smoke tests (health JSON chat BN/EN SSE at misty-brain.onrender.com; verify Vercel via vercel MCP), 16 Bengali continuation report + backlog to user.
 REPO facts: remote main = github salauddinmir/Misty-Ai, deploy: Render backend misty-brain.onrender.com, Vercel frontend. Docs dir holds phase12_work_notes.md (internal notes file - may skip committing or keep small), misty_department_training_master_plan_bn.md, misty_department_training_implementation_report_bn.md.
+
+## Phase 14 status (DONE, committed 7554e9c to main)
+DONE: (1) brain/learning/consolidation.py — MemoryConsolidator now has max_consolidations_per_cycle=8 (cycle breaks at cap), safety_gate_threshold=0.5 routes candidates through evaluate_learning; failures go to rejected_candidates (quarantine with decision/reason/audit_code); candidate provenance = content.get("source") only (no fallback, so missing source -> LEARN_NO_PROVENANCE reject); observations = content.get("observations",1)+consolidation_count. (2) brain/core/brain.py — autonomous_reflection_tick: max_evidence_per_tick=4 attribute, evidence selection capped by budget, last_autonomous_tick now includes tick_index, evidence_budget, elapsed_ms, quarantined_candidates (time imported as time_module). (3) tests/test_phase14_hypothesis_loop.py — 14 tests. (4) tests/test_learning_improvements.py sink test updated (activation 0.9, source seed, observations 3). Regression: 467 passed.
+
+## Phase 15 remaining steps
+1. Full pytest -q locally (expect 467).
+2. Smoke tests against production Render backend https://misty-brain.onrender.com: /health, POST /api/chat (BN "তুমি কে?" / EN "Who are you?"), /api/chat/stream (SSE), GET /api/training/catalog, GET /api/brain/state (verify last_autonomous_tick metrics present).
+3. Vercel deployment verify via vercel MCP: list_deployments (project misty-ai-web per context).
+4. If any route needs fix, push and wait for Render redeploy (cold start ~50s).
+5. Phase 16: Bengali continuation report (docs/misty_department_training_continuation_report_bn.md): phases 13-14 summary, test evidence, production status, updated backlog.
+
+## Test count history
+Phase 12: 441 -> Phase 13 (e991c1f): 453 -> Phase 14 (7554e9c): 467 (current main).
+Repo: salauddinmir/Misty-Ai, main branch, all pushes direct to main.
