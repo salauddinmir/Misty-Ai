@@ -154,6 +154,14 @@ class NLUParser:
         self._bn_casual_patterns = [
             re.compile(r"(কি খবর|কেমন আছো|কেমন আছ|কি খবরে|ভালো ব্যাপার|বেশ হয়েছে)", re.UNICODE),
             re.compile(r"(তুমি কি ভাবছো|কি ভাবছো|কি করছো|কি করছ)", re.UNICODE),
+            # Clarification / casual follow-up signals: "বুঝলাম না",
+            # "কি ব্যাপার?", "কেন?" — treated as conversational
+            # continuations rather than UNKNOWN intents so the brain
+            # never replies with the canned parse-failure message.
+            re.compile(
+                r"(বুঝলাম না|বুঝতে পারছি না|বুঝছি না|কি ব্যাপার|কী ব্যাপার|কেন|কেন কি হয়েছে)",
+                re.UNICODE,
+            ),
         ]
 
         # Bengali correction signals that start a turn (highest priority in
@@ -251,6 +259,13 @@ class NLUParser:
             re.compile(r"(how are you|how's it going|how are things)", re.IGNORECASE),
             re.compile(r"(what are you thinking|what are you thinking about)", re.IGNORECASE),
             re.compile(r"(that's good|that is good|nice|sounds good|cool)", re.IGNORECASE),
+            # Clarification / casual follow-up: "I don't understand",
+            # "what's up", "why" — conversational continuations.
+            re.compile(
+                r"(i don't understand|i do not understand|i don't get it|"
+                r"what's up|what is up|why\b|what happened|say again|repeat)",
+                re.IGNORECASE,
+            ),
         ]
 
         # English correction signals that start a turn.

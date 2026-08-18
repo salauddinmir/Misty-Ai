@@ -591,6 +591,28 @@ class Brain:
             response = f"ধন্যবাদ! আপনার কথাটি আমি সংগ্রহ করলাম। {self_model_text}"
             return response, 0.75
 
+        # Bengali clarification follow-ups: "বুঝলাম না", "কি ব্যাপার", "কেন"
+        if re.search(r"বুঝলাম ন|বুঝতে পারছি ন|বুঝছি ন", text):
+            response = (
+                "আপনি ঠিক আছেন! আমি একটু সহজ করে বলছি: আমি একটি ডিজিটাল "
+                "ব্রেন — আমি আপনার আগের কথার উপর ভিত্তি করে কাছে, চিন্তা করি এবং "
+                "আমার সংরক্ষিত জ্ঞান থেকে উত্তর তৈরি করি। কোনো অংশটি আবার "
+                "বুঝিয়ে বলি?"
+            )
+            return response, 0.75
+        if re.search(r"কি ব্যাপার|কী ব্যাপার", text):
+            response = (
+                "কোনো ব্যাপার নয়! আমি ভালো আছি এবং আপনার কথা শুনছি। "
+                f"{self_model_text} বলুন, কী নিয়ে কথা হবে?"
+            )
+            return response, 0.75
+        if re.search(r"\bকেন\b", text):
+            response = (
+                "একটি কারণ থাকতে পারে: আমি আমার সংরক্ষিত নিয়ম এবং কনসেপ্ট "
+                "থেকে সবচেয়ে যুক্তিসঙ্গত উত্তরটি বাছাই করি। আমি যদি ভুল উত্তর "
+                "দিয়ে থাকি, আমাকে ঠিক করে দিন — আমি শিখে যাব।"
+            )
+            return response, 0.6
         # English equivalents.
         if re.search(r"how are you|how's it going|how are things", text):
             response = f"I am doing well, thank you! {self_model_text} How about you?"
@@ -598,6 +620,29 @@ class Brain:
         if re.search(r"what are you thinking", text):
             response = f"I am observing my own state right now. {self_model_text} What would you like to discuss?"
             return response, 0.8
+        # English clarification follow-ups: "I don't understand",
+        # "what's up", "why"
+        if re.search(r"i don't understand|i do not understand|i don't get it", text):
+            response = (
+                "No problem! In short: I am a digital brain. I think by "
+                "combining the concepts and rules I have learned, and I give "
+                "you an answer derived from that knowledge. Would you like "
+                "me to explain any part again?"
+            )
+            return response, 0.75
+        if re.search(r"what's up|what is up|what happened", text):
+            response = (
+                "Nothing special — just processing and learning! "
+                f"{self_model_text} What shall we talk about?"
+            )
+            return response, 0.75
+        if re.search(r"\bwhy\b", text):
+            response = (
+                "There is a reason behind it: I pick the most consistent "
+                "answer derivable from my stored concepts and rules. If I got "
+                "something wrong, correct me — I will learn from it."
+            )
+            return response, 0.6
         if re.search(r"that's good|that is good|nice|sounds good|cool", text):
             response = f"Thank you! I noted that. {self_model_text}"
             return response, 0.75

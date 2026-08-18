@@ -201,3 +201,11 @@ Verified locally OK: আকাশের রঙ→নীল (0.95), বাংল�
 "কি ব্যাপার?" → None (graceful) — will hit _act_statement synthesis-fallback → canned echo; Phase 18b will add CONVERSATION patterns.
 brain.process() returns dict {response, confidence, intent, thought_trace, ...} — tests updated.
 Next: ruff clean (check again), pytest all, commit+push, Phase 18b, 19, 20.
+
+## Phase 18b status (2026-08-19)
+DONE in parser.py _bn_casual_patterns: added (বুঝলাম ন|বুঝতে পারছি ন|বুঝছি ন|কি ব্যাপার|কী ব্যাপার|কেন|কেন কি হয়েছে); _en_casual_patterns: added (i don't understand/i do not understand/i don't get it|what's up|what is up|why\b|what happened|say again|repeat).
+DONE in brain.py _act_conversation: Bengali handlers for বুঝলাম ন/কি ব্যাপার/কেন + EN for i don't understand/what's up/why — all return contextual self-model replies, confidence 0.6-0.75.
+Verified live: "বুঝলাম না"→conversation contextual reply, "কি ব্যাপার?"→OK, "কেন?"→OK, "I don't understand"→OK, "why?"→OK, "What's up?"→OK. No canned parse failure.
+Minor quirk (pre-existing, low priority): "আমি আপনার কাছে পারছিনা" wrongly matched relation_declaration — not blocking Phase 18b; skip.
+REMAINING: write tests/test_phase18b_graceful.py (3-5 tests: parser intent for বুঝলাম না/conversation; no canned reply via brain.process for বুঝলাম না + কি ব্যাপার + I don't understand + why), regression + ruff, commit+push; then Phase 19 (Render cold-start: app lifespan warmup + health during cold start + chat route retry hint), Phase 20 (BN report).
+Regression baseline: 505 passed after Phase 18 commit f972dbe.
