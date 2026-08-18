@@ -420,3 +420,49 @@ def register_commonsense_layer(brain: Any) -> int:
         )
         count += 1
     return count
+
+
+# ---------------------------------------------------------------------------
+# Phase 27: conversation corpus integration
+# ---------------------------------------------------------------------------
+
+
+def register_conversation_corpus(brain: Any) -> int:
+    """Load the conversation corpus' social-norm facts into the brain's
+    semantic memory, create its dialogue-act concepts in the knowledge
+    graph, and register the package in the package registry.
+
+    Returns the number of corpus facts registered.
+    """
+    try:
+        from brain.knowledge.corpus_conversation import (
+            CONVERSATION_CONCEPTS,
+            CONVERSATION_FACTS,
+            conversation_corpus,
+        )
+        from brain.knowledge.registry import PackageRegistry
+    except ImportError:  # pragma: no cover - corpus module optional
+        return 0
+
+    PackageRegistry().register(conversation_corpus())
+
+    for entry in CONVERSATION_CONCEPTS:
+        if brain.concept_graph.get_concept_by_name(entry["name"]) is None:
+            brain.concept_graph.create_concept(
+                name=entry["name"], concept_type=entry["type"]
+            )
+
+    count = 0
+    for fact in CONVERSATION_FACTS:
+        key = f"{fact['subject']}:{fact['predicate']}:{fact['obj']}"
+        if key in brain.semantic_memory.facts:
+            continue
+        brain.semantic_memory.store_fact(
+            subject=fact["subject"],
+            predicate=fact["predicate"],
+            obj=fact["obj"],
+            confidence=0.85,
+            source="conversation_corpus",
+        )
+        count += 1
+    return count

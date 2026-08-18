@@ -35,7 +35,10 @@ from brain.goals.manager import GoalManager
 from brain.graph.activation import SpreadingActivation
 from brain.graph.concepts import ConceptGraph
 from brain.graph.hebbian import HebbianLearner
-from brain.knowledge.commonsense import register_commonsense_layer
+from brain.knowledge.commonsense import (
+    register_commonsense_layer,
+    register_conversation_corpus,
+)
 from brain.knowledge.inference import InferenceSynthesizer
 from brain.knowledge.personality import ResponseVariator
 from brain.learning.consolidation import MemoryConsolidator
@@ -258,6 +261,7 @@ class Brain:
         # Phase 18: load the bilingual commonsense world-knowledge layer
         # AFTER trained identity facts so user-taught facts take priority.
         register_commonsense_layer(self)
+        register_conversation_corpus(self)
 
     def _init_neural_simulation(self) -> None:
         """Initialize the neural simulation engine with brain regions.
@@ -448,7 +452,14 @@ class Brain:
         driver_plan = self._driver_plan(
             text_input, response, intent_value, act_result.data.get("confidence", 0.5)
         )
-        if driver_plan.needs_followup and driver_plan.question and response:
+        if driver_plan.kind == "closure":
+            # Phase 27: farewells replace an otherwise-empty reply so
+            # "বাই" / "goodbye" never produces an unknown-question echo.
+            if (driver_plan.question and not response) or (
+                response and self._is_generic_unknown_reply(response)
+            ):
+                response = driver_plan.question or response
+        elif driver_plan.needs_followup and driver_plan.question and response:
             response = f"{response} {driver_plan.question}"
 
         # Phase 26: emotion-driven tone — apply the style opener and safe
@@ -878,6 +889,24 @@ class Brain:
 
     # Phase 25: conversation driver plan — decide the follow-up shape for
     # this turn before the response is finalized in `process()`.
+    def _is_generic_unknown_reply(self, response: str) -> bool:
+        """Phase 27: True when the response is one of the generic
+        unknown-input fallbacks from the personality pool or the
+        hard-coded unknown handler — those are safe to replace with a
+        contextually better reply (e.g. a farewell for closure inputs).
+        """
+        generic_markers = (
+            "working memory",
+            "learning opportunity",
+            "parse করতে পারিনি",
+            "বুঝতে শিখিনি",
+            "বিশ্লেষণ করতে পারছি না",
+            "could not resolve the intent",
+            "could not parse its intent",
+            "I heard you, but",
+        )
+        return response and any(marker and marker in response for marker in generic_markers)
+
     def _driver_plan(
         self, user_text: str, response: str, intent: str, confidence: float
     ) -> Any:
