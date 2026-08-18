@@ -12,7 +12,7 @@ import re
 from collections.abc import AsyncIterator
 from typing import Any, Dict
 
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
@@ -149,9 +149,27 @@ async def _persist_chat_state(app_state: Any, database: Any, brain: Any, message
 
 
 async def _process_chat_turn(request: Request, body: ChatRequest) -> ChatResponse:
-    """Process one message and schedule state persistence."""
-    brain = request.app.state.brain
+    """Process one message and schedule state persistence.
+
+    Phase 19: if the app is still booting (brain not attached) the chat
+    endpoint answers 503 with a Retry-After header instead of crashing
+    the worker; if the startup warmup has not run yet, it is executed
+    lazily on the first request.
+    """
+    brain = getattr(request.app.state, "brain", None)
+    if brain is None:
+        raise HTTPException(
+            status_code=503,
+            detail="MISTY brain is still booting. Retry in a few seconds.",
+            headers={"Retry-After": "3"},
+        )
     database = request.app.state.database
+    if not getattr(request.app.state, "warmup_complete", False):
+        try:
+            brain.process(" ")
+        except Exception:  # Warmup failure must never break a user turn
+            pass
+        request.app.state.warmup_complete = True
     result = brain.process(body.message)
     app_state = request.app.state
     pending_tasks = getattr(app_state, "pending_chat_persistence_tasks", None)

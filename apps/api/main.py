@@ -185,6 +185,17 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     # remembers concepts and relations across server restarts
     await _restore_persistent_knowledge(brain, database)
 
+    # Phase 19 warmup: run one full cognitive cycle before the first real
+    # request so the very first chat message never suffers the cold-start
+    # penalty (lazy JIT/LRU warming happens inside process()) and so any
+    # boot-time crash surfaces during startup instead of during a user
+    # request.
+    try:
+        brain.process(" ")
+    except Exception:
+        print("Brain warmup cycle skipped — first request will warm it")
+    app.state.warmup_complete = True
+
     # Store in app state for access in route handlers
     app.state.brain = brain
     app.state.database = database
@@ -266,5 +277,11 @@ async def root() -> dict:
 
 @app.get("/health")
 async def health_check() -> dict:
-    """Health check endpoint."""
-    return {"status": "healthy"}
+    """Health check endpoint with cold-start readiness status.
+
+    ``status`` is ``warm`` once the startup warmup cycle has run, so
+    orchestration (Render readiness probe, smoke scripts) can distinguish
+    an accepting-but-cold instance from one still booting.
+    """
+    ready = getattr(app.state, "warmup_complete", False)
+    return {"status": "warm" if ready else "cold", "ready": ready}
