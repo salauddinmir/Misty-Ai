@@ -176,16 +176,21 @@ class NLUParser:
             ),
         ]
 
-        # Bengali explicit teaching: "আমি জানি যে ...", "মনে রাখো ..."
+        # Bengali explicit teaching: "আমি জানি যে ...", "মনে রাখো ...".
+        # The separator after the trigger may be a space or a colon, so
+        # "মনে রাখো: X হলো Y" is still recognized as teaching instead of
+        # falling through to the mathematical heuristic.
         self._bn_teach_patterns = [
-            re.compile(r"(?:আমি জানি যে|মনে রাখো|মনে রাখুন|শেখো যে)\s+(.+)", re.UNICODE),
+            re.compile(r"(?:আমি জানি যে|মনে রাখো|মনে রাখুন|শেখো যে)[:\s]+(.+)", re.UNICODE),
         ]
 
         # Bengali "X হলো Y" generic assertion (statement with is_a relation).
         # Skipped below when the text already matched a relation-declaration
         # pattern, so "X হলো Y-এর Z" is not double-matched.
+        # "X হলো Y" — object may span multiple words; clause stop words
+        # (এবং, মানে, কিন্তু...) are trimmed after matching.
         self._bn_is_a_pattern = re.compile(
-            r"([A-Za-z\u0980-\u09FF]+)\s+হলো\s+([A-Za-z\u0980-\u09FF]+)",
+            r"([A-Za-z\u0980-\u09FF]+)\s+হলো\s+([A-Za-z\u0980-\u09FF]+(?:\s+[A-Za-z\u0980-\u09FF]+)*)",
             re.UNICODE,
         )
 
@@ -283,9 +288,13 @@ class NLUParser:
             re.compile(r"^\s*(no\b|wrong\b|actually\b|it is\b|it's\b|that's wrong)", re.IGNORECASE),
         ]
 
-        # English explicit teaching: "learn that ...", "remember that ..."
+        # English explicit teaching: "learn that ...", "remember that ...".
+        # Separator may be a space or a colon ("remember that: X is Y").
         self._en_teach_patterns = [
-            re.compile(r"(?:learn that|remember that|note that|keep in mind that)\s+(.+)$", re.IGNORECASE),
+            re.compile(
+                r"(?:learn that|remember that|note that|keep in mind that)[:\s]+(.+)$",
+                re.IGNORECASE,
+            ),
         ]
 
         # English "X means Y" / "X is a/an Y" assertions
@@ -359,6 +368,20 @@ class NLUParser:
             confidence=0.3,
         )
 
+    _BN_CLAUSE_STOPS = frozenset({
+        "মানে", "এবং", "কিন্তু", "যে", "তা", "এটি", "হলে", "এব", "বা", "তখন",
+        "মনে", "এটাই", "সেট", "ওটাই", "এখানে", "সেখানে",
+    })
+
+    @staticmethod
+    def _trim_bn_clause(obj: str) -> str:
+        """Remove trailing clause stop words from a Bengali is_a object."""
+        keep: list[str] = []
+        for word in obj.split():
+            if word in NLUParser._BN_CLAUSE_STOPS:
+                break
+            keep.append(word)
+        return " ".join(keep)
     def _try_bengali(self, text: str) -> ParseResult:
         """Try Bengali pattern matching."""
         # Check corrections first (a correction overrides anything else)
@@ -541,7 +564,7 @@ class NLUParser:
         # "X হলো Y" generic assertion (only if no relation pattern matched)
         if is_a_match:
             subject = is_a_match.group(1).strip()
-            definition = is_a_match.group(2).strip()
+            definition = self._trim_bn_clause(is_a_match.group(2).strip())
             if definition not in {"কী", "কি"}:
                 return ParseResult(
                     intent=IntentType.STATEMENT,

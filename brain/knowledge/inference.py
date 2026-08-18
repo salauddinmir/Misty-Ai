@@ -15,6 +15,7 @@ answer derived from what MISTY actually knows — "যা ভাবে তৈর
 """
 
 import re
+from collections import Counter
 from dataclasses import dataclass
 from typing import Any, Dict, List
 
@@ -110,8 +111,19 @@ class InferenceSynthesizer:
         if not matched_facts:
             return None
 
+        # Prefer the predicate actually carried by the matched facts.
+        # A bare "আকাশ কী?" asks for identity, but when the brain only
+        # knows color/reason facts, those specific predicates describe
+        # the topic better than a mislabeled identity answer.
+        pred_counts = Counter(f.predicate for f in matched_facts)
+        if predicate and pred_counts.get(predicate, 0):
+            effective_predicate = predicate
+        else:
+            effective_predicate = pred_counts.most_common(1)[0][0]
+
         return self._compose_answer(
-            text, matched_facts[:3], concepts[0], predicate, is_bengali
+            text, matched_facts[:3], concepts[0],
+            effective_predicate, is_bengali,
         )
 
     # ------------------------------------------------------------------
@@ -337,15 +349,21 @@ class InferenceSynthesizer:
             possessive = subject
             if not subject.endswith(("ের", "র", "র ")) and not subject.endswith("ে"):
                 possessive = f"{subject}ের"
+            # The identity predicate asks "what is X"; answer directly.
+            # Other predicates keep the label and add "হলো".
+            if matched_predicate == "is_a":
+                body = f"{subject} হলো {values}"
+            else:
+                body = f"{possessive} {ans_bn} হলো {values}"
             answer = (
-                f"আমি {strength} বলতে পারি: {possessive} {ans_bn} হলো {values}। "
+                f"আমি {strength} বলতে পারি: {body}। "
                 f"এটি আমার সংরক্ষিত কনসেপ্ট ও নিয়ম থেকে ডেরাইভ করা হয়েছে।"
             )
         else:
             answer = (
-                f"Based on my stored knowledge: the {ans_en} of "
-                f"{subject} is {values}. Derived from concepts and rules "
-                f"in my knowledge base."
+                f"Based on my stored knowledge, the {ans_en} of "
+                f"{subject.title()} is {values}. Derived from concepts "
+                f"and rules in my knowledge base."
             )
 
         return InferenceResult(

@@ -58,6 +58,14 @@ from brain.synapses.plasticity import PlasticityManager
 from brain.world import WorldModel
 
 
+def _current_token_set(text: str | None) -> set:
+    """Normalize the tokens of a raw input string for topic exclusion."""
+    if not text:
+        return set()
+    norm = re.sub(r"[^\w\u0980-\u09ff]", " ", text).strip()
+    return {w for w in norm.split() if w and len(w) > 2}
+
+
 class Brain:
     """The main cognitive system orchestrator.
 
@@ -549,16 +557,21 @@ class Brain:
         salient entity from the dialogue context, and pronoun-only
         inputs inherit that entity so the ACT phase can answer them.
         """
-        salient = self.dialogue_context.get_salient_entities()
-        if not salient:
-            return
-
         target = parse_result.query.get("target", "")
         if parse_result.intent in (IntentType.QUERY_WHO, IntentType.QUERY_WHAT):
             if not target or target in self._PRONOUN_TOKENS:
-                parse_result.query["target"] = salient[0]
-                parse_result.entities["coreference_target"] = salient[0]
-
+                # Phase 23: use a previous-turn topic, not a token from the
+                # current input (current-turn salient entities would just
+                # echo the bare word like "কারণ" back at the user).
+                prior_topic = self._prior_topic(
+                    exclude=_current_token_set(parse_result.raw_text)
+                )
+                if prior_topic:
+                    parse_result.query["target"] = prior_topic
+                    parse_result.entities["coreference_target"] = prior_topic
+        # Phase 23: bare follow-up questions ("সেটা কী?", "কারণ কী?", "আর বলো")
+        # inherit the last conversation topic so the thread stays alive.
+        self._resolve_bare_followup(parse_result)
         if not parse_result.entities and parse_result.intent in (
             IntentType.STATEMENT,
             IntentType.UNKNOWN,
@@ -566,9 +579,101 @@ class Brain:
             IntentType.CORRECTION,
             IntentType.TEACH,
         ):
-            resolved = resolve_entities(parse_result.raw_text, salient)
+            resolved = resolve_entities(
+                parse_result.raw_text, self.dialogue_context.get_salient_entities()
+            )
             if resolved:
                 parse_result.entities["resolved_entities"] = resolved
+
+    # Phase 23: bare follow-up resolution constants.
+    _BARE_FOLLOWUP_PATTERN = re.compile(
+        r"(সেট|এট|ওট|এগুল|ওগুল)\b|^(কারণ|কারণট|কী কারণ|কেনো|তারপর|"
+        r"তারপরে|আর|আরব|আরে|আরে বল|আর বল|আরে বলে|আরব বল|আরে বলে|"
+        r"আরে জনাও|জনাও|বলে দাও)\b"
+    )
+    _BARE_FOLLOWUP_PATTERNS = (
+        re.compile(r"সেট|এট|ওট|সেটা|এটা|ওটা|এটার|সেটার|এগুল|ওগুল|এগুলা|ওগুলা"),
+        re.compile(r"^কারণ|কারণ ক|কী কারণ|কারণটা"),
+        re.compile(r"^আর|আর বল|আরো বল|আরব বল|বলে দাও|জানাও|আর জানাও"),
+    )
+    # Phase 23: how many recent turns to look back at for context phrases.
+    _CONTEXT_WINDOW: int = 4
+    # Phase 23: discourse tokens that must never be treated as a topic.
+    _DISCOURSE_TOKENS = frozenset(
+        {
+            "আর", "আরো", "আরব", "কারণ", "কারণে", "কারণটা", "কারণটি",
+            "এখন", "তখন", "পরে", "আগে", "তাই", "এটাই", "বেশ", "আচ্ছা",
+            # Explicit-teaching trigger words must never be picked as the
+            # conversation topic ("মনে রাখো: X হলো Y" → topic = X). These
+            # also appear in DialogueContext's extraction ban list.
+            "মনে", "রাখো", "রাখুন", "রাখা", "জানি", "জানাও", "শেখো",
+            "শেখাও", "শেখে", "বলো", "বলুন", "বলে", "বলা",
+        }
+    )
+
+    def _resolve_bare_followup(self, parse_result: ParseResult) -> None:
+        """Phase 23: inherit the last conversation topic for bare follow-ups.
+
+        Inputs like "সেটা কী?", "কারণ কী?", "আর বলো" contain no explicit
+        entity, so the most recent PRIOR-TURN topic from the dialogue
+        context is copied into the query target so ACT handlers keep the
+        thread. Tokens from the current input are excluded so a bare word
+        like "কারণ" never echoes itself back at the user.
+        """
+        if parse_result.intent not in (
+            IntentType.QUERY_WHAT,
+            IntentType.QUERY_WHO,
+            IntentType.CONTINUATION,
+            IntentType.UNKNOWN,
+            IntentType.CONVERSATION,
+        ):
+            return
+        topic = self._prior_topic(exclude=_current_token_set(parse_result.raw_text))
+        if topic is None:
+            return
+        for pattern in self._BARE_FOLLOWUP_PATTERNS:
+            if pattern.search(parse_result.raw_text or ""):
+                parse_result.query["target"] = topic
+                parse_result.entities["bare_followup"] = True
+                parse_result.entities["coreference_target"] = topic
+                return
+
+    def _prior_topic(self, exclude: set | None = None) -> str | None:
+        """Return the most recent conversation topic from PRIOR turns only.
+
+        Tokens appearing in the current input are excluded so follow-ups
+        that name a bare word ("কারণ কী?", "আর বলো") inherit the previous
+        topic instead of echoing themselves. Inflected Bengali forms are
+        normalized to their base (genitive suffixes stripped).
+        """
+        exclude = exclude or set()
+        prior_texts = self.dialogue_context.get_history_texts()
+        # get_history_texts without include_last_n returns user turns; drop
+        # the very last one since it is the current input being processed.
+        prior_texts = prior_texts[:-1] if prior_texts else []
+        for turn in reversed(prior_texts):
+            norm = re.sub(r"[^\w\u0980-\u09ff]", " ", turn or "").strip()
+            words = [w for w in norm.split() if w and len(w) > 2]
+            for word in words:
+                base = self._normalize_bengali_word(word)
+                if base in self._DISCOURSE_TOKENS or base in exclude:
+                    continue
+                if base in self._PRONOUN_TOKENS:
+                    continue
+                return base
+        return None
+
+    @staticmethod
+    def _normalize_bengali_word(word: str) -> str:
+        """Strip common Bengali inflection suffixes to get a base topic."""
+        normalized = word
+        for suffix in ("েরটা", "েরটি", "ের", "র", "টা", "টি", "গুলো", "গুলি"):
+            if normalized != suffix and normalized.endswith(suffix):
+                stripped = normalized[: -len(suffix)]
+                if stripped:
+                    normalized = stripped
+                    break
+        return normalized
 
     def _act_conversation(self, parse_result: ParseResult) -> tuple:
         """Deterministic friendly reply for casual/social turns detected by
@@ -592,13 +697,22 @@ class Brain:
             return response, 0.75
 
         # Bengali clarification follow-ups: "বুঝলাম না", "কি ব্যাপার", "কেন"
+        # Phase 23: these are topic-anchored to the last thing the brain said.
         if re.search(r"বুঝলাম ন|বুঝতে পারছি ন|বুঝছি ন", text):
-            response = (
-                "আপনি ঠিক আছেন! আমি একটু সহজ করে বলছি: আমি একটি ডিজিটাল "
-                "ব্রেন — আমি আপনার আগের কথার উপর ভিত্তি করে কাছে, চিন্তা করি এবং "
-                "আমার সংরক্ষিত জ্ঞান থেকে উত্তর তৈরি করি। কোনো অংশটি আবার "
-                "বুঝিয়ে বলি?"
-            )
+            # Phase 23: anchor the clarification to the last brain turn.
+            anchor = self._context_topic_phrase()
+            if anchor:
+                response = (
+                    f"আপনি ঠিক আছেন! {anchor} আমি এটি একটু সহজ করে বলছি — "
+                    "দেখুন কোনো অংশ আবার বুঝিয়ে বলতে পারি?"
+                )
+            else:
+                response = (
+                    "আপনি ঠিক আছেন! আমি একটু সহজ করে বলছি: আমি একটি ডিজিটাল "
+                    "ব্রেন — আমি আপনার আগের কথার উপর ভিত্তি করে কাছে, চিন্তা করি এব "
+                    "আমার সংরক্ষিত জ্ঞান থেকে উত্তর তৈরি করি। কোনো অংশটি আবার "
+                    "বুঝিয়ে বলি?"
+                )
             return response, 0.75
         if re.search(r"কি ব্যাপার|কী ব্যাপার", text):
             response = (
@@ -651,6 +765,40 @@ class Brain:
         response = f"আমি আপনার কথাটি শুনলাম। {self_model_text}"
         return response, 0.6
 
+    # Phase 23: compose a short phrase that anchors the current reply to
+    # the recent conversation topic so follow-ups feel coherent.
+    def _context_topic_phrase(self) -> str | None:
+        """Return a Bengali phrase naming the most recent conversation topic,
+        or None when there is no recent context to reference.
+        """
+        recent = self.dialogue_context.get_history_texts(include_last_n=self._CONTEXT_WINDOW)
+        for turn in reversed(recent):
+            norm = re.sub(r"[^\w\u0980-\u09ff]", " ", turn or "").strip()
+            words = [w for w in norm.split() if w and len(w) > 2]
+            for candidate in words:
+                if candidate.lower() in self._PRONOUN_TOKENS:
+                    continue
+                # Skip discourse and stop-like tokens that are never topics.
+                if candidate.lower() in self._DISCOURSE_TOKENS or candidate.lower() in {
+                    "কি", "কী", "কিছু", "আমি", "তুমি", "আপনি",
+                    "এটা", "সেটা", "ওটা", "আছ", "আছো", "করছ",
+                }:
+                    continue
+                salient = self.dialogue_context.get_salient_entities()
+                salient = [e for e in salient if e not in self._DISCOURSE_TOKENS]
+                if salient and candidate.lower() == salient[0].lower():
+                    return f"আপনি আগে {candidate} নিয়ে কথা বলছিলেন — "
+                if salient:
+                    continue
+            salient = [
+                e
+                for e in self.dialogue_context.get_salient_entities()
+                if e not in self._DISCOURSE_TOKENS
+            ]
+            if salient:
+                return f"আপনি আগে {salient[0]} নিয়ে কথা বলছিলেন — "
+        return None
+
     def _self_model_phrase(self) -> str:
         """Compact, user-readable snapshot of the current self-model state."""
         summary = self.self_model.summary()
@@ -686,7 +834,11 @@ class Brain:
             # Bengali pronouns
             "সে",
             "তার",
+            "সেট",
+            "সেটা",
+            "এট",
             "এটা",
+            "ওট",
             "ওটা",
             "এই",
             "সেই",
@@ -1434,6 +1586,14 @@ class Brain:
         """
         raw = parse_result.raw_text
         facts = parse_result.facts if hasattr(parse_result, "facts") and parse_result.facts else []
+        # When the parser hands over only the taught sentence, extract the
+        # is_a fact from it here so "মনে রাখো: X হলো Y" actually teaches.
+        taught = parse_result.entities.get("taught", "") or raw
+        if not facts and taught:
+            for pattern in self.nlu._bn_is_a_pattern.finditer(taught):
+                subject, obj = pattern.group(1).strip(), NLUParser._trim_bn_clause(pattern.group(2).strip())
+                if subject and obj and subject != obj:
+                    facts.append({"subject": subject, "obj": obj})
         for fact in facts:
             subject, obj = fact.get("subject", ""), fact.get("obj", "")
             if subject and obj:
@@ -1475,8 +1635,14 @@ class Brain:
         Reuses the most salient topic from the ongoing dialogue so the
         brain keeps talking about what the user just asked about.
         """
+        # Phase 23: prefer the prior-turn topic over current-turn salient
+        # tokens (which for "আর বলো" would wrongly pick "আর" itself).
+        exclude = _current_token_set(parse_result.raw_text)
+        topic = self._prior_topic(exclude=exclude)
         salient = self.dialogue_context.get_salient_entities()
-        topic = salient[0] if salient else None
+        salient = [e for e in salient if e not in self._DISCOURSE_TOKENS]
+        if topic is None and salient:
+            topic = salient[0]
         if not topic:
             name_part = f" আপনার নাম {self.user_name}" if self.user_name else ""
             return (
@@ -1499,6 +1665,22 @@ class Brain:
         if related:
             names = [concept.name for concept in related[:3]]
             return f"{topic} নিয়ে আমার জ্ঞান: সম্পর্কিত ধারণা — {', '.join(names)}।", 0.7
+
+        # Phase 23: try knowledge-inference synthesis on the topic before
+        # admitting ignorance, so follow-ups can still extract reasoning.
+        synthesis = self.inference_synthesizer.synthesize(
+            f"{topic} কী?", self
+        )
+        if synthesis is not None:
+            self.state.add_thought("inference_synthesis", synthesis.steps)
+            detail = (
+                synthesis.answer[3:].strip() if synthesis.answer.startswith("আমি ")
+                else synthesis.answer
+            )
+            return (
+                f"{topic} সম্পর্কে আমি এতটুকু জানি: {detail}",
+                synthesis.confidence,
+            )
         return (f"{topic} নিয়ে আমি এখনো বেশি কিছু জানি না। আপনি কি আমাকে আরো শেখাবেন?"), 0.5
 
     def _phase_evaluate(self, act_result: CycleResult) -> CycleResult:
