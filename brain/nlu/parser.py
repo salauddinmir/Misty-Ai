@@ -194,6 +194,16 @@ class NLUParser:
             r"([A-Za-z\u0980-\u09FF]+)\s+মানে\s+(কী|কি)\s*[?\u0964\uff1f]?",
             re.UNICODE,
         )
+        # Bare Bengali "what is X" form without হলো/মানে: "স্যাটেলাইট কি?",
+        # "পানি কী", "internet কি". Matches a short Bengali/English topic
+        # word directly followed by the interrogative কি/কী at the end of
+        # the turn. A two-word guard keeps "আমি ভালো কি?" style phrases
+        # from being misclassified as definition queries — the topic part
+        # must not itself contain an interrogative meaning.
+        self._bn_bare_what_pattern = re.compile(
+            r"^([A-Za-z\u0980-\u09FF\-]{2,30})\s+(কী|কি)\s*[?।\u0964\uff1f]?\s*$",
+            re.UNICODE,
+        )
 
         # Bengali pronoun-targeted queries with an empty target, to be
         # resolved against the dialogue context by the brain:
@@ -544,6 +554,21 @@ class NLUParser:
                         }
                     ],
                     facts=[{"subject": subject, "obj": definition}],
+                    raw_text=text,
+                    confidence=0.7,
+                )
+
+        # Bare Bengali "what is X" form without হলো/মানে: "স্যাটেলাইট কি?"
+        # is classified as QUERY_WHAT on X with confidence 0.7 so the
+        # knowledge-inference synthesizer can answer from stored facts
+        # instead of falling back to the generic echo.
+        bare_match = self._bn_bare_what_pattern.search(text)
+        if bare_match:
+            target = bare_match.group(1).strip()
+            if target not in {"তুমি", "আপনি", "মিস্টি", "সে", "এটা", "ওটা", "এই", "সেই"}:
+                return ParseResult(
+                    intent=IntentType.QUERY_WHAT,
+                    query={"type": "what", "relation": "is_a", "target": target},
                     raw_text=text,
                     confidence=0.7,
                 )

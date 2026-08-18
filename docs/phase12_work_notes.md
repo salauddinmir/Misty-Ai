@@ -209,3 +209,28 @@ Verified live: "বুঝলাম না"→conversation contextual reply, "ক
 Minor quirk (pre-existing, low priority): "আমি আপনার কাছে পারছিনা" wrongly matched relation_declaration — not blocking Phase 18b; skip.
 REMAINING: write tests/test_phase18b_graceful.py (3-5 tests: parser intent for বুঝলাম না/conversation; no canned reply via brain.process for বুঝলাম না + কি ব্যাপার + I don't understand + why), regression + ruff, commit+push; then Phase 19 (Render cold-start: app lifespan warmup + health during cold start + chat route retry hint), Phase 20 (BN report).
 Regression baseline: 505 passed after Phase 18 commit f972dbe.
+
+## Phase 21 context (2026-08-19, user follow-up session)
+User screenshots (live production misty-ai-web.vercel.app):
+- "ভারতের রাজধানীর নাম কি?" → synthesis answer WORKS ("ভারতের রাজধানী হলো নয়াদিল্লি... ডেরাইভ") — Phase 18 working in prod.
+- "তোমার বাড়ি কোথায়?" asked (probably pending).
+- "স্যাটেলাইট কি?" → CANNED reply "ইনটেনট নির্ভুলভাবে parse করতে পারিনি... মনে রাখো/X হলো Y/maths/physics" — PRODUCTION shows old code (commit a8ee993 maybe not deployed yet) OR cold-start.
+User 4 questions to answer: (1) করনীয় কি; (2) ম্যাক্সিমাম ট্রেন করতে কি করতে হবে; (3) মানুষের মতো কথোপকথন ট্রেনিং কেমন চাই; (4) web search থেকে শিখতে পারবে কি।
+Plan: Phase 21a fix "স্যাটেলাইট কি?" gap: parser BN _bn_is_a_pattern? NO — pattern is "X হলো Y" only; "স্যাটেলাইট কি?" has NO হলো/মানে. Fix: add BN bare-what pattern "([word]) কি|কী?$" as QUERY_WHAT with confidence ~0.7 (after pronoun/what handlers, before returning UNKNOWN). Location: parser.py _try_bengali ~line 587 (before final return UNKNOWN). Must NOT catch "আমি ভালো কি"?? — guard: single Bengali word + কি/কী at end; exclude known interrogatives-only strings.
+Also expand commonsense.py with technology items: satellite, computer, internet, phone etc.
+Phase 21b: web-search learning — plan research-based ingestion pipeline (NOT runtime LLM): search via web research → structured facts via curriculum → safety gate evaluate_learning. Deliver as design doc + optional ingestion script.
+Production verification: live https://misty-brain.onrender.com POST /api/chat after push.
+
+## Phase 21b debug notes
+- DDG instant answer abstract: "A satellite or an artificial satellite is an object, typically a spacecraft, placed into orbit around a celestial body." — ONE long sentence, but _SENT_END split on " ." none; actual split: abstract had no period in 1st sentence? Result: triple subject "A satellite or an artificial satellite" matched but quarantine REJECT? No — decisions show quarantined subjects like "A satellite or an artificial s" — split happened incorrectly (period after 's'?). Actually abstract split on '.' after 'spacecraft,'? No — "satellite or an artificial satellite is an object" no period. The split came from '.' in "placed into orbit around a celestial body." — so sentence1 = full triple OK? But quarantined because observations=1 < min_consolidation_observations=2 → LEARN_INSUFFICIENT_EVIDENCE.
+- FIX: count observations = number of sources supporting same normalized triple (multi-source agreement) — if DDG+wiki agree, observations>=2 → ALLOW.
+- Also normalize subject: strip leading "A"/"The" and trailing "s or an artificial s"? Simple: split "A satellite or an artificial satellite" on " or an" → "A satellite". Keep simple: use first noun phrase. Implement: if subject contains " or " take prefix.
+- Wikipedia summary API works (no ASCII bug — earlier bug was url-encoding; use urllib.parse.quote).
+
+## Phase 21b current state
+- brain/knowledge/web_learning.py DONE v2: DDG Instant Answer + Wikipedia REST summary (bn+en) sources; extract_facts copula triples; two-pass support dict (multi-source observations = len(urls)); evaluate_learning gate; quarantine tracking; _first_alternative helper defined (NOT yet used in extract_facts — hook it in).
+- Sources verified working: DDG abstract for "satellite" = "A satellite or an artificial satellite is an object, typically a spacecraft, placed into orbit around a celestial body. They have a variety of uses, including communication relay, weather forecasting, navigation, broadcasting, scientific research, and Earth observation. Additional military uses..."
+- Bug remaining: extract_facts subject becomes "A satellite or an artificial satellite" (need _first_alternative applied: if " or " in subject → split). v1 bug: all quarantined because observations=1 < min_consolidation_observations=2. v2 fix: observations = len(supporting sources).
+- Also need: ruff check (multiline docstring typo line ~186 """" — fix to "), lint, tests/test_phase21b_web_learning.py (unit extract_facts + mock search test; network test optional with try/except skip), regression, smoke_production.py, commit+push, then Phase 22 report answering user's 4 questions (করণীয়/ম্যাক্স ট্রেনিং/কথোপকথন ট্রেনিং/ওয়েব শিখবে) in docs/misty_phase21_22_report_bn.md.
+- User's 4 questions answers (for final report): (1) করণীয় — লাইভ ওয়েব সাইটে মিস্টির মাধ্যমে ট্রেনিং session: teach commands, correction loop; (2) ম্যাক্স ট্রেনিং — web_learning ingest pipeline (এই Phase 21b) দিয়ে ১০ department manifest-based packages already loaded; আরো যোগ: physics/math formulas, literature BN, conversation corpus; (3) কথোপকথন — conversation corpus (গ্রিটিং/ফলো-আপ/clarification/এমোশন সিমুলেশন), dialogue-state in working memory, context carry-over; (4) ওয়েব-শেখা — YES (Phase 21b), agent-side ingestion tool with safety gates, NOT live chat runtime.
+- Test baseline after Phase 21a: 514+8 = 522 pending verification. Commits so far: a8ee993 (Phase 20), Phase 21a NOT yet committed.

@@ -211,6 +211,26 @@ _COMMONSENSE_FACTS: List[CommonsenseFact] = [
     CommonsenseFact("Pixline Incorporate", "founder", "Salauddin Mir"),
     CommonsenseFact("Salauddin Mir", "known_as", "Netvai"),
     CommonsenseFact("Netvai", "real_name", "Salauddin Mir"),
+
+    # ---------- প্রযুক্তি (technology) ----------
+    CommonsenseFact("স্যাটেলাইট", "is_a", "পৃথিবীর চারদিকে ঘূর্ণনরত যন্ত্র"),
+    CommonsenseFact("satellite", "is_a", "a machine that orbits the earth"),
+    CommonsenseFact("স্যাটেলাইট", "use", "যোগাযোগ ও আবহাওয়া পর্যবেক্ষণ"),
+    CommonsenseFact("satellite", "use", "communication and weather observation"),
+    CommonsenseFact("কম্পিউটার", "is_a", "তথ্য প্রক্রিয়াকরণের যন্ত্র"),
+    CommonsenseFact("computer", "is_a", "a machine that processes information"),
+    CommonsenseFact("কম্পিউটার", "needs", "বিদ্যুত ও নির্দেশাবলী"),
+    CommonsenseFact("computer", "needs", "electricity and instructions"),
+    CommonsenseFact("ইন্টারনেট", "is_a", "বিশ্বের কম্পিউটারের সংযোগ জাল"),
+    CommonsenseFact("internet", "is_a", "a worldwide network of computers"),
+    CommonsenseFact("টিভি", "is_a", "ছবি ও শব্দের প্রকাশ যন্ত্র"),
+    CommonsenseFact("tv", "is_a", "a device that displays images and sound"),
+    CommonsenseFact("রোবট", "is_a", "স্বয়ংক্রিয় যন্ত্র যা মানুষের কাজ করে"),
+    CommonsenseFact("robot", "is_a", "an automatic machine that does human tasks"),
+    CommonsenseFact("বিদ্যুত", "powers", "যন্ত্র ও বাতি"),
+    CommonsenseFact("electricity", "powers", "machines and lights"),
+    CommonsenseFact("বাতি", "gives", "আলো"),
+    CommonsenseFact("bulb", "gives", "light"),
 ]
 
 # English question-word mapping used by InferenceSynthesizer to decide

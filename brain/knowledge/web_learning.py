@@ -1,0 +1,280 @@
+"""
+Web-Search Learning Pipeline for MISTY.
+
+Answers the question "Can Misty learn from the web?". Yes — but not with an
+LLM sitting at runtime. Instead the pipeline is deterministic and
+safety-gated:
+
+1. ``WebSearchLearner.search(topic)`` collects trusted-source summaries:
+   the DuckDuckGo Instant Answer API plus the Bengali and English Wikipedia
+   summary APIs. These sources return structured abstracts, avoiding the
+   bot-blocking that plagues generic HTML scraping.
+2. ``WebSearchLearner.extract_facts(text)`` parses candidate sentences into
+   (subject, predicate, object) triples using copula heuristics only. No
+   external AI model is involved.
+3. ``WebSearchLearner.ingest(topic, ...)`` filters every candidate through
+   ``evaluate_learning()``: provenance is mandatory, contradicting facts
+   are quarantined, and only facts above the confidence threshold enter
+   the brain's semantic memory.
+
+Because the pipeline is an agent-side ingestion tool (not the chat
+runtime), a live chat message can never inject web content into the
+brain — the chat path never calls this module.
+
+Usage (designer-side training run):
+    learner = WebSearchLearner(brain)
+    result = await learner.ingest("satellite")
+    print(result.facts_learned, result.decisions)
+"""
+
+from __future__ import annotations
+
+import json
+import re
+import ssl
+import urllib.parse
+import urllib.request
+from dataclasses import dataclass, field
+from typing import Any
+
+from brain.safety.policy import Decision, evaluate_learning
+
+# Stop words that must not become triple heads or tails.
+_EN_STOP = {
+    "a", "an", "the", "is", "are", "was", "were", "be", "of", "in", "to",
+    "for", "on", "and", "or", "it", "that", "this", "with", "from", "by",
+    "as", "at", "which", "but", "not", "no", "so", "if", "then", "than",
+}
+_BN_STOP = {"এর", "র", "এ", "যে", "ও", "বা", "না", "নি"}
+
+# Copula verbs that signal "X is Y" definitions.
+_COPULAS = re.compile(r"\b(is|are|was|were|means|refers to)\b", re.IGNORECASE)
+
+# Sentence enders (English "." and Bengali "।").
+_SENT_END = re.compile(r"([.!])\s+")
+
+_WIKI_USER_AGENT = "Misty-Web-Learner/1.0 (educational knowledge acquisition)"
+
+
+@dataclass
+class WebLearningCandidate:
+    """A triple candidate harvested from a search result."""
+
+    subject: str
+    predicate: str
+    obj: str
+    confidence: float = 0.7
+    observations: int = 1
+    source_ref: str = ""
+    contradicts_existing: bool = False
+
+
+@dataclass
+class WebLearningResult:
+    """Aggregate result of a web-learning run."""
+
+    topic: str
+    queries_run: int = 0
+    facts_learned: list = field(default_factory=list)
+    decisions: list = field(default_factory=list)
+    quarantined: list = field(default_factory=list)
+
+
+class WebSearchLearner:
+    """Deterministic web-search -> triple -> safety-gate learning pipeline."""
+
+    def __init__(self, brain: Any, user_agent: str = _WIKI_USER_AGENT) -> None:
+        self.brain = brain
+        self._user_agent = user_agent
+        ctx = ssl.create_default_context()
+        self._opener = urllib.request.build_opener(
+            urllib.request.HTTPSHandler(context=ctx),
+        )
+
+    # ------------------------------------------------------------------
+    # Search: trusted structured sources
+    # ------------------------------------------------------------------
+
+    async def search(self, topic: str, *, max_results: int = 6) -> list[dict[str, str]]:
+        """Collect {snippet, url} pairs from trusted APIs.
+
+        Uses DuckDuckGo Instant Answer (JSON) and Wikipedia REST summaries
+        in both Bengali and English. Returns at most ``max_results`` unique
+        snippets.
+        """
+        snippets: list[dict[str, str]] = []
+        self._collect(snippets, await self._ddg_instant(topic))
+        self._collect(snippets, await self._wiki_summary(topic, lang="bn"))
+        self._collect(snippets, await self._wiki_summary(topic, lang="en"))
+        return snippets[:max_results]
+
+    def _collect(self, snippets: list[dict[str, str]], items: list[dict[str, str]]) -> None:
+        for item in items:
+            if item["snippet"] and len(item["snippet"]) > 15 and not any(
+                item["snippet"] == existing["snippet"] for existing in snippets
+            ):
+                snippets.append(item)
+
+    async def _ddg_instant(self, query: str) -> list[dict[str, str]]:
+        params = urllib.parse.urlencode({"q": query})
+        url = f"https://api.duckduckgo.com/?{params}&format=json&no_html=1"
+        try:
+            req = urllib.request.Request(url, headers={"User-Agent": self._user_agent})
+            with self._opener.open(req, timeout=15) as response:
+                data = json.loads(response.read().decode("utf-8", errors="replace"))
+        except Exception:
+            return []
+        abstract = (data.get("Abstract") or "").strip()
+        if not abstract:
+            return []
+        url = "DuckDuckGo"
+        return [{"snippet": abstract, "url": url}]
+
+    async def _wiki_summary(self, topic: str, lang: str) -> list[dict[str, str]]:
+        url = f"https://{lang}.wikipedia.org/api/rest_v1/page/summary/{urllib.parse.quote(topic)}"
+        try:
+            req = urllib.request.Request(url, headers={"User-Agent": self._user_agent})
+            with self._opener.open(req, timeout=15) as response:
+                data = json.loads(response.read().decode("utf-8", errors="replace"))
+        except Exception:
+            return []
+        extract = (data.get("extract") or "").strip()
+        if not extract:
+            return []
+        return [{"snippet": extract, "url": f"wikipedia.org ({lang})"}]
+
+    # ------------------------------------------------------------------
+    # Extraction: sentence -> triple
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def extract_facts(text: str) -> list[dict[str, str]]:
+        """Turn candidate sentences into (subject, predicate, object) triples.
+
+        Only copula-defining sentences ("X is Y") produce triples; everything
+        else is ignored rather than guessed.
+        """
+        triples: list[dict[str, str]] = []
+        for sentence in _SENT_END.split(text):
+            sentence = sentence.strip()
+            if len(sentence) < 5:
+                continue
+            match = _COPULAS.search(sentence)
+            if not match:
+                continue
+            subject = sentence[:match.start()].strip()
+            obj = sentence[match.end():].strip()
+            subject, obj = WebSearchLearner._clean(subject), WebSearchLearner._clean(obj)
+            if not subject or not obj:
+                continue
+            triples.append({"subject": WebSearchLearner._first_alternative(subject), "predicate": "is_a", "obj": obj})
+        return triples
+
+    @staticmethod
+    def _clean(text: str) -> str:
+        text = re.sub(r"\s+", " ", text).strip()
+        if not text or text.lower() in _EN_STOP or text in _BN_STOP:
+            return ""
+        return text
+
+    # ------------------------------------------------------------------
+    # Helpers used inside extraction
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _first_alternative(subject: str) -> str:
+        """"A satellite or an artificial satellite" -> "A satellite".
+
+        Copula definitions often repeat a near-synonym ("X or an artificial
+        X is ..."); the shorter head phrase is the cleaner subject.
+        """
+        if " or " in subject:
+            return subject.split(" or ", 1)[0].strip()
+        return subject
+
+    # ------------------------------------------------------------------
+    # Contradiction check against the brain's existing knowledge
+    # ------------------------------------------------------------------
+
+    def _contradicts_existing(self, candidate: WebLearningCandidate) -> bool:
+        facts = getattr(self.brain.semantic_memory, "facts", {})
+        lower_obj = candidate.obj.lower()
+        for key, fact in facts.items():
+            if not key.lower().startswith(candidate.subject.lower()):
+                continue
+            if fact.predicate == candidate.predicate and fact.obj.lower() != lower_obj:
+                return True
+        return False
+
+    # ------------------------------------------------------------------
+    # Ingestion
+    # ------------------------------------------------------------------
+
+    async def ingest(self, topic: str, *, max_facts: int = 6) -> WebLearningResult:
+        """Search for ``topic``, extract triples, gate them, and learn.
+
+        Only candidates approved by ``evaluate_learning()`` (provenance,
+        confidence threshold, no contradictions) enter semantic memory.
+        """
+        result = WebLearningResult(topic=topic)
+        sources = await self.search(topic)
+        result.queries_run = len(sources)
+
+        # Two-pass ingestion: first collect every triple with the list of
+        # supporting source URLs (multi-source agreement raises the
+        # observations count so ``evaluate_learning`` allows it), then gate
+        # and store.
+        support: dict[tuple[str, str], dict[str, Any]] = {}
+        for source in sources:
+            seen_in_source: set[tuple[str, str]] = set()
+            for triple in self.extract_facts(source["snippet"]):
+                triple_key = (triple["subject"].lower(), triple["obj"].lower())
+                if triple_key in seen_in_source:
+                    continue
+                seen_in_source.add(triple_key)
+                entry = support.setdefault(
+                    triple_key,
+                    {"subject": triple["subject"], "predicate": triple["predicate"], "obj": triple["obj"], "urls": []},
+                )
+                if source.get("url") and source["url"] not in entry["urls"]:
+                    entry["urls"].append(source["url"])
+
+        for entry in support.values():
+            if len(result.facts_learned) >= max_facts:
+                break
+            candidate = WebLearningCandidate(
+                subject=entry["subject"],
+                predicate=entry["predicate"],
+                obj=entry["obj"],
+                confidence=0.8,
+                source_ref=", ".join(entry["urls"]) or "web_search",
+                observations=len(entry["urls"]),
+            )
+            candidate.contradicts_existing = self._contradicts_existing(candidate)
+            decision = evaluate_learning({
+                "confidence": candidate.confidence,
+                "observations": candidate.observations,
+                "source_ref": candidate.source_ref,
+                "contradicts_existing": candidate.contradicts_existing,
+            })
+            result.decisions.append({
+                "triple": {
+                    "subject": candidate.subject,
+                    "predicate": candidate.predicate,
+                    "obj": candidate.obj,
+                },
+                "decision": decision.decision.value,
+                "reason": decision.reason,
+            })
+            if decision.decision is Decision.ALLOW:
+                self.brain.semantic_memory.store_fact(
+                    subject=candidate.subject,
+                    predicate=candidate.predicate,
+                    obj=candidate.obj,
+                    confidence=candidate.confidence,
+                    source="web_learning",
+                )
+                result.facts_learned.append(candidate)
+            else:
+                result.quarantined.append(candidate)
+        return result
