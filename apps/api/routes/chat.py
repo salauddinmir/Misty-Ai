@@ -14,7 +14,7 @@ from typing import Any, Dict
 
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import StreamingResponse
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 router = APIRouter()
 
@@ -32,6 +32,15 @@ class ChatRequest(BaseModel):
         min_length=1,
         max_length=5000,
     )
+
+    @field_validator("message")
+    @classmethod
+    def normalize_message(cls, value: str) -> str:
+        """Preserve user language while rejecting accidental blank messages."""
+        normalized = re.sub(r"\s+", " ", value).strip()
+        if not normalized:
+            raise ValueError("Message cannot be blank.")
+        return normalized
 
 
 class ChatResponse(BaseModel):
@@ -171,6 +180,8 @@ async def _process_chat_turn(request: Request, body: ChatRequest) -> ChatRespons
             pass
         request.app.state.warmup_complete = True
     result = brain.process(body.message)
+    response_text = str(result.get("response") or "").strip()
+    result["response"] = response_text or "I need a moment to form that reply. Please try asking again."
     app_state = request.app.state
     pending_tasks = getattr(app_state, "pending_chat_persistence_tasks", None)
     if pending_tasks is None:
@@ -225,6 +236,7 @@ async def chat_stream(request: Request, body: ChatRequest) -> StreamingResponse:
             yield _sse("error", {"message": "Misty could not finish that reply. Please try again."})
             return
 
+        yield _sse("status", {"status": "writing"})
         for chunk in _chunk_response_text(result.response):
             yield _sse("token", {"text": chunk})
             await asyncio.sleep(0.018)
