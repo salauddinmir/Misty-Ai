@@ -24,6 +24,7 @@ class BrainState:
     timestamp: float = field(default_factory=time_module.time)
     context: Dict[str, Any] = field(default_factory=dict)
     last_prediction_error: float = 0.0
+    thought_trace: Dict[str, Any] = field(default_factory=dict)
 
     def to_dict(self) -> Dict[str, Any]:
         """Convert brain state to a serializable dictionary."""
@@ -38,6 +39,19 @@ class BrainState:
             "timestamp": self.timestamp,
             "context": self.context,
             "last_prediction_error": self.last_prediction_error,
+            "thought_trace": self.thought_trace,
+        }
+
+    def add_thought(self, name: str, steps: Any) -> None:
+        """Append an inspectable reasoning step to the thought trace.
+
+        Records the cognitive method used (e.g. ``inference_synthesis``)
+        together with its derivation steps so external systems can see
+        *how* the brain arrived at an answer, not just the answer.
+        """
+        self.thought_trace[name] = {
+            "steps": steps if isinstance(steps, list) else [str(steps)],
+            "timestamp": time_module.time(),
         }
 
     def __repr__(self) -> str:

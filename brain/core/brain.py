@@ -33,6 +33,8 @@ from brain.goals.manager import GoalManager
 from brain.graph.activation import SpreadingActivation
 from brain.graph.concepts import ConceptGraph
 from brain.graph.hebbian import HebbianLearner
+from brain.knowledge.commonsense import register_commonsense_layer
+from brain.knowledge.inference import InferenceSynthesizer
 from brain.learning.consolidation import MemoryConsolidator
 from brain.learning.curiosity import CuriosityExplorer
 from brain.learning.induction import EvidenceGatedInducer
@@ -147,6 +149,9 @@ class Brain:
         self.last_autonomous_tick: Dict[str, Any] | None = None
         # Phase 14: hard evidence budget per autonomous reflection tick.
         self.max_evidence_per_tick: int = 4
+        # Phase 18: knowledge-inference synthesis — derive answers from
+        # stored concepts and rules instead of echoing memorized phrases.
+        self.inference_synthesizer = InferenceSynthesizer()
 
         # Neural simulation (Phase 1)
         self._neural_sim_engine = None
@@ -224,6 +229,10 @@ class Brain:
         if self.use_neural_sim and self._concept_encoder is not None:
             for name in created_concepts:
                 self._concept_encoder.encode_concept(name)
+
+        # Phase 18: load the bilingual commonsense world-knowledge layer
+        # AFTER trained identity facts so user-taught facts take priority.
+        register_commonsense_layer(self)
 
     def _init_neural_simulation(self) -> None:
         """Initialize the neural simulation engine with brain regions.
@@ -1225,9 +1234,15 @@ class Brain:
         flowing instead of dead-ending on unknown input.
         """
         raw = parse_result.raw_text or "your message"
-        self.emotion.update_from_outcome(success=False)
-        # Remember the unknown input as a learning opportunity
-        self.working_memory.store("unknown_input", raw)
+
+        # Phase 18: before admitting confusion, try to SYNTHESIZE an answer
+        # from the commonsense layer and stored knowledge so MISTY thinks
+        # rather than echoing a memorized phrase.
+        synthesis = self.inference_synthesizer.synthesize(raw, self)
+        if synthesis is not None:
+            self.emotion.update_from_outcome(success=True)
+            self.state.add_thought("inference_synthesis", synthesis.steps)
+            return synthesis.answer, synthesis.confidence
         is_bengali = any("\u0980" <= char <= "\u09ff" for char in raw)
         if is_bengali:
             return (
@@ -1292,6 +1307,18 @@ class Brain:
             if fact.get("subject") == target_name and fact.get("predicate") == "is_a":
                 return f"{target_name} হলো {fact.get('obj', '')}।", 0.85
 
+        # Phase 18: derive an answer from commonsense / stored knowledge
+        # before falling back to "আমি এখনো X সম্পর্কে জানি না".
+        synthesis = self.inference_synthesizer.synthesize(
+            parse_result.raw_text or target_name, self
+        )
+        if synthesis is not None:
+            self.state.add_thought("inference_synthesis", synthesis.steps)
+            return (
+                f"{target_name} সম্পর্কে আমি এইতুক জানি: {synthesis.answer}",
+                synthesis.confidence,
+            )
+
         self.emotion.update_from_outcome(success=False)
         return (f'আমি এখনো {target_name} সম্পর্কে জানি না। আপনি বলতে পারেন: "{target_name} হলো X" — তাহলে আমি মনে রাখব।'), 0.3
 
@@ -1330,6 +1357,18 @@ class Brain:
         if stored:
             response = f"ধন্যবাদ! আমি শিখেছি: {', '.join(stored)}। এটা আমার জ্ঞান গ্রাফে সংরক্ষিত হয়েছে।"
             return response, 0.9
+
+        # Phase 18: try knowledge-inference synthesis on the raw statement
+        # before falling back to the generic echo.
+        synthesis = self.inference_synthesizer.synthesize(
+            parse_result.raw_text or "", self
+        )
+        if synthesis is not None:
+            self.state.add_thought("inference_synthesis", synthesis.steps)
+            return (
+                synthesis.answer,
+                synthesis.confidence,
+            )
 
         # Plain statement without extractable facts: acknowledge using
         # the current conversation context so it does not feel robotic.

@@ -156,3 +156,48 @@ TODO next: add _act_conversation method to Brain class (deterministic, pattern-m
 Then: tests/test_phase17_live_gaps.py (7 tests per plan above), full regression (expect 469+7), ruff, commit+push main, production smoke verify (curl POST /api/chat with x² - 4 = 0 এব "কি খবর"), delivery.
 Note: user's app screenshots used the OLD build; our local repro showed ১৫×৭ worked already (current build). So no Bengali-arithmetic fix needed — just add test test_bengali_arithmetic_15x7 (expect "105" in response).
 User-facing context: user tests via misty-ai-web.vercel.app এব standalone "Misty AI Chat" app (backend: misty-brain.onrender.com).
+
+## Phase 18 — Knowledge-Inference Synthesis (user feedback: "শুধু save করা কথার উত্তর দিচ্ছে, ভাবছে না")
+Date: 2026-08-19
+
+### User-observed gaps (screenshots 2026-08-19)
+- "আকাশের রঙ কি?" → "ইন্টেন্ট নির্ভুলভাবে parse করতে পারছি না" (canned failure)
+- "বুঝলাম না", "কি ব্যাপার?" → same canned reply repeated
+- "x² - 7 = 0" → "Unable to connect to MISTY brain" (Render cold start drop during deploy)
+- User demand: Misty must SYNTHESIZE answers from stored concepts/rules, not only echo saved phrases — "যা ভাবে তৈরি করে সেখান থেকে উত্তর দেবে"।
+
+### Design: InferenceSynthesizer (brain/knowledge/inference.py)
+1. Query understanding: extract candidate concepts from question via token overlap with knowledge graph concepts + semantic memory facts (existing similarity helpers).
+2. Rule application: iterate graph relations (is-a, has-property, part-of) and formulas, chain facts depth ≤ 3; record derivation chain (steps).
+3. Confidence: product of premise confidences × rule strength; mark answer "নিশ্চিত (known)" vs "অনুমান (inference)" explicitly.
+4. Fallback: compose partial relevant facts into transparent reasoning paragraph, honest uncertainty; NEVER repeat canned "parse করতে পারছি না"।
+5. Commonsense world layer (brain/knowledge/commonsense.py): curated bilingual facts (sky-blue, water-wet, Bangladesh-Dhaka, day/night, seasons, rain/clouds) loaded as in-memory layer at Brain init via registry loader, source=SourceRef("commonsense_layer").
+6. ACT routing: hook synthesis into PLAN/ACT language-fallback path (~line 1290 echo); grounding.claims += "inference_synthesis".
+
+### Phase 19 cold start
+- Render cold start: frontend "Unable to connect" during deploy window. Fix: lifespan boot warmup (preload brain once at startup, avoiding first-request JIT compile delay) + verify health before chat. Frontend fallback message acceptable.
+
+### Production
+- Backend https://misty-brain.onrender.com, Frontend https://misty-ai-web.vercel.app. Verify pattern: tests/verify_phase17_deploy.py (polling requests loop).
+
+### brain/core/brain.py key facts (Phase 18 hook points, verified line numbers)
+- `_act_unknown(parse_result)` line ~1219: BN canned "আমি আপনার কথাটি বুঝতে চেষ্টা করেছি... parse করতে পারিনি" (conf 0.35) + EN; stores working memory "unknown_input". THIS is the message user hates on "আকাশের রঙ কি?".
+- `_act_statement` line ~1298: "আমি আপনার কথাটি শুনলাম{context_part}, কিন্তু এখনো এটি সম্পূর্ণ বুঝতে শিখিনি" (conf 0.5) — repeated on "বুঝলাম না", "কি ব্যাপার".
+- `_act_query_what` line ~1270: target_name lookup; fallback "আমি এখনো X সম্পর্কে জানি না" (0.3).
+- `self.semantic_memory.query(subject, predicate)` → list of facts (fact.obj etc); `self.concept_graph.get_concept_by_name(name)` → concept (.concept_type, .concept_id); `self.concept_graph.add_relation(source_id, target_id, relation_type)`; `self.dialogue_context.get_salient_entities()` → list.
+- Self introduction lives in `_act_query_self` line 1246 (creator_of → Pixline/Salauddin Mir/Netvai answer).
+- Phase 18 hook: in `_act_unknown`, before returning canned reply, call `InferenceSynthesizer.synthesize(raw_text)` which queries semantic_memory (all subjects) + commonsense layer; if derivation found → return synthesized answer w/ confidence + derivation_steps in thought_trace.
+
+## Phase 18 progress (2026-08-19)
+CREATED: brain/knowledge/commonsense.py (167 bilingual facts + QUESTION_PATTERNS 22 preds + register_commonsense_layer(brain)).
+CREATED: brain/knowledge/inference.py (InferenceSynthesizer: synthesize(question, brain) → InferenceResult(answer, confidence, steps, is_derived, language, matched_predicate, subject, obj, chain_depth); inline _BN_STOP/_EN_STOP; 3-2-1 word span matching; predicate detection; direct lookup + 1-hop chain; confidence = product).
+EDITED: brain/core/brain.py — imports InferenceSynthesizer + register_commonsense_layer; self.inference_synthesizer in __init__; register_commonsense_layer(self) at end of _inject_training_knowledge; _act_unknown synthesizes before canned reply; _act_statement synthesizes before generic echo; _act_query_what synthesizes before "আমি এখনো X সম্পর্কে জানি না".
+EDITED: brain/core/state.py — thought_trace dict + add_thought(name, steps).
+REMAINING: tests/test_phase18_inference.py, full pytest, ruff, commit+push. Then 18b (graceful unknown), 19 (Render cold start), 20 (BN report).
+
+## Phase 18 debug status (updated)
+Bugs fixed in inference.py: (1) _lookup arg collision fixed; (2) _tokenize now regex-based BN_WORD_RE [\u0980-\u09ff\u09d7]+|[A-Za-z0-9_]+ (matras kept); (3) _extract_concepts: exact span match → token-in-subject containment → BN suffix stripping (ের/কে/র/টি/টা); (4) _EN_STOP removed color/colour/made (were killing predicate tokens); (5) answer grammar: possessive ের attached only when subject lacks genitive ending; (6) EN answer phrasing "Based on my stored knowledge: the X of Y is Z".
+Verified locally OK: আকাশের রঙ→নীল (0.95), বাংলাদেশের রাজধানী→ঢাকা, মধুর স্বাদ→মিষ্টি, আগুন→তাপ ও আলো, What is capital of India→New Delhi.
+"কি ব্যাপার?" → None (graceful) — will hit _act_statement synthesis-fallback → canned echo; Phase 18b will add CONVERSATION patterns.
+brain.process() returns dict {response, confidence, intent, thought_trace, ...} — tests updated.
+Next: ruff clean (check again), pytest all, commit+push, Phase 18b, 19, 20.
