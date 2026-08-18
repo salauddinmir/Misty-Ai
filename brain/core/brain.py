@@ -35,6 +35,7 @@ from brain.graph.concepts import ConceptGraph
 from brain.graph.hebbian import HebbianLearner
 from brain.knowledge.commonsense import register_commonsense_layer
 from brain.knowledge.inference import InferenceSynthesizer
+from brain.knowledge.personality import ResponseVariator
 from brain.learning.consolidation import MemoryConsolidator
 from brain.learning.curiosity import CuriosityExplorer
 from brain.learning.induction import EvidenceGatedInducer
@@ -160,6 +161,11 @@ class Brain:
         # Phase 18: knowledge-inference synthesis — derive answers from
         # stored concepts and rules instead of echoing memorized phrases.
         self.inference_synthesizer = InferenceSynthesizer()
+
+        # Phase 24: personality voice and response variation — reply
+        # templates are drawn from a per-intent bilingual pool so two
+        # consecutive identical inputs cannot produce identical replies.
+        self.variator = ResponseVariator()
 
         # Neural simulation (Phase 1)
         self._neural_sim_engine = None
@@ -762,7 +768,12 @@ class Brain:
             return response, 0.75
 
         # Generic friendly acknowledgment for any other casual turn.
-        response = f"আমি আপনার কথাটি শুনলাম। {self_model_text}"
+        # Phase 24: pick a varied friendly reply so casual turns do not
+        # echo the same "আমি আপনার কথাটি শুনলাম। ..." sentence.
+        friendly = self.variator.pick("conversation", text)
+        response = f"{friendly} {self_model_text}" if friendly else (
+            f"আমি আপনার কথাটি শুনলাম। {self_model_text}"
+        )
         return response, 0.6
 
     # Phase 23: compose a short phrase that anchors the current reply to
@@ -1187,12 +1198,7 @@ class Brain:
         elif parse_result.intent == IntentType.CONVERSATION:
             response, confidence = self._act_conversation(parse_result)
         elif parse_result.intent == IntentType.GREETING:
-            name_part = f", {self.user_name}" if self.user_name else ""
-            response = (
-                f"হ্যালো{name_part}! আমি Misty - Smart Artificial Brain, "
-                f"Pixline Incorporate-এর তৈরি। কীভাবে সাহায্য করতে পারি?"
-            )
-            confidence = 0.9
+            response, confidence = self._act_greeting(parse_result)
 
         elif parse_result.intent == IntentType.MATH:
             response, confidence = self._act_math(parse_result)
@@ -1218,6 +1224,30 @@ class Brain:
             data={"response": response, "confidence": confidence},
             success=confidence > 0.5,
         )
+
+    def _act_greeting(self, parse_result: ParseResult) -> tuple:
+        """Phase 24: friendly greeting with a varied personality voice.
+
+        Uses the bilingual greeting pool so repeated greetings do not
+        echo the same sentence, while keeping MISTY's stable identity
+        (Smart Artificial Brain by Pixline Incorporate).
+        """
+        name_part = f", {self.user_name}" if self.user_name else ""
+        text = parse_result.raw_text or ""
+        response = self.variator.pick("greeting", text, placeholders={"name": name_part})
+        if not response:
+            is_bengali = any("\u0980" <= char <= "\u09ff" for char in text)
+            if is_bengali:
+                response = (
+                    f"হ্যালো{name_part}! আমি Misty - Smart Artificial Brain, "
+                    f"Pixline Incorporate-এর তৈরি। কীভাবে সাহায্য করতে পারি?"
+                )
+            else:
+                response = (
+                    f"Hello{name_part}! I am Misty - a Smart Artificial Brain built "
+                    f"by Pixline Incorporate. How may I help?"
+                )
+        return response, 0.9
 
     def _act_math(self, parse_result: ParseResult) -> tuple:
         """Solve a supported math query without an LLM."""
@@ -1440,19 +1470,21 @@ class Brain:
             self.emotion.update_from_outcome(success=True)
             self.state.add_thought("inference_synthesis", synthesis.steps)
             return synthesis.answer, synthesis.confidence
-        is_bengali = any("\u0980" <= char <= "\u09ff" for char in raw)
-        if is_bengali:
-            return (
+        # Phase 24: pick a varied personality template per language so
+        # consecutive unknown inputs do not echo the same canned phrase.
+        response = self.variator.pick("unknown", raw)
+        if not response:
+            is_bengali = any("\u0980" <= char <= "\u09ff" for char in raw)
+            response = (
                 "আমি আপনার কথাটি বুঝতে চেষ্টা করেছি, কিন্তু এই বাক্যের intent এখনো "
                 'নির্ভুলভাবে parse করতে পারিনি। আপনি চাইলে "মনে রাখো: ...", "X হলো Y", '
                 '"আমার নাম X", অথবা নির্দিষ্ট math/physics format ব্যবহার করে শেখাতে পারেন। '
                 "আমি এই অজানা input-টি learning opportunity হিসেবে working memory-তে রেখেছি।"
-            ), 0.35
-        response = (
-            "I heard you, but I could not resolve the intent yet. You can teach me with "
-            '"remember that ...", "X is Y", or ask a supported mathematics or physics question. '
-            "I have retained this unknown input as a learning opportunity."
-        )
+            ) if is_bengali else (
+                "I heard you, but I could not resolve the intent yet. You can teach me with "
+                '"remember that ...", "X is Y", or ask a supported mathematics or physics question. '
+                "I have retained this unknown input as a learning opportunity."
+            )
         return response, 0.35
 
     def _act_query_self(self, parse_result: ParseResult) -> tuple:
@@ -1517,7 +1549,17 @@ class Brain:
             )
 
         self.emotion.update_from_outcome(success=False)
-        return (f'আমি এখনো {target_name} সম্পর্কে জানি না। আপনি বলতে পারেন: "{target_name} হলো X" — তাহলে আমি মনে রাখব।'), 0.3
+        # Phase 24: varied humble fallback so repeated "X কী?" queries
+        # do not echo the same "আমি এখনো X সম্পর্কে জানি না" sentence.
+        fallback = self.variator.pick(
+            "query_what_unknown", target_name, placeholders={"subject": target_name}
+        )
+        if not fallback:
+            fallback = (
+                f'আমি এখনো {target_name} সম্পর্কে জানি না। আপনি বলতে পারেন: '
+                f'"{target_name} হলো X" — তাহলে আমি মনে রাখব।'
+            )
+        return fallback, 0.3
 
     def _act_statement(self, parse_result: ParseResult) -> tuple:
         """Handle ordinary assertions like "মিস্টি হলো এআই" (is_a fact)
@@ -1572,11 +1614,16 @@ class Brain:
         salient = self.dialogue_context.get_salient_entities()
         context_hint = salient[0] if salient else ""
         context_part = f" ({context_hint} নিয়ে)" if context_hint else ""
-        return (
-            f"আমি আপনার কথাটি শুনলাম{context_part}, কিন্তু এখনো "
-            "এটি সম্পূর্ণ বুঝতে শিখিনি। আপনি চাইলে শেখাতে পারেন: "
-            '"মনে রাখো ..." বা "X হলো Y" ফরম্যাটে।'
-        ), 0.5
+        # Phase 24: varied acknowledgment so repeated statements do not
+        # echo the same generic robot reply.
+        ack = self.variator.pick("statement", parse_result.raw_text or "")
+        if not ack:
+            ack = (
+                f"আমি আপনার কথাটি শুনলাম{context_part}, কিন্তু এখনো "
+                "এটি সম্পূর্ণ বুঝতে শিখিনি। আপনি চাইলে শেখাতে পারেন: "
+                '"মনে রাখো ..." বা "X হলো Y" ফরম্যাটে।'
+            )
+        return ack, 0.5
 
     def _act_teach(self, parse_result: ParseResult) -> tuple:
         """Handle explicit teaching ("মনে রাখো ...", "I know that ...").
@@ -1603,14 +1650,25 @@ class Brain:
                     emotional_valence=0.7,
                     importance=0.8,
                 )
-                return f"মনে রাখা হয়েছে: {subject} হলো {obj}।", 0.9
+                # Phase 24: varied learning acknowledgment.
+                ack = self.variator.pick(
+                    "teach", raw, placeholders={"fact": f"{subject} হলো {obj}"}
+                )
+                if not ack:
+                    ack = f"মনে রাখা হয়েছে: {subject} হলো {obj}।"
+                return ack, 0.9
 
         self.episodic_memory.store(
             content={"type": "taught_statement", "text": raw},
             emotional_valence=0.6,
             importance=0.7,
         )
-        return f"আমি মনে রাখলাম: {raw}", 0.7
+        # Phase 24: varied acknowledgment when no structured fact was
+        # extracted from the taught sentence.
+        ack = self.variator.pick("teach", raw, placeholders={"fact": raw})
+        if not ack:
+            ack = f"আমি মনে রাখলাম: {raw}"
+        return ack, 0.7
 
     def _act_correction(self, parse_result: ParseResult) -> tuple:
         """Handle corrections ("আসলে মিস্টি", "no, it is Misty").
@@ -1626,8 +1684,25 @@ class Brain:
                 candidates.extend(v for v in value if isinstance(v, str))
         if candidates:
             correction_target = candidates[0]
-            return (f"ধন্যবাদ সংশোধনের জন্য। আপনি ঠিক বলছেন — {correction_target}। আমি এটা মনে রাখলাম।"), 0.8
-        return ("আমি বুঝতে পেরেছি আপনি সংশোধন করছেন, কিন্তু কী সংশোধন করতে চাইছেন সেটা স্পষ্ট করে বলুন।"), 0.5
+            # Phase 24: varied correction acknowledgment.
+            ack = self.variator.pick(
+                "correction", parse_result.raw_text or "",
+                placeholders={"target": correction_target},
+            )
+            if not ack:
+                ack = (
+                    f"ধন্যবাদ সংশোধনের জন্য। আপনি ঠিক বলছেন — {correction_target}। "
+                    "আমি এটা মনে রাখলাম।"
+                )
+            return ack, 0.8
+        # Phase 24: varied clarification request.
+        clarify = self.variator.pick("correction", parse_result.raw_text or "")
+        if not clarify:
+            clarify = (
+                "আমি বুঝতে পেরেছি আপনি সংশোধন করছেন, কিন্তু কী সংশোধন করতে "
+                "চাইছেন সেটা স্পষ্ট করে বলুন।"
+            )
+        return clarify, 0.5
 
     def _act_continuation(self, parse_result: ParseResult) -> tuple:
         """Handle conversational continuations ("আরো বলো", "more").
@@ -1654,9 +1729,17 @@ class Brain:
         facts = self.semantic_memory.query(subject=topic, predicate="is_a")
         if facts:
             detail = ", ".join(fact.obj for fact in facts[:2])
-            return (
-                f"আমি {topic} নিয়ে বলছি — {topic} হলো {detail}। এর বেশি জানতে চাইলে বলুন 'আমি {topic}-এর তথ্য দাও'।"
-            ), 0.8
+            # Phase 24: varied continuation phrasing around the topic detail.
+            variant = self.variator.pick(
+                "continuation", parse_result.raw_text or "",
+                placeholders={"topic": topic, "detail": detail},
+            )
+            if not variant:
+                variant = (
+                    f"আমি {topic} নিয়ে বলছি — {topic} হলো {detail}। এর বেশি জানতে "
+                    f"চাইলে বলুন 'আমি {topic}-এর তথ্য দাও'।"
+                )
+            return variant, 0.8
 
         topic_concept = self.concept_graph.get_concept_by_name(topic)
         related = []
@@ -1681,7 +1764,18 @@ class Brain:
                 f"{topic} সম্পর্কে আমি এতটুকু জানি: {detail}",
                 synthesis.confidence,
             )
-        return (f"{topic} নিয়ে আমি এখনো বেশি কিছু জানি না। আপনি কি আমাকে আরো শেখাবেন?"), 0.5
+        # Phase 24: varied honest-fallback phrasing instead of a fixed
+        # "{topic} নিয়ে আমি এখনো বেশি কিছু জানি না..." sentence.
+        honest = self.variator.pick(
+            "continuation", parse_result.raw_text or "",
+            placeholders={"topic": topic, "detail": ""},
+        )
+        if not honest:
+            honest = (
+                f"{topic} নিয়ে আমি এখনো বেশি কিছু জানি না। আপনি কি আমাকে "
+                "আরো শেখাবেন?"
+            )
+        return honest, 0.5
 
     def _phase_evaluate(self, act_result: CycleResult) -> CycleResult:
         """EVALUATE phase: Assess the response quality."""
