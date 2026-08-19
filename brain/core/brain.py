@@ -6,6 +6,7 @@ processes input through the cognitive cycle. This is the primary
 entry point for the cognitive system.
 """
 
+import copy
 import re
 import time as time_module
 from typing import Any, Dict, List
@@ -50,7 +51,7 @@ from brain.knowledge.web_learning import WebSearchLearner
 from brain.learning.consolidation import MemoryConsolidator
 from brain.learning.curiosity import CuriosityExplorer
 from brain.learning.induction import EvidenceGatedInducer
-from brain.learning.post_learning_loop import PostLearningAssessor
+from brain.learning.post_learning_loop import PostLearningAssessor, attach_to_learner
 from brain.learning.reinforcement import ReinforcementLearner
 from brain.learning.reward import RewardSignal
 from brain.learning.self_assessment import GapAssessor
@@ -104,6 +105,9 @@ class Brain:
         self.name: str | None = None
         self.user_name: str | None = None
         self.use_neural_sim: bool = use_neural_sim
+        # Assessment clones must not learn from benchmark prompts or trigger
+        # process-wide persistence hooks installed by the API runtime.
+        self._assessment_mode: bool = False
 
         # Neural substrate
         self.concept_population = NeuronPopulation(name="concepts")
@@ -154,7 +158,8 @@ class Brain:
         # the same semantic memory, quarantine, and safety gate.
         self.web_learner = WebSearchLearner(self)
         # Phase 37 — post-learning self-assessment loop.
-        self.post_learning_assessor = PostLearningAssessor(self)
+        self.post_learning_assessor = PostLearningAssessor(self, gap_assessor=self.gap_assessor)
+        attach_to_learner(self.web_learner, self.post_learning_assessor)
         self._learning_quarantine: List[Dict[str, Any]] = []
 
         # Emotion
@@ -213,6 +218,22 @@ class Brain:
         # interaction. Runs after the neural encoder exists so trained
         # concepts can be registered in the simulation.
         self._inject_training_knowledge()
+
+    def enable_assessment_mode(self) -> None:
+        """Disable learning and persistence side effects for an evaluator clone.
+
+        API startup currently installs an instance-level procedural store hook
+        and a process-wide ``Procedure.reinforce`` hook.  Evaluation clones may
+        inherit the former through ``deepcopy`` and always observe the latter,
+        so assessment mode removes the instance hook and cognitive phases check
+        this flag before invoking any reinforcement or long-term learning.
+        """
+        self._assessment_mode = True
+        self.consolidator.persistence_sink = None
+        # A live API brain may have an instance monkey-patch that closes over
+        # its database.  Removing a copied override restores the normal class
+        # method on the isolated evaluator.
+        self.procedural_memory.__dict__.pop("store", None)
 
     def _inject_training_knowledge(self) -> None:
         """Inject identity and general training knowledge at startup.
@@ -446,10 +467,19 @@ class Brain:
         associate_result = run_phase(self._phase_associate, interpret_result.data.get("parse_result"))
 
         # Phase 5: REASON
-        run_phase(self._phase_reason, interpret_result.data.get("parse_result"))
+        reason_result = run_phase(
+            self._phase_reason,
+            interpret_result.data.get("parse_result"),
+            recall_result.data,
+            associate_result.data,
+        )
 
         # Phase 6: PLAN
-        run_phase(self._phase_plan, interpret_result.data.get("parse_result"))
+        plan_result = run_phase(
+            self._phase_plan,
+            interpret_result.data.get("parse_result"),
+            reason_result.data,
+        )
 
         # Phase 7: ACT
         act_result = run_phase(
@@ -457,6 +487,8 @@ class Brain:
             interpret_result.data.get("parse_result"),
             recall_result.data,
             associate_result.data,
+            reason_result.data,
+            plan_result.data,
         )
 
         # Phase 8: EVALUATE
@@ -518,14 +550,19 @@ class Brain:
         )
         # Keep the interpreted intent accessible to API consumers
         # (intent_value already set earlier for the conversation driver).
+        used_evidence_ids = tuple(act_result.data.get("used_evidence_ids", []))
+        used_evidence = [item for item in self.workspace.evidence if item.evidence_id in used_evidence_ids]
         grounded_utterance = self.language_grounder.ground(
             response,
             raw_input=text_input,
             intent=intent_value,
             confidence=float(act_result.data.get("confidence", 0.5)),
-            evidence_count=len(self.workspace.evidence),
+            evidence_count=len(used_evidence),
             hypothesis_count=len(self.workspace.hypotheses),
-            strategy="deterministic_action_with_workspace_context",
+            strategy="causal_plan_execution",
+            grounding_source=str(act_result.data.get("grounding_source", "fallback")),
+            evidence_sources=tuple(item.source for item in used_evidence),
+            evidence_ids=tuple(item.evidence_id for item in used_evidence),
         )
 
         # Record the brain turn so the next user turn can resolve
@@ -1244,37 +1281,147 @@ class Brain:
         }
     )
 
+    def _normalize_what_target_for_recall(self, parse_result: ParseResult) -> None:
+        """Resolve deterministic WHAT target variants before evidence retrieval.
+
+        The compatibility ACT handler historically normalized compounds,
+        inflections, and inherited topics after RECALL. Doing the same bounded
+        normalization here lets REASON rank the facts that ACT can consume and
+        preserves their provenance through the causal pipeline.
+        """
+        if parse_result.intent != IntentType.QUERY_WHAT:
+            return
+
+        target_name = parse_result.query.get("target", "")
+        relation = parse_result.query.get("relation", "")
+        target_tokens = {token.casefold() for token in re.findall(r"[A-Za-z\u0980-\u09ff]+", target_name)}
+        if relation in {"", "is_a"}:
+            attribute_predicates = {
+                "color": {"color", "colour", "রঙ"},
+                "use": {"use", "uses", "ব্যবহার", "কাজ"},
+                "capability": {"capability", "ক্ষমতা"},
+            }
+            for predicate, markers in attribute_predicates.items():
+                if target_tokens & markers:
+                    relation = predicate
+                    parse_result.query["relation"] = predicate
+                    break
+        if not target_name or relation in {"use", "capability", "why", "how"}:
+            inherited = self.dialogue_context.topic
+            if not inherited:
+                inherited = self._prior_topic(
+                    exclude=_current_token_set(parse_result.raw_text) | self._INTERROGATIVE_TOKENS,
+                    parse_result=parse_result,
+                )
+            if inherited:
+                target_name = inherited
+
+        if not target_name:
+            return
+
+        if " " in target_name:
+            stop_words = (
+                self._SALIENT_STOP_TOKENS
+                | self._INTERROGATIVE_TOKENS
+                | {
+                    "of",
+                    "the",
+                    "a",
+                    "an",
+                    "in",
+                    "on",
+                    "at",
+                    "with",
+                    "from",
+                }
+            )
+            is_bengali = any("\u0980" <= char <= "\u09ff" for char in target_name)
+            candidates = target_name.split() if is_bengali else list(reversed(target_name.split()))
+            if not self._definition_or_concept(target_name):
+                target_name = next(
+                    (
+                        word
+                        for word in candidates
+                        if word.casefold() not in stop_words and self._definition_or_concept(word)
+                    ),
+                    next((word for word in candidates if word.casefold() not in stop_words), target_name),
+                )
+
+        if not target_name.isascii() and " " not in target_name:
+            base = self._normalize_bengali_word(target_name)
+            if base != target_name and self._definition_or_concept(base):
+                target_name = base
+        elif target_name.endswith("s") and len(target_name) > 3 and not self._definition_or_concept(target_name):
+            if target_name.endswith("ies") and len(target_name) > 4:
+                singular = target_name[:-3] + "y"
+            elif target_name.endswith("es") and len(target_name) > 4:
+                singular = target_name[:-2]
+            else:
+                singular = target_name[:-1]
+            if self._definition_or_concept(singular):
+                target_name = singular
+
+        parse_result.query["target"] = target_name
+
     def _phase_recall(self, parse_result: ParseResult | None) -> CycleResult:
-        """RECALL phase: Retrieve relevant memories."""
+        """RECALL phase: retrieve memories and broadcast their provenance."""
         self.state.current_phase = "recall"
-        recalled: Dict[str, Any] = {}
+        recalled: Dict[str, Any] = {"evidence_ids": []}
 
-        if parse_result:
-            # Phase 4: mark recalled targets and score by recency/
-            # frequency/emotion so retrieval favors human-like recall.
-            target_name = parse_result.query.get("target", "")
-            if target_name:
-                target_concept = self.concept_graph.get_concept_by_name(target_name)
-                if target_concept:
-                    self.recall_scorer.record_recall(target_concept.concept_id)
-                    recalled["recall_scores"] = self.recall_scorer.score(
-                        target_concept.concept_id,
-                        emotional_valence=self._current_valence(),
-                    )
+        if not parse_result:
+            return CycleResult(phase=CognitivePhase.RECALL, data=recalled, success=True)
 
-        if parse_result and parse_result.intent == IntentType.QUERY_WHO:
-            target_name = parse_result.query.get("target", "")
-            relation = parse_result.query.get("relation", "")
+        self._normalize_what_target_for_recall(parse_result)
+        target_name = parse_result.query.get("target", "")
+        relation = parse_result.query.get("relation", "")
+        if target_name:
+            target_concept = self.concept_graph.get_concept_by_name(target_name)
+            if target_concept:
+                self.recall_scorer.record_recall(target_concept.concept_id)
+                recalled["recall_scores"] = self.recall_scorer.score(
+                    target_concept.concept_id,
+                    emotional_valence=self._current_valence(),
+                )
 
-            # Search semantic memory
-            facts = self.semantic_memory.query(predicate=relation, obj=target_name)
-            if facts:
-                recalled["semantic_facts"] = [
-                    {"subject": f.subject, "predicate": f.predicate, "obj": f.obj} for f in facts
-                ]
+        facts = []
+        if parse_result.intent == IntentType.QUERY_WHO and target_name:
+            facts = self.semantic_memory.query(predicate=relation or None, obj=target_name)
+        elif parse_result.intent == IntentType.QUERY_WHAT and target_name:
+            facts = self.semantic_memory.query(subject=target_name)
+            predicate_groups = {
+                "is_a": {"is_a", "definition", "সংজ্ঞা", "সূত্র", "formula"},
+                "color": {"color"},
+                "use": {"use", "is_a"},
+                "capability": {"capability", "use", "is_a"},
+                "why": {"why_reason", "day_color_reason", "color", "is_a"},
+                "how": {"why_reason", "day_color_reason", "color", "use", "is_a"},
+            }
+            relevant_predicates = predicate_groups.get(relation)
+            if relevant_predicates:
+                facts = [fact for fact in facts if fact.predicate in relevant_predicates]
 
-            # Search episodic memory: past interactions about this target
-            # (experience-based recall, not just stored facts)
+        if facts:
+            semantic_facts = []
+            for fact in facts:
+                record = {
+                    "subject": fact.subject,
+                    "predicate": fact.predicate,
+                    "obj": fact.obj,
+                    "source": fact.source,
+                    "confidence": float(fact.confidence),
+                }
+                evidence = Evidence(
+                    source=fact.source or "semantic_memory",
+                    content={"kind": "semantic_fact", **record},
+                    confidence=float(fact.confidence),
+                )
+                self.workspace.broadcast_evidence(evidence)
+                record["evidence_id"] = evidence.evidence_id
+                recalled["evidence_ids"].append(evidence.evidence_id)
+                semantic_facts.append(record)
+            recalled["semantic_facts"] = semantic_facts
+
+        if target_name:
             episode_hits = self.episodic_memory.recall_by_content(target_name)
             if episode_hits:
                 recalled["episode_hits"] = [
@@ -1286,17 +1433,28 @@ class Brain:
                     for ep in episode_hits[:5]
                 ]
 
-            # Search knowledge graph
             target_concept = self.concept_graph.get_concept_by_name(target_name)
             if target_concept:
-                relations = self.concept_graph.get_relations(target_concept.concept_id, direction="incoming")
-                recalled["graph_relations"] = relations
+                direction = "incoming" if parse_result.intent == IntentType.QUERY_WHO else "both"
+                graph_relations = self.concept_graph.get_relations(target_concept.concept_id, direction=direction)
+                if parse_result.intent == IntentType.QUERY_WHO and relation:
+                    graph_relations = [item for item in graph_relations if item.get("relation_type") == relation]
+                if graph_relations:
+                    recalled_relations = []
+                    for relation_record in graph_relations:
+                        record = {**relation_record, "evidence_source": "knowledge_graph"}
+                        evidence = Evidence(
+                            source="knowledge_graph",
+                            content={"kind": "graph_relation", **record},
+                            confidence=float(record.get("confidence", 1.0)),
+                        )
+                        self.workspace.broadcast_evidence(evidence)
+                        record["evidence_id"] = evidence.evidence_id
+                        recalled["evidence_ids"].append(evidence.evidence_id)
+                        recalled_relations.append(record)
+                    recalled["graph_relations"] = recalled_relations
 
-        return CycleResult(
-            phase=CognitivePhase.RECALL,
-            data=recalled,
-            success=True,
-        )
+        return CycleResult(phase=CognitivePhase.RECALL, data=recalled, success=True)
 
     def _phase_associate(self, parse_result: ParseResult | None) -> CycleResult:
         """ASSOCIATE phase: Spread activation to related concepts.
@@ -1325,12 +1483,16 @@ class Brain:
 
                     self.state.active_concepts = {k: round(v, 3) for k, v in activated.items()}
                     # Phase 4: Hebbian learning — strengthen edges between
-                    # concepts that fired together this cycle.
-                    hebbian_updates = self.hebbian.update(self.concept_graph, list(activated.keys()))
-                    if hebbian_updates:
-                        self.working_memory.store("hebbian_updates", hebbian_updates)
+                    # concepts that fired together this cycle. Assessment
+                    # clones perform retrieval only and must not learn from
+                    # benchmark prompts.
+                    if not self._assessment_mode:
+                        hebbian_updates = self.hebbian.update(self.concept_graph, list(activated.keys()))
+                        if hebbian_updates:
+                            self.working_memory.store("hebbian_updates", hebbian_updates)
         # Phase 4: Hebbian bookkeeping (also covers the neural path).
-        self.hebbian.register_activations(self.state.active_concepts.keys())
+        if not self._assessment_mode:
+            self.hebbian.register_activations(self.state.active_concepts.keys())
         return CycleResult(
             phase=CognitivePhase.ASSOCIATE,
             data={"activation_map": activated},
@@ -1399,10 +1561,18 @@ class Brain:
 
         return activation_map
 
-    def _phase_reason(self, parse_result: ParseResult | None) -> CycleResult:
-        """REASON phase: Apply inference rules."""
+    def _phase_reason(
+        self,
+        parse_result: ParseResult | None,
+        recall_data: Dict[str, Any] | None = None,
+        associate_data: Dict[str, Any] | None = None,
+    ) -> CycleResult:
+        """REASON phase: derive answer candidates from recalled evidence."""
         self.state.current_phase = "reason"
+        recall_data = recall_data or {}
+        associate_data = associate_data or {}
         derived: List[Dict[str, Any]] = []
+        answer_candidates: List[Dict[str, Any]] = []
 
         if parse_result:
             intent_name = parse_result.intent.value
@@ -1423,57 +1593,223 @@ class Brain:
             hypothesis.mark_tested(parse_result.confidence > 0.3)
             self.workspace.propose(hypothesis)
 
-        if parse_result and parse_result.intent == IntentType.QUERY_WHO:
             target_name = parse_result.query.get("target", "")
             relation = parse_result.query.get("relation", "")
-
-            target_concept = self.concept_graph.get_concept_by_name(target_name)
-            if target_concept:
-                related = self.concept_graph.find_related(
-                    target_concept.concept_id,
-                    relation_type=relation,
-                    direction="incoming",
+            subject = parse_result.query.get("subject", "")
+            self_names = {"misty", "মিস্টি", "মিস্টিকে"}
+            self_references = {str(item).casefold() for item in self._SELF_SUBJECTS} | self_names
+            protected_identity_query = (
+                parse_result.intent == IntentType.QUERY_WHO
+                and relation in {"creator_of", "made_by"}
+                and (str(target_name).casefold() in self_names or str(subject).casefold() in self_references)
+            )
+            if protected_identity_query:
+                response, confidence = self._act_query_self(parse_result)
+                identity_evidence = Evidence(
+                    source="protected_self_model",
+                    content={
+                        "kind": "protected_identity",
+                        "subject": "Misty",
+                        "predicate": "made_by",
+                        "obj": "Pixline Incorporate / Salauddin Mir",
+                    },
+                    confidence=confidence,
                 )
-                if related:
-                    derived = [{"answer": c.name, "relation": relation} for c in related]
+                self.workspace.broadcast_evidence(identity_evidence)
+                answer_candidates.append(
+                    {
+                        "answer": response,
+                        "response": response,
+                        "source": "protected_self_model",
+                        "predicate": "made_by",
+                        "confidence": confidence,
+                        "evidence_ids": [identity_evidence.evidence_id],
+                        "trust_priority": 100,
+                    }
+                )
 
-        # Consult procedural memory: apply the strongest learned
-        # if-then procedure matching the current context so stored
-        # procedures actually influence reasoning instead of sitting idle
+            for fact in recall_data.get("semantic_facts", []):
+                if parse_result.intent == IntentType.QUERY_WHO:
+                    answer = str(fact.get("subject", "")).strip()
+                    response = answer
+                elif parse_result.intent == IntentType.QUERY_WHAT:
+                    answer = str(fact.get("obj", "")).strip()
+                    response = (
+                        f"{target_name} is {answer}." if target_name.isascii() else f"{target_name} হলো {answer}।"
+                    )
+                else:
+                    continue
+                if answer:
+                    answer_candidates.append(
+                        {
+                            "answer": answer,
+                            "response": response,
+                            "source": fact.get("source", "semantic_memory"),
+                            "predicate": fact.get("predicate"),
+                            "confidence": float(fact.get("confidence", 0.5)),
+                            "evidence_ids": [fact["evidence_id"]] if fact.get("evidence_id") else [],
+                        }
+                    )
+
+            for relation_record in recall_data.get("graph_relations", []):
+                if parse_result.intent == IntentType.QUERY_WHAT:
+                    relevant_graph_predicates = {
+                        "is_a": {"is_a"},
+                        "color": {"color"},
+                        "use": {"use", "uses"},
+                        "capability": {"capability", "use", "uses"},
+                        "why": {"why_reason", "day_color_reason", "color"},
+                        "how": {"why_reason", "day_color_reason", "use", "uses"},
+                    }.get(relation)
+                    if (
+                        relevant_graph_predicates is not None
+                        and relation_record.get("relation_type") not in relevant_graph_predicates
+                    ):
+                        continue
+                if parse_result.intent == IntentType.QUERY_WHO:
+                    answer_id = relation_record.get("source")
+                elif relation_record.get("source"):
+                    target_concept = self.concept_graph.get_concept_by_name(target_name)
+                    answer_id = (
+                        relation_record.get("target")
+                        if target_concept and relation_record.get("source") == target_concept.concept_id
+                        else relation_record.get("source")
+                    )
+                else:
+                    answer_id = None
+                answer_concept = self.concept_graph.get_concept(answer_id) if answer_id else None
+                if answer_concept:
+                    response = answer_concept.name
+                    if parse_result.intent == IntentType.QUERY_WHAT:
+                        response = (
+                            f"{target_name} is related to {answer_concept.name}."
+                            if target_name.isascii()
+                            else f"{target_name} {answer_concept.name}-এর সাথে সম্পর্কিত।"
+                        )
+                    answer_candidates.append(
+                        {
+                            "answer": answer_concept.name,
+                            "response": response,
+                            "source": "knowledge_graph",
+                            "predicate": relation_record.get("relation_type"),
+                            "confidence": float(relation_record.get("confidence", 0.5)),
+                            "evidence_ids": [relation_record["evidence_id"]]
+                            if relation_record.get("evidence_id")
+                            else [],
+                        }
+                    )
+
+            composition_relations = {"use", "capability", "why", "how"}
+            semantic_facts = recall_data.get("semantic_facts", [])
+            if parse_result.intent == IntentType.QUERY_WHAT and relation in composition_relations and semantic_facts:
+                details = list(dict.fromkeys(str(fact.get("obj", "")).strip() for fact in semantic_facts))
+                details = [detail for detail in details if detail]
+                evidence_ids = list(
+                    dict.fromkeys(str(fact.get("evidence_id")) for fact in semantic_facts if fact.get("evidence_id"))
+                )
+                if details and evidence_ids:
+                    joined_details = ", ".join(details[:4])
+                    is_bengali = any("\u0980" <= char <= "\u09ff" for char in parse_result.raw_text)
+                    response = (
+                        f"{target_name} সম্পর্কে সংরক্ষিত তথ্য: {joined_details}।"
+                        if is_bengali
+                        else f"From my stored knowledge about {target_name}: {joined_details}."
+                    )
+                    answer_candidates.append(
+                        {
+                            "answer": joined_details,
+                            "response": response,
+                            "source": "semantic_composition",
+                            "predicate": relation,
+                            "confidence": min(float(fact.get("confidence", 0.5)) for fact in semantic_facts),
+                            "evidence_ids": evidence_ids,
+                            "trust_priority": 10,
+                        }
+                    )
+
         context = parse_result.raw_text if parse_result else ""
         if context and hasattr(self, "procedural_memory") and self.procedural_memory.size > 0:
             procedure = self.procedural_memory.get_strongest(context)
             if procedure:
-                procedure.reinforce(success=True, amount=0.05)
+                # Evaluation must never invoke the process-wide reinforcement
+                # persistence hook installed by the API lifespan.
+                if not self._assessment_mode:
+                    procedure.reinforce(success=True, amount=0.05)
+                procedure_evidence = Evidence(
+                    source="procedural_memory",
+                    content={
+                        "kind": "procedure",
+                        "procedure_id": procedure.procedure_id,
+                        "name": procedure.name,
+                        "action": procedure.action,
+                    },
+                    confidence=procedure.strength,
+                )
+                self.workspace.broadcast_evidence(procedure_evidence)
                 derived.append(
                     {
                         "procedure": procedure.name,
                         "action": procedure.action,
                         "strength": procedure.strength,
+                        "evidence_id": procedure_evidence.evidence_id,
                     }
                 )
+
+        # Rank before deduplicating so duplicate answers retain the
+        # strongest evidence rather than whichever store happened to be
+        # iterated first.
+        answer_candidates.sort(
+            key=lambda item: (
+                int(item.get("trust_priority", 0)),
+                float(item.get("confidence", 0.0)),
+            ),
+            reverse=True,
+        )
+        ranked_candidates: List[Dict[str, Any]] = []
+        seen_answers: set[str] = set()
+        for candidate in answer_candidates:
+            answer_key = str(candidate.get("answer", "")).strip().casefold()
+            if not answer_key or answer_key in seen_answers:
+                continue
+            seen_answers.add(answer_key)
+            ranked_candidates.append(candidate)
+        derived.extend(ranked_candidates)
+        if parse_result and ranked_candidates and parse_result.intent in {IntentType.QUERY_WHO, IntentType.QUERY_WHAT}:
+            selected = ranked_candidates[0]
+            self.state.add_thought(
+                "inference_synthesis",
+                [
+                    f"REASON selected predicate {selected.get('predicate') or 'unknown'} using ranked evidence.",
+                    f"PLAN received {len(selected.get('evidence_ids', []))} supporting evidence item(s).",
+                ],
+            )
         return CycleResult(
             phase=CognitivePhase.REASON,
-            data={"derived": derived},
+            data={
+                "derived": derived,
+                "answer_candidates": ranked_candidates,
+                "selected_answer": ranked_candidates[0] if ranked_candidates else None,
+                "recall_evidence_ids": list(recall_data.get("evidence_ids", [])),
+                "association_count": len(associate_data.get("activation_map", {})),
+            },
             success=True,
         )
 
-    def _phase_plan(self, parse_result: ParseResult | None) -> CycleResult:
-        """PLAN phase: Decide what to do.
-
-        Phase 6: the current intent is decomposed into a hierarchical goal
-        with ordered plan steps so the next cycles can drive progress
-        tracking step by step.
-        """
+    def _phase_plan(
+        self,
+        parse_result: ParseResult | None,
+        reason_data: Dict[str, Any] | None = None,
+    ) -> CycleResult:
+        """PLAN phase: select an executable action using reasoning output."""
         self.state.current_phase = "plan"
+        reason_data = reason_data or {}
         if not parse_result:
             return CycleResult(
                 phase=CognitivePhase.PLAN,
-                data={"plan": "acknowledge"},
-                success=True,
+                data={"plan": "request_clarification", "executable": False, "reason": "missing_parse_result"},
+                success=False,
             )
         intent = parse_result.intent.value
-        # Priority: corrections and queries matter more than greetings.
         priority = {
             "correction": 0.9,
             "teach": 0.8,
@@ -1493,30 +1829,35 @@ class Brain:
         )
         self.state.context["active_goal"] = goal.goal_id
 
-        if parse_result.intent == IntentType.NAME_DECLARATION:
-            plan = "store_identity"
-        elif parse_result.intent == IntentType.RELATION_DECLARATION:
-            plan = "store_relation"
-        elif parse_result.intent in (IntentType.QUERY_WHO, IntentType.QUERY_WHAT):
-            plan = "answer_query"
-        elif parse_result.intent == IntentType.GREETING:
-            plan = "greet_back"
-        elif parse_result.intent == IntentType.CONVERSATION:
-            plan = "converse_friendly"
-        elif parse_result.intent == IntentType.MATH:
-            plan = "solve_mathematics"
-        elif parse_result.intent == IntentType.PHYSICS:
-            plan = "solve_physics"
-        elif parse_result.intent in (IntentType.TEACH, IntentType.STATEMENT, IntentType.CORRECTION):
-            plan = "absorb_knowledge"
-        elif parse_result.intent == IntentType.CONTINUATION:
-            plan = "continue_topic"
-        else:
-            plan = "acknowledge"
+        plan_by_intent = {
+            IntentType.NAME_DECLARATION: "store_identity",
+            IntentType.RELATION_DECLARATION: "store_relation",
+            IntentType.QUERY_WHO: "answer_query",
+            IntentType.QUERY_WHAT: "answer_query",
+            IntentType.GREETING: "greet_back",
+            IntentType.CONVERSATION: "converse_friendly",
+            IntentType.MATH: "solve_mathematics",
+            IntentType.PHYSICS: "solve_physics",
+            IntentType.TEACH: "absorb_knowledge",
+            IntentType.STATEMENT: "absorb_knowledge",
+            IntentType.CORRECTION: "absorb_knowledge",
+            IntentType.CONTINUATION: "continue_topic",
+            IntentType.CAPABILITY_QUERY: "describe_capabilities",
+            IntentType.RECOGNITION_QUERY: "recall_identity",
+        }
+        plan = plan_by_intent.get(parse_result.intent, "request_clarification")
+        executable = plan in set(plan_by_intent.values()) | {"request_clarification"}
         return CycleResult(
             phase=CognitivePhase.PLAN,
-            data={"plan": plan, "active_goal": goal.goal_id},
-            success=True,
+            data={
+                "plan": plan,
+                "active_goal": goal.goal_id,
+                "expected_intent": intent,
+                "executable": executable,
+                "selected_answer": reason_data.get("selected_answer"),
+                "reason_evidence_ids": list(reason_data.get("recall_evidence_ids", [])),
+            },
+            success=executable,
         )
 
     def _phase_act(
@@ -1524,78 +1865,243 @@ class Brain:
         parse_result: ParseResult | None,
         recall_data: Dict[str, Any],
         associate_data: Dict[str, Any],
+        reason_data: Dict[str, Any],
+        plan_data: Dict[str, Any],
     ) -> CycleResult:
-        """ACT phase: Execute the plan and generate a response."""
+        """ACT phase: validate and execute the selected causal plan."""
         self.state.current_phase = "act"
 
         if not parse_result:
             return CycleResult(
                 phase=CognitivePhase.ACT,
-                data={"response": "...", "confidence": 0.3},
+                data={
+                    "response": "Please clarify what you would like me to do.",
+                    "confidence": 0.3,
+                    "grounding_source": "fallback",
+                    "plan": plan_data.get("plan"),
+                    "used_evidence_ids": [],
+                },
+                success=False,
+            )
+
+        plan = str(plan_data.get("plan", ""))
+        allowed_intents = {
+            "store_identity": {IntentType.NAME_DECLARATION},
+            "store_relation": {IntentType.RELATION_DECLARATION},
+            "answer_query": {IntentType.QUERY_WHO, IntentType.QUERY_WHAT},
+            "absorb_knowledge": {IntentType.TEACH, IntentType.STATEMENT, IntentType.CORRECTION},
+            "continue_topic": {IntentType.CONTINUATION},
+            "describe_capabilities": {IntentType.CAPABILITY_QUERY},
+            "recall_identity": {IntentType.RECOGNITION_QUERY},
+            "converse_friendly": {IntentType.CONVERSATION},
+            "greet_back": {IntentType.GREETING},
+            "solve_mathematics": {IntentType.MATH},
+            "solve_physics": {IntentType.PHYSICS},
+            "request_clarification": {parse_result.intent},
+        }
+        plan_matches_intent = parse_result.intent in allowed_intents.get(plan, set())
+        expected_intent = plan_data.get("expected_intent")
+        if (
+            not plan_data.get("executable", False)
+            or not plan_matches_intent
+            or (expected_intent and expected_intent != parse_result.intent.value)
+        ):
+            is_bengali = any("\u0980" <= char <= "\u09ff" for char in parse_result.raw_text)
+            response = (
+                "নির্বাচিত পরিকল্পনাটি এই অনুরোধের জন্য নিরাপদে কার্যকর করা যাচ্ছে না। অনুগ্রহ করে অনুরোধটি স্পষ্ট করুন।"
+                if is_bengali
+                else "The selected plan is not executable for this request. Please clarify what you want me to do."
+            )
+            return CycleResult(
+                phase=CognitivePhase.ACT,
+                data={
+                    "response": response,
+                    "confidence": 0.25,
+                    "grounding_source": "fallback",
+                    "plan": plan,
+                    "used_evidence_ids": [],
+                    "rejection_reason": "plan_intent_mismatch_or_not_executable",
+                },
                 success=False,
             )
 
         response = ""
         confidence = 0.5
+        grounding_source = "direct_knowledge"
+        used_evidence_ids: List[str] = []
+        selected_answer = plan_data.get("selected_answer") or reason_data.get("selected_answer")
+        selected_response = ""
+        selected_evidence_ids: List[str] = []
+        selected_supported = False
+        if selected_answer:
+            selected_response = str(selected_answer.get("response") or selected_answer.get("answer") or "").strip()
+            selected_evidence_ids = list(selected_answer.get("evidence_ids", []))
+            selected_supported = bool(selected_response and selected_evidence_ids)
 
-        if parse_result.intent == IntentType.NAME_DECLARATION:
-            response, confidence = self._act_name_declaration(parse_result)
-
-        elif parse_result.intent == IntentType.RELATION_DECLARATION:
-            response, confidence = self._act_relation_declaration(parse_result)
-
-        elif parse_result.intent == IntentType.QUERY_WHO:
+        used_selected_answer = False
+        if plan == "store_identity":
+            response, confidence = self._run_learning_action(self._act_name_declaration, parse_result)
+        elif plan == "store_relation":
+            response, confidence = self._run_learning_action(self._act_relation_declaration, parse_result)
+        elif (
+            plan == "answer_query"
+            and parse_result.intent in {IntentType.QUERY_WHO, IntentType.QUERY_WHAT}
+            and selected_supported
+        ):
+            # For supported factual queries the ranked REASON decision is
+            # authoritative. ACT must not independently re-query insertion-
+            # ordered stores and silently execute a different answer.
+            response = selected_response
+            confidence = float(selected_answer.get("confidence", 0.5))
+            used_evidence_ids = selected_evidence_ids
+            grounding_source = "reason_derived_evidence"
+            used_selected_answer = True
+        elif plan == "answer_query" and parse_result.intent == IntentType.QUERY_WHO:
             response, confidence = self._act_query(parse_result, recall_data)
-
-        elif parse_result.intent == IntentType.QUERY_WHAT:
+        elif plan == "answer_query" and parse_result.intent == IntentType.QUERY_WHAT:
+            # Normalized/aliased targets that could not participate in RECALL
+            # still use the compatibility handler; consumed facts are turned
+            # into explicit evidence below.
             response, confidence = self._act_query_what(parse_result, recall_data)
-
-        elif parse_result.intent == IntentType.STATEMENT:
-            response, confidence = self._act_statement(parse_result)
-
-        elif parse_result.intent == IntentType.TEACH:
-            response, confidence = self._act_teach(parse_result)
-
-        elif parse_result.intent == IntentType.CORRECTION:
-            response, confidence = self._act_correction(parse_result)
-
-        elif parse_result.intent == IntentType.CONTINUATION:
+        elif plan == "absorb_knowledge" and parse_result.intent == IntentType.STATEMENT:
+            response, confidence = self._run_learning_action(self._act_statement, parse_result)
+        elif plan == "absorb_knowledge" and parse_result.intent == IntentType.TEACH:
+            response, confidence = self._run_learning_action(self._act_teach, parse_result)
+        elif plan == "absorb_knowledge" and parse_result.intent == IntentType.CORRECTION:
+            response, confidence = self._run_learning_action(self._act_correction, parse_result)
+        elif plan == "continue_topic":
             response, confidence = self._act_continuation(parse_result)
-
-        elif parse_result.intent == IntentType.CAPABILITY_QUERY:
+        elif plan == "describe_capabilities":
             response, confidence = self._act_capability(parse_result)
-
-        elif parse_result.intent == IntentType.RECOGNITION_QUERY:
+        elif plan == "recall_identity":
             response, confidence = self._act_recognition(parse_result)
-        elif parse_result.intent == IntentType.CONVERSATION:
+        elif plan == "converse_friendly":
             response, confidence = self._act_conversation(parse_result)
-        elif parse_result.intent == IntentType.GREETING:
+            grounding_source = "fallback"
+        elif plan == "greet_back":
             response, confidence = self._act_greeting(parse_result)
-
-        elif parse_result.intent == IntentType.MATH:
+            grounding_source = "fallback"
+        elif plan == "solve_mathematics":
             response, confidence = self._act_math(parse_result)
-
-        elif parse_result.intent == IntentType.PHYSICS:
+        elif plan == "solve_physics":
             response, confidence = self._act_physics(parse_result)
-
+        elif selected_supported:
+            response = selected_response
+            confidence = float(selected_answer.get("confidence", 0.5))
+            used_evidence_ids = selected_evidence_ids
+            grounding_source = "reason_derived_evidence"
         else:
-            # Unknown/unsupported input: give a contextual fallback instead
-            # of a flat "I don't know" so the user understands the brain's
-            # current capability boundary and what it CAN learn.
             response, confidence = self._act_unknown(parse_result)
+            grounding_source = "fallback"
 
-        # Phase 4: curiosity-driven exploration — when an under-explored
-        # neighbor concept earns a bonus above threshold, append a question
-        # so the agent actively seeks missing knowledge.
+        # A compatibility WHAT handler records the exact semantic facts it
+        # rendered. When target normalization or alias resolution happened
+        # after RECALL, broadcast those consumed facts now so a fact-backed
+        # response can never claim direct knowledge without evidence lineage.
+        if plan == "answer_query" and parse_result.intent == IntentType.QUERY_WHAT and not used_selected_answer:
+            used_fact_keys = set(getattr(self, "_last_query_what_fact_keys", []))
+            supporting_records = [
+                fact
+                for fact in recall_data.get("semantic_facts", [])
+                if (str(fact.get("subject", "")), str(fact.get("predicate", "")), str(fact.get("obj", "")))
+                in used_fact_keys
+            ]
+            recalled_keys = {
+                (str(fact.get("subject", "")), str(fact.get("predicate", "")), str(fact.get("obj", "")))
+                for fact in supporting_records
+            }
+            for fact in self.semantic_memory.facts.values():
+                fact_key = (fact.subject, fact.predicate, fact.obj)
+                if fact_key not in used_fact_keys or fact_key in recalled_keys:
+                    continue
+                evidence = Evidence(
+                    source=fact.source or "semantic_memory",
+                    content={
+                        "kind": "semantic_fact",
+                        "subject": fact.subject,
+                        "predicate": fact.predicate,
+                        "obj": fact.obj,
+                        "source": fact.source,
+                        "confidence": float(fact.confidence),
+                    },
+                    confidence=float(fact.confidence),
+                )
+                self.workspace.broadcast_evidence(evidence)
+                supporting_records.append(
+                    {
+                        "subject": fact.subject,
+                        "predicate": fact.predicate,
+                        "obj": fact.obj,
+                        "source": fact.source,
+                        "confidence": float(fact.confidence),
+                        "evidence_id": evidence.evidence_id,
+                    }
+                )
+
+            if supporting_records:
+                for fact in supporting_records:
+                    evidence_id = fact.get("evidence_id")
+                    if evidence_id and evidence_id not in used_evidence_ids:
+                        used_evidence_ids.append(evidence_id)
+                confidence = min(
+                    confidence,
+                    *(float(fact.get("confidence", confidence)) for fact in supporting_records),
+                )
+                grounding_source = "reason_derived_evidence"
+            elif selected_answer:
+                # A specialized answer with no consumed semantic facts must
+                # not advertise more certainty than conflicting ranked data.
+                confidence = min(confidence, float(selected_answer.get("confidence", confidence)))
+
+        # Any remaining query fallback with ranked evidence is conservatively
+        # bounded by that evidence rather than a handler's hard-coded score.
+        if plan == "answer_query" and selected_answer and grounding_source == "direct_knowledge":
+            confidence = min(confidence, float(selected_answer.get("confidence", confidence)))
+
+        if confidence <= 0.35 and not used_evidence_ids and grounding_source == "direct_knowledge":
+            grounding_source = "fallback"
+
         curiosity_question = self._curiosity_prompt(self.state.active_concepts)
         if curiosity_question:
             response = (response + " " + curiosity_question) if response else curiosity_question
 
         return CycleResult(
             phase=CognitivePhase.ACT,
-            data={"response": response, "confidence": confidence},
+            data={
+                "response": response,
+                "confidence": confidence,
+                "plan": plan,
+                "grounding_source": grounding_source,
+                "used_evidence_ids": used_evidence_ids,
+                "association_count": len(associate_data.get("activation_map", {})),
+            },
             success=confidence > 0.5,
         )
+
+    def _run_learning_action(self, handler: Any, parse_result: ParseResult) -> tuple:
+        """Execute a learning-shaped ACT handler without retaining assessment writes."""
+        if not self._assessment_mode:
+            return handler(parse_result)
+        snapshots = {
+            "name": self.name,
+            "user_name": self.user_name,
+            "semantic_memory": copy.deepcopy(self.semantic_memory),
+            "concept_graph": copy.deepcopy(self.concept_graph),
+            "episodic_memory": copy.deepcopy(self.episodic_memory),
+            "procedural_memory": copy.deepcopy(self.procedural_memory),
+            "learning_quarantine": copy.deepcopy(self._learning_quarantine),
+        }
+        try:
+            return handler(parse_result)
+        finally:
+            self.name = snapshots["name"]
+            self.user_name = snapshots["user_name"]
+            self.semantic_memory = snapshots["semantic_memory"]
+            self.concept_graph = snapshots["concept_graph"]
+            self.episodic_memory = snapshots["episodic_memory"]
+            self.procedural_memory = snapshots["procedural_memory"]
+            self._learning_quarantine = snapshots["learning_quarantine"]
+            self.procedural_memory.__dict__.pop("store", None)
 
     def _act_greeting(self, parse_result: ParseResult) -> tuple:
         """Phase 24: friendly greeting with a varied personality voice.
@@ -1950,6 +2456,7 @@ class Brain:
         and falls back to a humble "still learning" answer that mentions
         the asked-about entity so the user can teach it.
         """
+        self._last_query_what_fact_keys: List[tuple[str, str, str]] = []
         target_name = parse_result.query.get("target", "")
         relation = parse_result.query.get("relation", "")
         # Phase 28: relational follow-ups ("এর কাজ কি?", "What can that
@@ -2073,6 +2580,7 @@ class Brain:
                 + self.semantic_memory.query(subject=target_name, predicate="why_reason")
             )
             if facts:
+                self._last_query_what_fact_keys = [(fact.subject, fact.predicate, fact.obj) for fact in facts[:3]]
                 is_bn = any("\u0980" <= ch <= "\u09ff" for ch in parse_result.raw_text or "")
                 detail_parts = [f.obj for f in facts[:3]]
                 detail = ", ".join(detail_parts)
@@ -2105,6 +2613,7 @@ class Brain:
             + self.semantic_memory.query(subject=target_name, predicate="formula")
         )
         if facts:
+            self._last_query_what_fact_keys = [(fact.subject, fact.predicate, fact.obj) for fact in facts[:3]]
             is_bn = any("\u0980" <= ch <= "\u09ff" for ch in parse_result.raw_text or "")
             definitions = [fact.obj for fact in facts]
             if is_bn:
@@ -2144,6 +2653,7 @@ class Brain:
             if _alias_facts:
                 facts = _alias_facts
         if facts:
+            self._last_query_what_fact_keys = [(fact.subject, fact.predicate, fact.obj) for fact in facts[:3]]
             is_bn = any("\u0980" <= ch <= "\u09ff" for ch in parse_result.raw_text or "")
             definitions = [fact.obj for fact in facts]
             if is_bn:
@@ -2159,6 +2669,9 @@ class Brain:
         recalled = recall_data.get("semantic_facts", [])
         for fact in recalled:
             if fact.get("subject") == target_name and fact.get("predicate") == "is_a":
+                self._last_query_what_fact_keys = [
+                    (str(fact.get("subject", "")), str(fact.get("predicate", "")), str(fact.get("obj", "")))
+                ]
                 return f"{target_name} হলো {fact.get('obj', '')}।", 0.85
 
         # Phase 18: derive an answer from commonsense / stored knowledge
@@ -2437,6 +2950,12 @@ class Brain:
     def _phase_learn(self, parse_result: ParseResult | None, act_result: CycleResult) -> CycleResult:
         """LEARN phase: Update learning systems."""
         self.state.current_phase = "learn"
+        if self._assessment_mode:
+            return CycleResult(
+                phase=CognitivePhase.LEARN,
+                data={"assessment_mode": True, "learning_skipped": True},
+                success=True,
+            )
 
         success = act_result.success
         confidence = act_result.data.get("confidence", 0.5)
@@ -2510,6 +3029,12 @@ class Brain:
     def _phase_consolidate(self) -> CycleResult:
         """CONSOLIDATE phase: Move working memory to long-term storage."""
         self.state.current_phase = "consolidate"
+        if self._assessment_mode:
+            return CycleResult(
+                phase=CognitivePhase.CONSOLIDATE,
+                data={"assessment_mode": True, "consolidation_skipped": True},
+                success=True,
+            )
 
         consolidated = self.consolidator.consolidate(
             self.working_memory,

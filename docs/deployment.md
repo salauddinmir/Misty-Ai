@@ -63,7 +63,14 @@ After deploy, verify: `GET https://<service>.onrender.com/health` →
 ## 3. Vercel (frontend)
 
 The Next.js app at `apps/web/` ships a `vercel.json` describing the build
-(`next build`, output `.next`).
+(`next build`, output `.next`). A clean Vercel build runs `npm ci`, including
+the development-time TypeScript, Tailwind, and PostCSS tooling required by
+the build.
+
+> **Security follow-up:** the current locked Next.js major has a published
+> vulnerability notice. This patch intentionally does not perform a risky
+> framework-major migration; upgrade to a patched supported release in a
+> dedicated frontend migration with compatibility and deployment testing.
 
 1. In the Vercel dashboard, import the GitHub repo `salauddinmir/Misty-Ai`.
 2. Set **Root Directory** to `apps/web`.

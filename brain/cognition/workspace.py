@@ -204,6 +204,16 @@ class GlobalWorkspace:
             "hypothesis_count": len(self.hypotheses),
             "appraisal_count": len(self.appraisals),
             "best_hypothesis": best.to_dict() if best else None,
+            "recent_evidence": [
+                {
+                    "evidence_id": item.evidence_id,
+                    "source": item.source,
+                    "confidence": item.confidence,
+                    "polarity": item.polarity,
+                    "content": item.content,
+                }
+                for item in list(self.evidence)[-5:]
+            ],
             "recent_appraisals": [item.to_dict() for item in list(self.appraisals)[-3:]],
         }
 

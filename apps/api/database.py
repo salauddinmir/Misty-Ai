@@ -268,6 +268,29 @@ class Database:
             await self._connection.commit()
         return relation_id
 
+    async def update_relation(
+        self,
+        relation_id: str,
+        *,
+        weight: float,
+        confidence: float,
+    ) -> bool:
+        """Update a persisted relation's mutable state by durable ID.
+
+        Returns ``True`` only when the durable row exists. Callers can then
+        advance their persistence cache after the write has succeeded.
+        """
+        sql = (
+            "UPDATE relations SET weight = $1, confidence = $2 WHERE relation_id = $3"
+            if DRIVER == "postgres"
+            else "UPDATE relations SET weight = ?, confidence = ? WHERE relation_id = ?"
+        )
+        result = await self.execute(sql, (float(weight), float(confidence), relation_id))
+        if DRIVER == "postgres":
+            return str(result).rsplit(" ", 1)[-1] != "0"
+        await self._connection.commit()
+        return bool(result.rowcount)
+
     async def load_relations(self) -> List[Dict[str, Any]]:
         """Load all relations from the database."""
         rows = await self.fetchall("SELECT * FROM relations")
@@ -309,14 +332,23 @@ class Database:
             await self._connection.commit()
         return episode_id
 
-    async def load_episodes(self, limit: int = 100) -> List[Dict[str, Any]]:
-        """Load recent episodes from the database (newest first)."""
-        rows = await self.fetchall(
-            "SELECT * FROM episodes ORDER BY timestamp DESC LIMIT $1"
-            if DRIVER == "postgres"
-            else "SELECT * FROM episodes ORDER BY timestamp DESC LIMIT ?",
-            (limit,),
-        )
+    async def load_episodes(self, limit: int | None = 100) -> List[Dict[str, Any]]:
+        """Load episodes newest first, optionally without a row limit.
+
+        ``limit=None`` is the interim full-history path used to hydrate
+        semantic facts while they still share the generic episode table.
+        Integer limits retain the established recent-episode behavior. A
+        dedicated semantic-fact table should eventually replace this scan.
+        """
+        if limit is None:
+            rows = await self.fetchall("SELECT * FROM episodes ORDER BY timestamp DESC")
+        else:
+            rows = await self.fetchall(
+                "SELECT * FROM episodes ORDER BY timestamp DESC LIMIT $1"
+                if DRIVER == "postgres"
+                else "SELECT * FROM episodes ORDER BY timestamp DESC LIMIT ?",
+                (limit,),
+            )
         return [
             {
                 "episode_id": row[0],

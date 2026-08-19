@@ -17,6 +17,7 @@ from __future__ import annotations
 import sys
 import time
 from datetime import datetime, timezone
+from pathlib import Path
 
 from brain.core.brain import Brain
 from brain.knowledge.corpus_conversation import CONVERSATION_BENCHMARK
@@ -178,8 +179,10 @@ def run_case(brain: Brain, case: dict) -> bool:
     if expected:
         # Case-insensitive substring check for conversational parity.
         return expected.lower() in last.lower()
-    # Cases with empty expected just must not dead-end with an error token
-    return last is not None and "Traceback" not in last
+    # Empty-expected cases still require a substantive, non-error reply.
+    normalized = str(last or "").strip()
+    error_tokens = ("traceback", "exception", "internal server error", "error")
+    return bool(normalized) and not any(token in normalized.casefold() for token in error_tokens)
 
 
 def main() -> int:
@@ -266,8 +269,8 @@ def main() -> int:
         "রিপোর্ট তৈরি: Manus AI — MISTY (Pixline Incorporate)",
         "",
     ]
-    report_path = "/home/ubuntu/Misty-Ai/docs/misty_phase28_benchmark_report_bn.md"
-    with open(report_path, "w", encoding="utf-8") as fh:
+    report_path = Path(__file__).resolve().parents[1] / "docs" / "misty_phase28_benchmark_report_bn.md"
+    with report_path.open("w", encoding="utf-8") as fh:
         fh.write("\n".join(lines) + "\n")
 
     print(f"BENCHMARK {total} cases, {passed} passed, score={score:.4f} ({'PASS' if ok_all else 'FAIL'})")

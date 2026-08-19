@@ -1,18 +1,21 @@
-# MISTY - Artificial Cognitive System
-The idea by - Salauddin Mir / Founder of - Mistlook - Ai based Social Network Platform on Google Play
-MISTY is an experimental artificial cognitive system built **without any LLM dependency**. It combines a rule-based natural language understanding layer, a knowledge graph, working/episodic/semantic/procedural memory systems, an emotion engine, reinforcement learning, and a cognitive cycle (Observe → Interpret → Recall → Associate → Reason → Plan → Act → Evaluate → Learn → Consolidate).
+# MISTY — Hybrid Cognitive Research System
 
-> Note: Phase 1 neural simulation research (vectorized LIF populations, spiking encoding, brain regions) lives on the `phase-1-neural-core` branch. It is a research branch and has not yet been merged into `main`.
+MISTY is an **LLM-independent hybrid symbolic/neural cognitive research system**. Its default runtime is deterministic and symbolic: rule-based Bengali/English language parsing, a knowledge graph, working/episodic/semantic/procedural memory, bounded cognitive-workspace records, goals, affective state signals, and an inspectable Observe → Interpret → Recall → Associate → Reason → Plan → Act → Evaluate → Learn → Consolidate cycle.
+
+An optional spiking-neural simulation can contribute association activity when `Brain(use_neural_sim=True)` is selected. It is **off by default** in the API and is an experimental simulation path, not a claim of biological equivalence, consciousness, or human-level cognition.
 
 ## Features
 
-- **Bilingual NLU (Bengali + English)** — intent parsing via rule-based pattern matching
-- **Knowledge graph** — NetworkX-backed concepts and typed relations with activation
-- **4 memory systems** — working, episodic, semantic, procedural
-- **Cognitive cycle** — full observe→learn loop with reward feedback
-- **Emotion engine** — curiosity, confidence, frustration, satisfaction, etc.
-- **REST API + WebSocket** — FastAPI with a streaming brain-activity endpoint
-- **SQLite persistence** — concepts and relations survive server restarts
+- **Bengali + English NLU** — deterministic intent and entity parsing
+- **Knowledge graph** — NetworkX-backed concepts, typed relations, and spreading activation
+- **Four memory models** — working, episodic, semantic, and procedural
+- **Causal cognitive cycle** — recalled evidence and reasoning feed planning and action metadata
+- **Inspectable grounding** — response provenance, workspace evidence, self-model summary, and phase timings
+- **Deterministic math and physics engines** — bounded supported problem formats
+- **Optional neural simulation** — vectorized LIF populations and experimental neural association, default-off
+- **FastAPI + Next.js** — JSON/SSE chat APIs and a cognitive-trace frontend
+- **Persistence** — concepts, relations, semantic-fact episodes, procedures, and brain-state snapshots
+- **Prototype interfaces** — media feature extraction, voice, sensors, and safety-gated actuator bridges
 
 ## Quick Start
 
@@ -29,20 +32,23 @@ PYTHONPATH=. pytest tests/
 PYTHONPATH=. uvicorn apps.api.main:app --reload
 
 # 4. Start the frontend (in another terminal)
-cd web
-npm install
+cd apps/web
+npm ci
 npm run dev   # http://localhost:3000
 ```
 
 ## API
 
 | Endpoint | Method | Description |
-|----------|--------|-------------|
-| `/api/chat` | POST | Send a message; the brain runs a full cognitive cycle |
-| `/api/chat/media` | POST | Send image/audio input (base64) through the multimodal perception gateway — `{"modality": "image\|audio", "data": "<base64>", "message": "..."}`; the percept drives the neural sensory region and the cognitive cycle |
+|---|---|---|
+| `/api/chat` | POST | Run a text input through the cognitive cycle and return response/trace metadata |
+| `/api/chat/stream` | POST | Stream cognitive status and response text |
+| `/api/chat/media` | POST | Prototype image/audio feature-extraction gateway; it does not perform general visual or speech understanding |
 | `/api/brain/*` | GET | Inspect concepts, memories, and brain state |
-| `/ws/brain/activity` | WS | Real-time brain activity stream |
-| `/health` | GET | Health check |
+| `/api/sensors/*` | various | Transport-neutral sensor prototype APIs |
+| `/api/actuators/*` | various | Safety-gated actuator bridge APIs; dry-run is the intended research default |
+| `/ws/brain/activity` | WS | Brain-activity event stream |
+| `/health` | GET | Runtime readiness status |
 
 Example:
 
@@ -54,35 +60,33 @@ curl -X POST http://localhost:8000/api/chat \
 
 ## Architecture
 
+```text
+Input
+  │
+  ├─ deterministic Bengali/English NLU
+  ▼
+OBSERVE → INTERPRET → RECALL → ASSOCIATE → REASON
+        → PLAN → ACT → EVALUATE → LEARN → CONSOLIDATE
+  │
+  ├─ cognitive workspace and provenance-carrying evidence
+  ├─ knowledge graph and memory systems
+  ├─ goals, world model, appraisal, reflection, and deterministic engines
+  └─ optional/default-off spiking-neural association simulation
+  ▼
+Response + confidence + grounding + safe trace metadata
 ```
-User Input
-  |  rule-based NLU (Bengali/English)
-  v
-Cognitive Cycle: OBSERVE -> INTERPRET -> RECALL -> ASSOCIATE ->
-                 REASON -> PLAN -> ACT -> EVALUATE -> LEARN -> CONSOLIDATE
-  |
-  +-- Knowledge Graph (concepts + relations, activation spreading)
-  +-- Memory: working / episodic / semantic / procedural
-  +-- Emotion Engine + Reinforcement Learner (Q-table)
-  +-- SQLite persistence (concepts, relations, episodes, states)
-  |
-  v
-Response + metadata (confidence, emotional state, processing time)
-```
+
+The project is a research platform for testing explicit cognitive mechanisms. Progress should be evaluated through reproducible behavior, provenance, uncertainty calibration, persistence, safety, and symbolic-vs-neural ablations—not anthropomorphic or human-level claims.
 
 ## Project Status
 
 | Component | Status |
-|-----------|--------|
-| Cognitive cycle core | Implemented |
-| Bengali/English NLU | Implemented (rule-based) |
-| Knowledge graph + relations | Implemented + persisted |
-| 4 memory systems | Implemented; boot-restore from SQLite |
-| Emotion + RL | Basic implementation |
-| Planner / reflection / consolidation | Basic implementation |
-| Neural simulation (SNN) | Research branch `phase-1-neural-core` |
-| Vision / audio / speech / hardware | Planned (see `docs/phase-plan.md`) |
-
-## License
-
-See `LICENSE` for details.
+|---|---|
+| Cognitive cycle core | Implemented; actively being integrated and validated |
+| Bengali/English NLU | Implemented (rule-based, bounded coverage) |
+| Knowledge graph + relations | Implemented with persistence |
+| Memory models | Implemented; persistence coverage varies by memory type |
+| Emotion/appraisal and reinforcement learning | Basic computational state models |
+| Planning, reflection, consolidation | Basic research implementations |
+| Neural simulation (SNN) | Merged, experimental, optional, default-off |
+| Image/audio/voice/sensor/hardware | Prototype interfaces, not general perception or human-equivalent control |

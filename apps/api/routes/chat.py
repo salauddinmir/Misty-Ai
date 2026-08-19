@@ -8,6 +8,7 @@ returns the response with metadata.
 
 import asyncio
 import json
+import logging
 import re
 from collections.abc import AsyncIterator
 from typing import Any, Dict
@@ -17,6 +18,7 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field, field_validator
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 
 class ChatRequest(BaseModel):
@@ -61,13 +63,52 @@ class ChatResponse(BaseModel):
     active_concepts: Dict[str, float]
     emotional_state: Dict[str, float]
     brain_state: Dict[str, Any]
+    cognitive_workspace: Dict[str, Any] = Field(default_factory=dict)
+    thought_trace: Dict[str, Any] = Field(default_factory=dict)
+    self_model: Dict[str, Any] = Field(default_factory=dict)
+    phase_timings_ms: Dict[str, float] = Field(default_factory=dict)
     grounding: Dict[str, Any] = Field(default_factory=dict)
+
+
+def _ensure_persistence_indexes(app_state: Any) -> None:
+    """Create empty indexes before a turn when startup did not provide them."""
+    if not hasattr(app_state, "persisted_concept_ids"):
+        app_state.persisted_concept_ids = set()
+    if not hasattr(app_state, "persisted_relation_keys"):
+        app_state.persisted_relation_keys = set()
+    if not hasattr(app_state, "persisted_relation_state"):
+        app_state.persisted_relation_state = {}
+    if not hasattr(app_state, "persisted_fact_keys"):
+        app_state.persisted_fact_keys = set()
+
+
+def _track_persistence_task(app_state: Any, task: asyncio.Task[Any]) -> None:
+    """Keep a strong task reference and report asynchronous write failures."""
+    tasks = getattr(app_state, "persistence_tasks", None)
+    if tasks is None:
+        tasks = set()
+        app_state.persistence_tasks = tasks
+    app_state.pending_chat_persistence_tasks = tasks
+    tasks.add(task)
+
+    def _completed(done: asyncio.Task[Any]) -> None:
+        tasks.discard(done)
+        if done.cancelled():
+            return
+        try:
+            error = done.exception()
+        except asyncio.CancelledError:
+            return
+        if error is not None:
+            logger.error("Background persistence task failed: %s", error)
+
+    task.add_done_callback(_completed)
 
 
 async def _persist_chat_state(app_state: Any, database: Any, brain: Any, message: str, result: Dict[str, Any]) -> None:
     """Persist state without allowing database latency/failure to block chat."""
     try:
-        state = brain.get_state()
+        state = result.get("brain_state", {})
         await database.save_brain_state(
             cycle_count=state["cycle_count"],
             current_phase="idle",
@@ -81,16 +122,13 @@ async def _persist_chat_state(app_state: Any, database: Any, brain: Any, message
             persistence_lock = asyncio.Lock()
             app_state.chat_persistence_lock = persistence_lock
         async with persistence_lock:
-            if not hasattr(app_state, "persisted_concept_ids"):
-                app_state.persisted_concept_ids = set(brain.concept_graph._concepts)
-            if not hasattr(app_state, "persisted_relation_keys"):
-                app_state.persisted_relation_keys = set()
-            if not hasattr(app_state, "persisted_fact_keys"):
-                app_state.persisted_fact_keys = set()
+            persisted_concept_ids = app_state.persisted_concept_ids
+            persisted_relation_keys = app_state.persisted_relation_keys
+            persisted_fact_keys = app_state.persisted_fact_keys
             new_concepts = [
                 concept
                 for concept in brain.concept_graph._concepts.values()
-                if concept.concept_id not in app_state.persisted_concept_ids
+                if concept.concept_id not in persisted_concept_ids
             ]
             await asyncio.gather(
                 *(
@@ -105,32 +143,84 @@ async def _persist_chat_state(app_state: Any, database: Any, brain: Any, message
                     for concept in new_concepts
                 )
             )
-            app_state.persisted_concept_ids.update(concept.concept_id for concept in new_concepts)
-            new_relations = []
+            persisted_concept_ids.update(concept.concept_id for concept in new_concepts)
+
+            persisted_relation_state = app_state.persisted_relation_state
             for rel in brain.concept_graph.get_all_relations():
                 relation_key = (rel["source_id"], rel["target_id"], rel["relation_type"])
-                if relation_key not in app_state.persisted_relation_keys:
-                    new_relations.append((relation_key, rel))
-            relation_results = await asyncio.gather(
-                *(
-                    database.save_relation(
-                        source_id=rel["source_id"],
-                        target_id=rel["target_id"],
-                        relation_type=rel["relation_type"],
-                        weight=rel["weight"],
-                        confidence=rel["confidence"],
+                relation_id = rel.get("relation_id")
+                durable_state = persisted_relation_state.get(relation_key)
+
+                if relation_key not in persisted_relation_keys:
+                    try:
+                        relation_id = await database.save_relation(
+                            source_id=rel["source_id"],
+                            target_id=rel["target_id"],
+                            relation_type=rel["relation_type"],
+                            weight=rel["weight"],
+                            confidence=rel["confidence"],
+                        )
+                    except Exception as error:
+                        logger.error("Relation persistence failed for %s: %s", relation_key, error)
+                        continue
+                    brain.concept_graph.attach_relation_id(
+                        rel["source_id"],
+                        rel["target_id"],
+                        rel["relation_type"],
+                        relation_id,
                     )
-                    for _, rel in new_relations
-                ),
-                return_exceptions=True,
-            )
-            for (relation_key, _), saved in zip(new_relations, relation_results, strict=True):
-                if not isinstance(saved, Exception):
-                    app_state.persisted_relation_keys.add(relation_key)
+                    # Advance caches only after the insert succeeds.
+                    persisted_relation_keys.add(relation_key)
+                    persisted_relation_state[relation_key] = {
+                        "relation_id": relation_id,
+                        "weight": float(rel["weight"]),
+                        "confidence": float(rel["confidence"]),
+                    }
+                    continue
+
+                if durable_state is None:
+                    # Compatibility for callers that seeded only the legacy
+                    # key cache. Hydrated startup always supplies full state.
+                    if relation_id:
+                        persisted_relation_state[relation_key] = {
+                            "relation_id": relation_id,
+                            "weight": float(rel["weight"]),
+                            "confidence": float(rel["confidence"]),
+                        }
+                    continue
+
+                durable_id = relation_id or durable_state.get("relation_id")
+                if relation_id is None and durable_id:
+                    brain.concept_graph.attach_relation_id(
+                        rel["source_id"],
+                        rel["target_id"],
+                        rel["relation_type"],
+                        durable_id,
+                    )
+                weight_changed = float(rel["weight"]) != float(durable_state.get("weight", 1.0))
+                confidence_changed = float(rel["confidence"]) != float(durable_state.get("confidence", 1.0))
+                if not durable_id or not (weight_changed or confidence_changed):
+                    continue
+                try:
+                    updated = await database.update_relation(
+                        durable_id,
+                        weight=float(rel["weight"]),
+                        confidence=float(rel["confidence"]),
+                    )
+                except Exception as error:
+                    logger.error("Relation update failed for %s: %s", relation_key, error)
+                    continue
+                if not updated:
+                    logger.error("Relation update found no durable row for %s", relation_key)
+                    continue
+                # Advance mutable-state cache only after the update succeeds.
+                persisted_relation_state[relation_key] = {
+                    "relation_id": durable_id,
+                    "weight": float(rel["weight"]),
+                    "confidence": float(rel["confidence"]),
+                }
             new_facts = [
-                (key, fact)
-                for key, fact in brain.semantic_memory.facts.items()
-                if key not in app_state.persisted_fact_keys
+                (key, fact) for key, fact in brain.semantic_memory.facts.items() if key not in persisted_fact_keys
             ]
             fact_results = await asyncio.gather(
                 *(
@@ -151,10 +241,12 @@ async def _persist_chat_state(app_state: Any, database: Any, brain: Any, message
                 return_exceptions=True,
             )
             for (key, _), saved in zip(new_facts, fact_results, strict=True):
-                if not isinstance(saved, Exception):
-                    app_state.persisted_fact_keys.add(key)
+                if isinstance(saved, Exception):
+                    logger.error("Semantic-fact persistence failed for %s: %s", key, saved)
+                else:
+                    persisted_fact_keys.add(key)
     except Exception:
-        return
+        logger.exception("Chat-state persistence failed")
 
 
 async def _process_chat_turn(request: Request, body: ChatRequest) -> ChatResponse:
@@ -172,8 +264,10 @@ async def _process_chat_turn(request: Request, body: ChatRequest) -> ChatRespons
             detail="MISTY brain is still booting. Retry in a few seconds.",
             headers={"Retry-After": "3"},
         )
-    database = request.app.state.database
-    if not getattr(request.app.state, "warmup_complete", False):
+    app_state = request.app.state
+    _ensure_persistence_indexes(app_state)
+    database = app_state.database
+    if not getattr(app_state, "warmup_complete", False):
         try:
             brain.process(" ")
         except Exception:  # Warmup failure must never break a user turn
@@ -182,14 +276,8 @@ async def _process_chat_turn(request: Request, body: ChatRequest) -> ChatRespons
     result = brain.process(body.message)
     response_text = str(result.get("response") or "").strip()
     result["response"] = response_text or "I need a moment to form that reply. Please try asking again."
-    app_state = request.app.state
-    pending_tasks = getattr(app_state, "pending_chat_persistence_tasks", None)
-    if pending_tasks is None:
-        pending_tasks = set()
-        app_state.pending_chat_persistence_tasks = pending_tasks
     persistence_task = asyncio.create_task(_persist_chat_state(app_state, database, brain, body.message, result))
-    pending_tasks.add(persistence_task)
-    persistence_task.add_done_callback(pending_tasks.discard)
+    _track_persistence_task(app_state, persistence_task)
 
     return ChatResponse(
         response=result["response"],
@@ -198,6 +286,10 @@ async def _process_chat_turn(request: Request, body: ChatRequest) -> ChatRespons
         active_concepts=result["active_concepts"],
         emotional_state=result["emotional_state"],
         brain_state=result["brain_state"],
+        cognitive_workspace=result.get("cognitive_workspace", {}),
+        thought_trace=result.get("thought_trace", {}),
+        self_model=result.get("self_model", {}),
+        phase_timings_ms=result.get("phase_timings_ms", {}),
         grounding=result.get("grounding", {}),
     )
 
