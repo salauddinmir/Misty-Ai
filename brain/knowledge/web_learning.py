@@ -114,6 +114,12 @@ class WebSearchLearner:
     def __init__(self, brain: Any, user_agent: str = _WIKI_USER_AGENT) -> None:
         self.brain = brain
         self._user_agent = user_agent
+        # Phase 42: second-layer fact verification — every ALLOW'd candidate
+        # is checked for multi-source corroboration and internal
+        # consistency before it enters semantic memory.
+        from brain.learning.fact_verification import FactVerifier
+
+        self.fact_verifier = FactVerifier(brain)
         ctx = ssl.create_default_context()
         self._opener = urllib.request.build_opener(
             urllib.request.HTTPSHandler(context=ctx),
@@ -301,6 +307,18 @@ class WebSearchLearner:
                 }
             )
             if decision.decision is Decision.ALLOW:
+                # Phase 42: verify before committing — corroboration and
+                # conflict checks may retract older facts or lower the
+                # confidence of a single-source candidate.
+                if candidate.contradicts_existing:
+                    verdict, _reason, confidence_after = self._verify_and_resolve(candidate)
+                    if verdict == "retracted":
+                        result.quarantined.append(candidate)
+                        continue
+                    candidate.confidence = confidence_after
+                else:
+                    _verdict, _reason, confidence_after = self._verify_and_resolve(candidate)
+                    candidate.confidence = confidence_after
                 self.brain.semantic_memory.store_fact(
                     subject=candidate.subject,
                     predicate=candidate.predicate,
@@ -312,6 +330,25 @@ class WebSearchLearner:
             else:
                 result.quarantined.append(candidate)
         return result
+
+    # ------------------------------------------------------------------
+    # Phase 42: second-layer verification (corroboration + conflict)
+    # ------------------------------------------------------------------
+
+    def _verify_and_resolve(self, candidate: WebLearningCandidate) -> Tuple[str, str, float]:
+        """Run the Phase 42 verifier on one candidate and resolve any
+        conflict with the brain's own knowledge.
+
+        Returns (verdict, reason, confidence_after).
+        """
+        entry = self.fact_verifier.verify_triple(
+            subject=candidate.subject,
+            predicate=candidate.predicate,
+            obj=candidate.obj,
+            source_ref=candidate.source_ref,
+            observations=candidate.observations,
+        )
+        return entry.verdict, entry.reason, entry.confidence_after or candidate.confidence
 
     # ------------------------------------------------------------------
     # Phase 35: batch ingestion with topic weights and conflict detection

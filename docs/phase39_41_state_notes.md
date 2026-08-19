@@ -100,3 +100,34 @@ Next: Phase 41 self-correction (brain/learning/self_correction.py CorrectionAudi
 - tests/test_phase41_self_correction.py written (~11 tests incl. route TestBrainStateRoute).
 - Remaining: run tests, lint, full gate (pytest expect 902+11=913, benchmark 57/57, smoke), commit+push, CI verify, Render verify, then final Bengali report docs/phase39_41_completion_report_bn.md (attach to user message with report; mention phases 39-41 complete, 39 roadmap, 40 user memory, 41 self-correction).
 - Gate baseline after Phase 40: ruff clean, 902 tests, benchmark 57/57, smoke PASS. Phase 39 commit f2848cd, Phase 40 commit ed5f63f.
+
+## Phase 42 (fact verification) — IN PROGRESS
+
+### DONE
+- brain/learning/fact_verification.py WRITTEN: FactVerifier(brain), VerificationEntry, _domains(url_str)→hosts. verify_triple(subject,predicate,obj,source_ref,observations=1) → entry with verdict∈{corroborated(single_source ≥2 independent domains), single_source, conflicted, retracted}. Retract: stronger evidence (observations>=stored observations which is stored fact.confidence) → semantic_memory.remove_fact(key); else conflicted (keep stored). confidence_after: corroborated=0.95, single=0.6. Log bounded 100. summary(): enabled/min/verified_total/corroborated/retracted/conflicted/single_source/recent(3).
+- brain/knowledge/web_learning.py: WebSearchLearner.__init__ now creates self.fact_verifier = FactVerifier(brain) (lazy import). ingest() ALLOW path: _verify_and_resolve(candidate) → (verdict, reason, confidence_after); if contradicts_existing and verdict=="retracted" → quarantined+continue; else candidate.confidence = confidence_after before store_fact.
+- brain/core/brain.py: self.fact_verifier = self.web_learner.fact_verifier in __init__ (line ~215); get_state key "fact_verification": self.fact_verifier.summary().
+- apps/api/routes/brain.py: fact_verification: Dict[str, Any] | None = None field added to BrainStateResponse.
+- tests/test_phase42_fact_verification.py written (17 tests).
+
+### DEBUG FINDINGS (critical)
+- SemanticMemory.query() kwargs are subject/predicate/obj (NOT subj). Test file uses subject=/predicate= after fix.
+- evaluate_learning requires observations >= min_consolidation_observations (default 2) for ALLOW; provenance mandatory; contradicts_existing → QUARANTINE (first gate).
+- Queries for "X" return 27k chars of facts (training corpus injects many). verify_triple retract works; earlier test failures were because query(obj='Y') matched stored fact obj 'Y'?? No — the assert [] was brain.semantic_memory.query(subject='X', predicate='is_a', obj='Y') returning [] because remove was followed by store only if verdict retracted — store happens in TEST via verifier.verify_triple? NO: verifier does NOT store (it only removes). The test asserted query(obj='Y') after verify — but entry.verdict=="retracted" removed Z and DID NOT store Y. Fix test: after retraction, challenger still not in memory; test should assert Z removed and Y NOT stored, OR call store_fact manually. Also test same_fact_not_conflict: verifier doesn't store; query('Y') was [] because fact was stored in Brain() then... actually it returned []?? Earlier assertion was `entry.verdict == "single_source"` — fine.
+- Test fix needed: for retracted test, verifier removes old + verdict retracted; new fact NOT stored by verifier (brain ingest stores after _verify_and_resolve only if not retracted). So assertion "assert brain.semantic_memory.query(... obj='Y')" must be REMOVED, or verify separately.
+
+### REMAINING Phase 42
+1. Fix tests/test_phase42_fact_verification.py per findings above (17 tests; 5 currently failing: conflict_retract_with_stronger_evidence [assert [] on obj=Y], conflict_kept [verdict expected conflicted but got retracted? see line 72 'retracted'=='conflicted'], ingest_runs_verification [assert result.facts_learned []], contradicting [line 172 assert []], corroborated [line 188 assert []])
+2. Note: conflict_kept test expects 'conflicted' but got 'retracted' — stored confidence 1.0 vs observations 1 → but _find_conflict returns observations=fact.confidence=1.0; challenger observations=1 → >=, so retracted. Fix: use stored confidence 0.9 or challenger observations=1 and expectation: when evidence equal → retract wins (by design). Adjust test: store at confidence 1.0, challenger observations=1 → retracted (acceptable); or test kept when stored obs > challenger: store confidence 2.0? Better: store fact with a wrapper attribute? SemanticFact.confidence used as observations proxy; simplest test design: conflicted case = stored fact.confidence=1.5 (evidence stronger than challenger obs=1).
+3. ingest tests: facts_learned empty because _stub_search snippets' triple key support: 'The platypus is a monotreme' / 'lays eggs and nurses young' → different objects → each support entry observations=1 → REJECT (observations<2). Fix stubs: same-object snippets from same domain OR two snippets yielding same triple (e.g. 'The platypus is a monotreme' + 'The platypus is a monotreme mammal'). For corroborated test: both 'Mars is a planet' → same triple, two domains → observations=2 ALLOW, corroborated (2 domains).
+4. Then ruff format/check, pytest full gate (expect 918+17=935), benchmark 57/57, smoke, commit+push, CI wait.
+
+## Phase 42 STATUS: ALL GATES PASS — READY TO COMMIT+PUSH
+
+Tests 935 passed, benchmark 57/57 (100%), smoke production ALL PASS, ruff clean, ruff format applied (3 files reformatted).
+
+Files: brain/learning/fact_verification.py (FactVerifier/VerificationEntry/_domains), brain/knowledge/web_learning.py (fact_verifier in __init__, _verify_and_resolve + ingest hook), brain/core/brain.py (self.fact_verifier alias, fact_verification in get_state), apps/api/routes/brain.py (fact_verification field), tests/test_phase42_fact_verification.py (17 tests).
+
+KEY SEMANTICS (for Phase 43+): verifier.verify_triple verdicts: retracted (observations >= stored confidence proxy), conflicted (weaker evidence — keeps stored), corroborated (2+ independent domains → confidence 0.95), single_source (confidence 0.6). Verifier NEVER stores challenger; only retracts + logs. ingest() tests: identical extract triple needed for observations>=2; asyncio.run() not get_event_loop() in tests (pytest-asyncio auto mode).
+
+NEXT: commit+push Phase 42, wait CI, then Phase 43 (personal recall integration in conversation responses) per master plan.

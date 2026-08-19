@@ -209,6 +209,10 @@ class Brain:
         # answer against the brain's own knowledge, accepts provable
         # corrections, and logs every attempt for inspection.
         self.correction_auditor = CorrectionAuditor()
+        # Phase 42: fact verification — a second, stricter layer over web
+        # learning: multi-source corroboration, internal consistency
+        # checks, and an inspectable verdict audit trail.
+        self.fact_verifier = self.web_learner.fact_verifier
         self._learning_quarantine: List[Dict[str, Any]] = []
 
         # Emotion
@@ -3754,6 +3758,9 @@ class Brain:
             # brain received, how many it accepted, and the last
             # correction event (claim, marker, reason).
             "self_correction": self.correction_auditor.summary(),
+            # Phase 42: fact-verification audit — corroboration and
+            # conflict verdicts from the latest verification run.
+            "fact_verification": self.fact_verifier.summary(),
             # Phase 6: goal-driven behavior snapshot.
             "active_goal": (
                 {"goal_id": g.goal_id, "description": g.description, "progress": g.progress, "status": g.status.value}
