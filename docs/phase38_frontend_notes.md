@@ -40,3 +40,8 @@
 - Lint green. NEXT: run pytest, benchmark 57/57, smoke; then merge branch into main, push; CI verify; Render auto-deploys on push.
 - Frontend already live (done earlier). Backend deploys via Render git auto-deploy.
 - Note: my branch name myphase38 — merge to main then push main.
+
+## RENDER DEPLOY STATUS (verified via dashboard, 07:45 AM)
+The misty-brain service (srv-da16bpe7bikc738f34j0) IS connected to salauddinmir/Misty-Ai main branch and auto-deployed: commit 8817b62 "Deploy live" at 7:39 AM (started 7:38 AM). Deployment LIVE. The earlier "old code" responses I observed were from the previous live build (17f8ebd); new build 8817b62 is now serving. The Render dashboard also shows a notification banner "You've been migrated to our new Hobby plan". Latest deploy shows green check = live.
+My remaining verification: hit https://misty-brain.onrender.com POST /api/chat with (1) 'তুমি কি করছো?' expecting no "এটা আমারও পছন্দের" opener, (2) 'কি খবর?' expecting grounded answer, (3) check /api/brain/state for active_concepts non-empty + memory_recall + last_confidence fields. Then write final Bengali summary report and deliver.
+Frontend (Vercel) update already live from earlier. GitHub Actions CI for 8817b62 pending check — verify with gh run list.

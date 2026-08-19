@@ -69,7 +69,7 @@ def test_high_interest_gets_enthusiastic_tone(mapper):
     )
     assert plan.style == "enthusiastic"
     assert plan.length_hint == "detailed"
-    assert plan.opener in ("এটা নিয়ে ভেবে দেখি।", "এটা আমারও পছন্দের বিষয়।", "এখান থেকেই শুরু করি।"), plan.opener
+    assert plan.opener in ("এটা নিয়ে ভেবে দেখি।", "আমি আপনার কথাটা মনোদিয়ে শুনছি।", "এখান থেকেই শুরু করি।"), plan.opener
 
 
 def test_low_attention_gets_short_tone(mapper):
