@@ -52,6 +52,10 @@ class BrainStateResponse(BaseModel):
     # corrections_accepted, last_correction event). Empty until the first
     # visitor challenges one of the brain's answers.
     self_correction: Dict[str, Any] | None = None
+    # Phase 43: visitor id bound to the last cycle and the personal
+    # facts/episodes that grounded its reply.
+    current_user_id: str = "anon"
+    personal_recall: Dict[str, Any] | None = None
 
 
 class ConceptResponse(BaseModel):

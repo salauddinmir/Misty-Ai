@@ -68,6 +68,9 @@ class ChatResponse(BaseModel):
     self_model: Dict[str, Any] = Field(default_factory=dict)
     phase_timings_ms: Dict[str, float] = Field(default_factory=dict)
     grounding: Dict[str, Any] = Field(default_factory=dict)
+    # Phase 43: the visitor's remembered facts and episodes that grounded
+    # this turn — personalized long-term memory exposed per reply.
+    personal_recall: Dict[str, Any] = Field(default_factory=dict)
 
 
 def _resolve_user_id(request: Request) -> str:
@@ -330,13 +333,12 @@ async def _process_chat_turn(request: Request, body: ChatRequest) -> ChatRespons
         except Exception:  # Warmup failure must never break a user turn
             pass
         request.app.state.warmup_complete = True
-    result = brain.process(body.message)
+    # Phase 43: resolve the visitor id first so personal recall grounds
+    # the cycle and the reply; Phase 40 then remembers the turn for them.
+    user_id = _resolve_user_id(request)
+    result = brain.process(body.message, user_id=user_id)
     response_text = str(result.get("response") or "").strip()
     result["response"] = response_text or "I need a moment to form that reply. Please try asking again."
-    # Phase 40: per-user memory — remember this turn for the visitor so
-    # facts and follow-up recollection are personalized, and persist it
-    # through the same background persistence task.
-    user_id = _resolve_user_id(request)
     _record_user_turn(brain, user_id, body.message, result)
     persistence_task = asyncio.create_task(
         _persist_chat_state(app_state, database, brain, body.message, result, user_id=user_id)
@@ -355,6 +357,7 @@ async def _process_chat_turn(request: Request, body: ChatRequest) -> ChatRespons
         self_model=result.get("self_model", {}),
         phase_timings_ms=result.get("phase_timings_ms", {}),
         grounding=result.get("grounding", {}),
+        personal_recall=result.get("personal_recall", {}),
     )
 
 

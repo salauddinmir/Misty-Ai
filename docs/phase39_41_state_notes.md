@@ -131,3 +131,15 @@ Files: brain/learning/fact_verification.py (FactVerifier/VerificationEntry/_doma
 KEY SEMANTICS (for Phase 43+): verifier.verify_triple verdicts: retracted (observations >= stored confidence proxy), conflicted (weaker evidence — keeps stored), corroborated (2+ independent domains → confidence 0.95), single_source (confidence 0.6). Verifier NEVER stores challenger; only retracts + logs. ingest() tests: identical extract triple needed for observations>=2; asyncio.run() not get_event_loop() in tests (pytest-asyncio auto mode).
 
 NEXT: commit+push Phase 42, wait CI, then Phase 43 (personal recall integration in conversation responses) per master plan.
+
+## Phase 43 progress (Aug 20)
+- DONE: brain.py — process(text_input, user_id), current_user_id, _last_personal_recall,
+  _phase_personal_recall(parse) → dict (user_id, preferred_language, fact_matches[:4], episode_matches[:4]);
+  merged into _phase_recall after semantic facts → recalled["personal_context"] + Evidence broadcast
+  (personal_fact conf 0.85, personal_episode conf 0.7); result dict has "personal_recall": self._last_personal_recall;
+  get_state: current_user_id + personal_recall.
+- DONE: routes/chat.py — user_id resolved BEFORE brain.process; ChatResponse.personal_recall; result field passed.
+- DONE: routes/brain.py — BrainStateResponse: current_user_id: str = "anon", personal_recall: Dict|None = None.
+- DONE: tests/test_phase43_personal_recall.py — 11 tests pass (chat client needs database on app.state + brain router).
+- ruff clean. Regression 946 passed.
+- TODO: ruff format, benchmark 57/57, smoke, commit+push, CI, then phase43 report (phase 10 of plan).

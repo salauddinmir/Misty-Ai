@@ -204,6 +204,11 @@ class Brain:
         # conversation episodes, so personal questions ("কাল আমি কী
         # বলেছিলাম?") are answered from real recollection.
         self.user_memory = UserProfileMemory()
+        # Phase 43: personal recall is bound to the visitor id for each
+        # cycle so that a user's remembered facts and episodes can join
+        # the cognitive evidence of their turns.
+        self.current_user_id: str = "anon"
+        self._last_personal_recall: Dict[str, Any] = {}
         # Phase 41: self-correction — when a visitor challenges the brain
         # ("এটা ভুল", "that's wrong"), the auditor re-checks the previous
         # answer against the brain's own knowledge, accepts provable
@@ -429,15 +434,17 @@ class Brain:
         # Concept encoder for neural patterns
         self._concept_encoder = ConceptEncoder(population_size=512, sparsity=0.07)
 
-    def process(self, text_input: str) -> Dict[str, Any]:
+    def process(self, text_input: str, user_id: str | None = None) -> Dict[str, Any]:
         """Process a text input through the full cognitive cycle.
         This is the main entry point for interacting with the brain.
         Args:
             text_input: Natural language input (Bengali or English).
+            user_id: Visitor id whose remembered profile grounds this
+                cycle's personal recall (defaults to ``"anon"``).
         Returns:
             Dictionary with response, brain state, and processing details.
         """
-        return self._run_cycle(text_input=text_input, source="text")
+        return self._run_cycle(text_input=text_input, source="text", user_id=user_id)
 
     def process_sensor_event(self, event: SensorEvent) -> Dict[str, Any]:
         """Process a hardware sensor reading through the cognitive cycle.
@@ -463,9 +470,12 @@ class Brain:
         text_input: str,
         source: str = "text",
         sensor_event: SensorEvent | None = None,
+        user_id: str | None = None,
     ) -> Dict[str, Any]:
         """Shared cognitive-cycle implementation for text and sensor input."""
         start_time = time_module.time()
+        # Phase 43: bind this cycle to the visitor id for personal recall.
+        self.current_user_id = (user_id or "anon").strip() or "anon"
         self.state.last_input = text_input
         self.workspace.reset_cycle(goal="answer" if source == "text" else "monitor")
         self.workspace.broadcast_event(
@@ -671,6 +681,9 @@ class Brain:
             "self_model": self.self_model.summary(),
             "grounding": grounded_utterance.to_dict(),
             "phase_timings_ms": dict(self.cycle.phase_timings_ms),
+            # Phase 43: the personal facts/episodes that grounded this
+            # reply (bound to the visitor id for this cycle).
+            "personal_recall": self._last_personal_recall,
         }
 
     def _phase_observe(self, text_input: str) -> CycleResult:
@@ -1470,6 +1483,36 @@ class Brain:
 
         parse_result.query["target"] = target_name
 
+    def _phase_personal_recall(self, parse_result: ParseResult | None) -> Dict[str, Any]:
+        """Phase 43: pull the current visitor's remembered facts and recent
+        episodes whose text overlaps the query, and merge them into the
+        RECALL evidence so answers can be grounded in what Misty knows
+        about the person she is talking to.
+
+        Never raises: a personal-memory hiccup must not break a turn.
+        """
+        context: Dict[str, Any] = {
+            "user_id": self.current_user_id,
+            "preferred_language": "unknown",
+            "fact_matches": [],
+            "episode_matches": [],
+        }
+        try:
+            user_memory = getattr(self, "user_memory", None)
+            if user_memory is None or not parse_result:
+                return context
+            query_text = parse_result.raw_text or ""
+            if not query_text.strip():
+                return context
+            recall = user_memory.personal_recall(self.current_user_id, query_text)
+            context["preferred_language"] = recall.get("preferred_language", "unknown")
+            context["fact_matches"] = recall.get("fact_matches", [])[:4]
+            context["episode_matches"] = recall.get("episode_matches", [])[:4]
+        except Exception:
+            # Personal recall is best-effort; the turn keeps working.
+            return context
+        return context
+
     def _phase_recall(self, parse_result: ParseResult | None) -> CycleResult:
         """RECALL phase: retrieve memories and broadcast their provenance."""
         self.state.current_phase = "recall"
@@ -1527,6 +1570,33 @@ class Brain:
                 recalled["evidence_ids"].append(evidence.evidence_id)
                 semantic_facts.append(record)
             recalled["semantic_facts"] = semantic_facts
+
+        # Phase 43: personal recall — the visitor's remembered facts and
+        # recent episodes that overlap the query join this cycle's
+        # cognitive evidence, so replies can be grounded in what Misty
+        # remembers about the person she is talking to.
+        personal_context = self._phase_personal_recall(parse_result)
+        if personal_context.get("fact_matches") or personal_context.get("episode_matches"):
+            self._last_personal_recall = personal_context
+            recalled["personal_context"] = personal_context
+            for fact in personal_context.get("fact_matches", []):
+                evidence = Evidence(
+                    source="personal_memory",
+                    content={"kind": "personal_fact", **fact},
+                    confidence=0.85,
+                )
+                self.workspace.broadcast_evidence(evidence)
+                fact["evidence_id"] = evidence.evidence_id
+                recalled["evidence_ids"].append(evidence.evidence_id)
+            for episode in personal_context.get("episode_matches", []):
+                evidence = Evidence(
+                    source="personal_memory",
+                    content={"kind": "personal_episode", **episode},
+                    confidence=0.7,
+                )
+                self.workspace.broadcast_evidence(evidence)
+                episode["evidence_id"] = evidence.evidence_id
+                recalled["evidence_ids"].append(evidence.evidence_id)
 
         if target_name:
             episode_hits = self.episodic_memory.recall_by_content(target_name)
@@ -3761,6 +3831,10 @@ class Brain:
             # Phase 42: fact-verification audit — corroboration and
             # conflict verdicts from the latest verification run.
             "fact_verification": self.fact_verifier.summary(),
+            # Phase 43: the visitor id this cycle is bound to and the
+            # personal facts/episodes that grounded the last reply.
+            "current_user_id": self.current_user_id,
+            "personal_recall": self._last_personal_recall,
             # Phase 6: goal-driven behavior snapshot.
             "active_goal": (
                 {"goal_id": g.goal_id, "description": g.description, "progress": g.progress, "status": g.status.value}
