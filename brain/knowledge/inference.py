@@ -172,8 +172,11 @@ class InferenceSynthesizer:
         def _poss_norm(text: str) -> str:
             # Phase 30: strip possessive "'s" tokens and collapse spaces so
             # "Ohm's Law" (tokens "ohm", "law") matches stored subjects.
+            # Phase 31: also collapse hyphens so "Visva-Bharati" tokens
+            # "visva" + "bharati" match the hyphenated stored subject.
             return " ".join(
-                part for part in text.replace("'s", " ").split() if part != "s"
+                part for part in text.replace("'s", " ").replace("-", " ").split()
+                if part != "s"
             )
 
         _norm_to_stored = {_poss_norm(subj): subj for subj in stored}

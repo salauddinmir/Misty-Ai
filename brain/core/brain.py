@@ -42,6 +42,7 @@ from brain.knowledge.commonsense import (
 )
 from brain.knowledge.inference import InferenceSynthesizer
 from brain.knowledge.personality import ResponseVariator
+from brain.knowledge.training_literature import register_literature_curriculum
 from brain.knowledge.training_mathematics import register_mathematics_curriculum
 from brain.knowledge.training_physics import register_physics_curriculum
 from brain.learning.consolidation import MemoryConsolidator
@@ -272,6 +273,9 @@ class Brain:
         # Phase 30: load the full bilingual physics curriculum — mechanics,
         # energy, gravitation, electricity, waves and thermal concepts.
         register_physics_curriculum(self)
+        # Phase 31: load the bilingual Bengali literature curriculum —
+        # Tagore, Nazrul, Jibanananda Das and the literary renaissance.
+        register_literature_curriculum(self)
 
     def _init_neural_simulation(self) -> None:
         """Initialize the neural simulation engine with brain regions.
