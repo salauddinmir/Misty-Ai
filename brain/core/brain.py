@@ -1078,6 +1078,20 @@ class Brain:
         # (process(), Phase 25) then installs the full farewell line.
         if parse_result.entities.get("closure"):
             return ("", 0.9)
+        # A bare teaching command carries nothing to store, so ask for the
+        # content instead of implying that something was remembered.
+        if parse_result.entities.get("clarification_needed") == "teach_payload_missing":
+            is_bengali = any("\u0980" <= char <= "\u09ff" for char in parse_result.raw_text or "")
+            if is_bengali:
+                return (
+                    "কী মনে রাখব? পুরো তথ্যটি বলুন — যেমন "
+                    '"মনে রাখো: আকাশের রঙ নীল" বা "মনে রাখো: কিনেটিক এনার্জি হলো গতির শক্তি"। '
+                    "এখনো কিছু সংরক্ষণ করিনি।"
+                ), 0.6
+            return (
+                'What should I remember? Give me the full fact, for example "remember: the sky is blue". '
+                "I have not stored anything yet."
+            ), 0.6
         # Phase 28: safe-humor requests get a joke as the actual reply
         # instead of an unknown fallback with a tacked-on joke.
         if self.tone_mapper._user_humor(parse_result.raw_text):
@@ -1089,6 +1103,26 @@ class Brain:
             opener = "একটি ছোট্ট রসিকতা শোনাই — " if is_bn else "Here is a small joke for you — "
             return f"{opener}{joke}", 0.7
         self_model_text = self._self_model_phrase()
+
+        # Status questions ("কি করা হচ্ছে", "কি করছেন", "what are you doing")
+        # are answered from the actual runtime state instead of a greeting.
+        if re.search(r"(কি|কী)\s*কর(?:া\s*হ|ছেন|ছিল)|what\s+(?:are\s+you|is\s+being)\s+doing", text):
+            is_bengali = any("\u0980" <= char <= "\u09ff" for char in parse_result.raw_text or "")
+            goal = self.state.context.get("active_goal")
+            if is_bengali:
+                return (
+                    f"এই মুহূর্তে আমি আপনার শেষ বাক্যটি প্রক্রিয়া করছি — cycle #{self.cycle.cycle_count + 1}, "
+                    f"বর্তমান ধাপ: {self.state.current_phase}। আমার knowledge graph-এ "
+                    f"{self.semantic_memory.size} টি fact এবং {len(self.state.active_concepts)} টি সক্রিয় ধারণা আছে"
+                    f"{f', সক্রিয় লক্ষ্য: {goal}' if goal else ''}। "
+                    "আপনি চাইলে নতুন কিছু শেখাতে বা প্রশ্ন করতে পারেন।"
+                ), 0.8
+            return (
+                f"Right now I am processing your last message — cycle #{self.cycle.cycle_count + 1}, "
+                f"current phase: {self.state.current_phase}. I hold {self.semantic_memory.size} facts and "
+                f"{len(self.state.active_concepts)} active concepts"
+                f"{f', active goal: {goal}' if goal else ''}."
+            ), 0.8
 
         # Bengali "ভাবছো/করছো" queries expose the current thinking state.
         if re.search(r"ভাবছ|কি করছ", text):
@@ -1820,7 +1854,7 @@ class Brain:
                 parse_result.intent == IntentType.QUERY_WHO
                 and relation in {"creator_of", "made_by"}
                 and (str(target_name).casefold() in self_names or str(subject).casefold() in self_references)
-            )
+            ) or bool(parse_result.entities.get("self_identity"))
             if protected_identity_query:
                 response, confidence = self._act_query_self(parse_result)
                 identity_evidence = Evidence(
@@ -2062,6 +2096,7 @@ class Brain:
             IntentType.CONTINUATION: "continue_topic",
             IntentType.CAPABILITY_QUERY: "describe_capabilities",
             IntentType.RECOGNITION_QUERY: "recall_identity",
+            IntentType.LIST_QUERY: "answer_list",
         }
         plan = plan_by_intent.get(parse_result.intent, "request_clarification")
         executable = plan in set(plan_by_intent.values()) | {"request_clarification"}
@@ -2111,6 +2146,7 @@ class Brain:
             "continue_topic": {IntentType.CONTINUATION},
             "describe_capabilities": {IntentType.CAPABILITY_QUERY},
             "recall_identity": {IntentType.RECOGNITION_QUERY},
+            "answer_list": {IntentType.LIST_QUERY},
             "converse_friendly": {IntentType.CONVERSATION},
             "greet_back": {IntentType.GREETING},
             "solve_mathematics": {IntentType.MATH},
@@ -2193,6 +2229,8 @@ class Brain:
             response, confidence = self._act_capability(parse_result)
         elif plan == "recall_identity":
             response, confidence = self._act_recognition(parse_result)
+        elif plan == "answer_list":
+            response, confidence = self._act_list_query(parse_result)
         elif plan == "converse_friendly":
             response, confidence = self._act_conversation(parse_result)
             grounding_source = "fallback"
@@ -2600,6 +2638,175 @@ class Brain:
             )
         return response, 0.35
 
+    # Predicates whose objects name members of a category, used by list
+    # answers so only genuinely enumerable knowledge is returned.
+    _LIST_MEMBER_PREDICATES = (
+        "includes",
+        "অন্তর্ভুক্ত",
+        "উদাহরণ",
+        "example",
+        "member",
+        "সদস্য",
+        "type_of",
+    )
+
+    def _topic_members(self, topic: str) -> List[tuple[str, str, float]]:
+        """Collect stored items that belong to ``topic``.
+
+        Returns ``(item, source, confidence)`` triples gathered from
+        membership facts, reverse ``is_a`` facts, and graph relations. Only
+        real stored knowledge is returned; nothing is invented.
+        """
+        members: Dict[str, tuple[str, float]] = {}
+
+        def _add(name: str, source: str, confidence: float) -> None:
+            name = (name or "").strip()
+            if not name or name.casefold() == topic.casefold():
+                return
+            existing = members.get(name)
+            if existing is None or confidence > existing[1]:
+                members[name] = (source or "semantic_memory", confidence)
+
+        for predicate in self._LIST_MEMBER_PREDICATES:
+            for fact in self.semantic_memory.query(subject=topic, predicate=predicate):
+                for part in re.split(r"[,;\u0964]|\s+ও\s+|\s+এবং\s+", fact.obj):
+                    _add(part, fact.source, float(fact.confidence))
+
+        # Reverse "X is_a topic" facts enumerate category members.
+        for fact in self.semantic_memory.facts.values():
+            if fact.predicate not in {"is_a", "type_of", "সংজ্ঞা"}:
+                continue
+            if topic.casefold() in str(fact.obj).casefold():
+                _add(fact.subject, fact.source, float(fact.confidence))
+
+        topic_concept = self.concept_graph.get_concept_by_name(topic)
+        if topic_concept:
+            for relation in self.concept_graph.get_relations(topic_concept.concept_id, direction="both"):
+                if relation.get("relation_type") not in {
+                    "includes",
+                    "is_a",
+                    "type_of",
+                    "wrote",
+                    "translated",
+                }:
+                    continue
+                other_id = (
+                    relation.get("target")
+                    if relation.get("source") == topic_concept.concept_id
+                    else relation.get("source")
+                )
+                other = self.concept_graph.get_concept(other_id) if other_id else None
+                if other:
+                    _add(other.name, "knowledge_graph", float(relation.get("confidence", 0.8)))
+
+        # Concepts typed by the topic ("কবিতা" typed works) also qualify.
+        for concept in list(getattr(self.concept_graph, "_concepts", {}).values()):
+            concept_type = str(getattr(concept, "concept_type", "") or "")
+            if concept_type and concept_type.casefold() in topic.casefold():
+                _add(concept.name, "knowledge_graph", 0.8)
+
+        return [(name, source, confidence) for name, (source, confidence) in members.items()]
+
+    def _related_topic_facts(self, topic: str, limit: int = 2) -> str:
+        """Summarize stored facts that mention ``topic`` without listing members."""
+        words = [
+            word
+            for word in re.findall(r"[A-Za-z\u0980-\u09ff]+", topic)
+            if len(word) > 2 and word.casefold() not in self._SALIENT_STOP_TOKENS
+        ]
+        # Only the head noun qualifies: a broader word would surface facts
+        # that do not actually belong to the requested category.
+        words = words[-1:]
+        summaries: List[str] = []
+        for fact in self.semantic_memory.facts.values():
+            haystack = f"{fact.subject} {fact.obj}".casefold()
+            if any(word.casefold() in haystack for word in words):
+                summaries.append(f"{fact.subject} — {fact.obj}")
+            if len(summaries) >= limit:
+                break
+        return "; ".join(dict.fromkeys(summaries))
+
+    def _act_list_query(self, parse_result: ParseResult) -> tuple:
+        """Answer "... নাম বলো" requests from stored knowledge only.
+
+        The reply states how many items are actually known so a partial
+        answer is never presented as a complete authoritative list.
+        """
+        topic = str(parse_result.query.get("target") or parse_result.entities.get("list_topic") or "").strip()
+        requested = parse_result.query.get("count")
+        is_bengali = any("\u0980" <= char <= "\u09ff" for char in parse_result.raw_text or topic)
+        if not topic:
+            return (
+                ("কোন বিষয়ের নামগুলো চাইছেন, একটু নির্দিষ্ট করে বলুন।" if is_bengali else "Which topic should I list?"),
+                0.3,
+            )
+
+        members = self._topic_members(topic)
+        # Fall back only to the head noun of the phrase ("ভারতের আশ্চর্য" ->
+        # "আশ্চর্য"). Broader words such as "ভারত" must never be substituted,
+        # because listing unrelated India facts as "wonders" would be wrong.
+        if not members:
+            content_words = [
+                word
+                for word in re.findall(r"[A-Za-z\u0980-\u09ff]+", topic)
+                if len(word) > 2 and word.casefold() not in self._SALIENT_STOP_TOKENS
+            ]
+            if content_words:
+                members = self._topic_members(content_words[-1])
+
+        deduped: Dict[str, tuple[str, float]] = {}
+        for name, source, confidence in members:
+            current = deduped.get(name)
+            if current is None or confidence > current[1]:
+                deduped[name] = (source, confidence)
+        ranked = sorted(deduped.items(), key=lambda item: item[1][1], reverse=True)
+
+        if not ranked:
+            self.emotion.update_from_outcome(success=False)
+            related = self._related_topic_facts(topic)
+            if related and is_bengali:
+                return (
+                    f"{topic} সম্পর্কে যাচাই করা পূর্ণ তালিকা আমার কাছে নেই, তাই বানিয়ে বলব না। "
+                    f"তবে সম্পর্কিত যা জানি: {related}। চাইলে শেখাতে পারেন: "
+                    f'"মনে রাখো: {topic} এর অন্তর্ভুক্ত X, Y, Z"।'
+                ), 0.4
+            if related:
+                return (
+                    f"I do not have a verified full list for {topic}, so I will not invent one. "
+                    f"Related knowledge I do have: {related}. You can teach me with "
+                    f'"remember: {topic} includes X, Y, Z".'
+                ), 0.4
+            if is_bengali:
+                return (
+                    f"{topic} সম্পর্কিত নামের তালিকা এখনো আমার জ্ঞানভাণ্ডারে নেই, তাই অনুমান করে বলব না। "
+                    f'আপনি শেখাতে পারেন: "মনে রাখো: {topic} এর অন্তর্ভুক্ত X, Y, Z" — তাহলে আমি মনে রাখব।'
+                ), 0.3
+            return (
+                f"I do not have a stored list for {topic} yet, so I will not guess. "
+                f'You can teach me with "remember: {topic} includes X, Y, Z".'
+            ), 0.3
+
+        limit = requested if isinstance(requested, int) and requested > 0 else min(len(ranked), 7)
+        shown = [name for name, _ in ranked[:limit]]
+        self._last_query_what_fact_keys = []
+        numbered = "; ".join(f"{index}. {name}" for index, name in enumerate(shown, start=1))
+        confidence = min(0.9, max(0.55, sum(meta[1] for _, meta in ranked[:limit]) / max(1, len(shown))))
+
+        if is_bengali:
+            answer = f"আমার সংরক্ষিত জ্ঞান অনুসারে {topic} সম্পর্কিত যা জানি: {numbered}।"
+            if isinstance(requested, int) and requested > len(shown):
+                answer += (
+                    f" আপনি {requested} টি চেয়েছিলেন, কিন্তু যাচাই করা তথ্যে আমি {len(shown)} টি পেয়েছি — বাকিগুলো অনুমান করব না।"
+                )
+        else:
+            answer = f"From my stored knowledge about {topic}: {numbered}."
+            if isinstance(requested, int) and requested > len(shown):
+                answer += (
+                    f" You asked for {requested}, but I only have {len(shown)} verified item(s); "
+                    "I will not invent the rest."
+                )
+        return answer, confidence
+
     def _act_query_self(self, parse_result: ParseResult) -> tuple:
         """Answer identity questions about MISTY herself.
 
@@ -2962,6 +3169,13 @@ class Brain:
                 synthesis.confidence,
             )
 
+        # A bare topic phrase ("বাংলা কবিতা") is an implicit request for what
+        # the brain knows, so answer from stored knowledge before echoing a
+        # generic acknowledgement.
+        topic_reply = self._topic_knowledge_reply(parse_result.raw_text or "")
+        if topic_reply is not None:
+            return topic_reply
+
         # Plain statement without extractable facts: acknowledge using
         # the current conversation context so it does not feel robotic.
         salient = self.dialogue_context.get_salient_entities()
@@ -2977,6 +3191,55 @@ class Brain:
                 '"মনে রাখো ..." বা "X হলো Y" ফরম্যাটে।'
             )
         return ack, 0.5
+
+    def _topic_knowledge_reply(self, text: str) -> tuple | None:
+        """Answer a short bare topic phrase from stored knowledge.
+
+        Only applies to compact noun phrases with no sentence structure, so
+        ordinary statements keep their existing acknowledgement path.
+        """
+        phrase = re.sub(r"[?!।\u0964\uff1f.]+$", "", (text or "").strip())
+        words = phrase.split()
+        if not phrase or len(words) > 4:
+            return None
+        lowered = {word.casefold() for word in words}
+        if lowered & (self._INTERROGATIVE_TOKENS | self._PRONOUN_TOKENS):
+            return None
+        # Verb-like Bengali endings indicate a sentence rather than a topic.
+        if any(re.search(r"(হলো|হয়|করে|করি|আছে|ছিল|বলো|দাও|চাই)$", word) for word in words):
+            return None
+
+        is_bengali = any("\u0980" <= char <= "\u09ff" for char in phrase)
+        candidates = [phrase]
+        candidates.extend(word for word in words if len(word) > 2)
+
+        for candidate in candidates:
+            facts = self._definition_or_concept(candidate)
+            if not facts or not isinstance(facts, list):
+                continue
+            self._last_query_what_fact_keys = [(fact.subject, fact.predicate, fact.obj) for fact in facts[:3]]
+            details = ", ".join(dict.fromkeys(fact.obj for fact in facts[:3]))
+            confidence = min(0.9, min(float(fact.confidence) for fact in facts[:3]))
+            if is_bengali:
+                answer = f"{candidate} সম্পর্কে আমার সংরক্ষিত জ্ঞান: {details}।"
+            else:
+                answer = f"From my stored knowledge, {candidate} is {details}."
+            members = self._topic_members(candidate)[:5]
+            if members:
+                names = ", ".join(dict.fromkeys(name for name, _, _ in members))
+                answer += f" এই বিষয়ে আমি যেগুলো চিনি: {names}।" if is_bengali else f" Related items I know: {names}."
+            return answer, confidence
+
+        # No definition, but the topic may still have known members.
+        for candidate in candidates:
+            members = self._topic_members(candidate)[:7]
+            if len(members) >= 2:
+                names = ", ".join(dict.fromkeys(name for name, _, _ in members))
+                confidence = min(0.85, sum(item[2] for item in members) / len(members))
+                if is_bengali:
+                    return f"{candidate} সম্পর্কে আমার জানা বিষয়গুলো: {names}। কোনটি নিয়ে বিস্তারিত বলব?", confidence
+                return f"About {candidate} I know: {names}. Which one should I expand on?", confidence
+        return None
 
     def _act_teach(self, parse_result: ParseResult) -> tuple:
         """Handle explicit teaching ("মনে রাখো ...", "I know that ...").

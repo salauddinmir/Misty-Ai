@@ -73,17 +73,45 @@ class PhysicsEngine:
         "current",
     )
 
+    # Bengali word forms that contain a physics marker as a prefix but are
+    # ordinary vocabulary rather than physics terms. Without this guard the
+    # force marker "বল" matches the verb "বলো" ("say"), so an ordinary Bengali
+    # request ending in "নাম বলো" is misrouted to the physics solver.
+    _BN_MARKER_EXCLUSIONS: ClassVar[dict[str, tuple[str, ...]]] = {
+        "বল": (
+            "বলো",
+            "বলুন",
+            "বলবেন",
+            "বলবে",
+            "বলছি",
+            "বলছেন",
+            "বলছ",
+            "বলা",
+            "বললে",
+            "বললেন",
+            "বলল",
+            "বলেছে",
+            "বলেছেন",
+            "বলেন",
+            "বলে",
+        ),
+    }
+
     @classmethod
     def _has_marker(cls, text: str, marker: str) -> bool:
         """Match a physics term as a token, not as a substring.
 
         Bengali-only markers match by substring instead, because Bengali
         inflections (for example "ওহম" inside "ওহমে") would otherwise fail
-        the token boundary check against vowel-sign code points.
+        the token boundary check against vowel-sign code points. Known
+        non-physics word forms are removed first so an unrelated verb cannot
+        impersonate a physics quantity.
         """
         if marker == "g =":
             return marker in text
         if all("\u0980" <= char <= "\u09ff" for char in marker):
+            for excluded in cls._BN_MARKER_EXCLUSIONS.get(marker, ()):
+                text = text.replace(excluded, " ")
             return marker in text
         escaped = re.escape(marker)
         return re.search(rf"(?<![\w\u0980-\u09FF]){escaped}(?![\w\u0980-\u09FF])", text) is not None
