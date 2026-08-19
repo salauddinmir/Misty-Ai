@@ -52,6 +52,10 @@ class BrainStateResponse(BaseModel):
     # recent decay/prune decisions, half-life config). Empty until the
     # brain runs its first autonomous reflection tick.
     fact_aging: Dict[str, Any] | None = None
+    # Phase 45: consolidation audit (total_decisions, counts by action,
+    # recent rehearsal/merge/removal decisions, sweep config). Empty until
+    # the brain runs its first autonomous reflection tick.
+    consolidation: Dict[str, Any] | None = None
     # Phase 41: self-correction audit (challenges_received,
     # corrections_accepted, last_correction event). Empty until the first
     # visitor challenges one of the brain's answers.

@@ -49,6 +49,7 @@ from brain.knowledge.training_mathematics import register_mathematics_curriculum
 from brain.knowledge.training_physics import register_physics_curriculum
 from brain.knowledge.web_learning import WebSearchLearner
 from brain.learning.consolidation import MemoryConsolidator
+from brain.learning.consolidation_sweep import ConsolidationEngine
 from brain.learning.curiosity import CuriosityExplorer
 from brain.learning.fact_aging import FactAger
 from brain.learning.induction import EvidenceGatedInducer
@@ -224,6 +225,10 @@ class Brain:
         # confidence while curated facts stay stable; facts that fall
         # below the prune threshold are removed with an audit log.
         self.fact_ager = FactAger(self)
+        # Phase 45: consolidation sweep — rehearsal of mid-confidence facts,
+        # cleanup of quarantine losers and duplicate merge of web-learned
+        # claims, all with an inspectable audit log.
+        self.consolidation_engine = ConsolidationEngine(self)
         self._learning_quarantine: List[Dict[str, Any]] = []
 
         # Emotion
@@ -3685,6 +3690,8 @@ class Brain:
         # Phase 44: one bounded aging sweep per reflection tick — web-learned
         # facts decay and stale facts prune with an inspectable log.
         self.fact_ager.age_facts()
+        # Phase 45: one bounded consolidation sweep per reflection tick.
+        self.consolidation_engine.consolidation_sweep()
         active_goal = self.goal_manager.active_goal()
         goal_text = active_goal.description if active_goal else "review unresolved knowledge"
         uncertainty = self.self_model.uncertainty
@@ -3843,6 +3850,9 @@ class Brain:
             # Phase 44: fact-aging audit — decay and pruning decisions
             # made on web-learned facts since boot.
             "fact_aging": self.fact_ager.summary(),
+            # Phase 45: consolidation audit — rehearsal, quarantine cleanup
+            # and duplicate-merge decisions since boot.
+            "consolidation": self.consolidation_engine.summary(),
             # Phase 43: the visitor id this cycle is bound to and the
             # personal facts/episodes that grounded the last reply.
             "current_user_id": self.current_user_id,
