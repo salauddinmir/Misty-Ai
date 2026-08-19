@@ -1,7 +1,7 @@
 {
   "buildCommand": "next build",
   "outputDirectory": ".next",
-  "installCommand": "npm ci --omit=dev || npm install",
+  "installCommand": "npm ci",
   "framework": "nextjs",
   "headers": [
     {

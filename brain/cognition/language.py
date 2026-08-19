@@ -15,6 +15,9 @@ class GroundedUtterance:
     uncertainty: float
     claims: tuple[str, ...]
     strategy: str
+    grounding_source: str = "fallback"
+    evidence_sources: tuple[str, ...] = ()
+    evidence_ids: tuple[str, ...] = ()
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -24,6 +27,9 @@ class GroundedUtterance:
             "uncertainty": self.uncertainty,
             "claims": list(self.claims),
             "strategy": self.strategy,
+            "grounding_source": self.grounding_source,
+            "evidence_sources": list(self.evidence_sources),
+            "evidence_ids": list(self.evidence_ids),
         }
 
 
@@ -44,13 +50,16 @@ class LanguageGrounder:
         evidence_count: int,
         hypothesis_count: int,
         strategy: str = "deterministic_action",
+        grounding_source: str = "fallback",
+        evidence_sources: tuple[str, ...] = (),
+        evidence_ids: tuple[str, ...] = (),
     ) -> GroundedUtterance:
         has_bengali = any("\u0980" <= char <= "\u09ff" for char in raw_input)
         claims: list[str] = []
         if evidence_count:
             claims.append("workspace_evidence")
-        if hypothesis_count:
-            claims.append("workspace_hypothesis")
+            if hypothesis_count:
+                claims.append("workspace_hypothesis")
         if intent in {"math", "physics"}:
             claims.append(f"deterministic_{intent}_engine")
         if not claims:
@@ -64,4 +73,7 @@ class LanguageGrounder:
             uncertainty=round(1.0 - bounded_confidence, 6),
             claims=tuple(claims),
             strategy=strategy,
+            grounding_source=grounding_source,
+            evidence_sources=tuple(dict.fromkeys(evidence_sources)),
+            evidence_ids=tuple(dict.fromkeys(evidence_ids)),
         )

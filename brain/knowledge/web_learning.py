@@ -339,8 +339,17 @@ class WebSearchLearner:
         * Teaching report: returns a dict with ``learned``, ``quarantined``,
           and ``skipped`` per topic plus the aggregate conflict list.
         """
+        if isinstance(min_agreement_sources, bool) or not isinstance(min_agreement_sources, int):
+            raise TypeError("min_agreement_sources must be an integer")
+        if min_agreement_sources < 1:
+            raise ValueError("min_agreement_sources must be at least 1")
+        normalized_topics = [topic.strip() for topic in topics if topic.strip()]
         weights = topic_weights or {}
-        teaching_report: Dict[str, Any] = {"topics": [], "cross_topic_conflicts": []}
+        teaching_report: Dict[str, Any] = {
+            "topics": normalized_topics,
+            "cross_topic_conflicts": [],
+            "assessment_config": {"min_agreement_sources": min_agreement_sources},
+        }
 
         # Phase 1: collect (subject, predicate, object) -> list of urls
         # across ALL topics, grouped by (subject, predicate) so that
@@ -348,7 +357,7 @@ class WebSearchLearner:
         # and multi-source agreement (same subject+obj, >=2 urls) can both
         # be computed on the merged pool.
         support: Dict[Tuple[str, str], Dict[str, Any]] = {}
-        for topic in topics:
+        for topic in normalized_topics:
             weight = max(float(weights.get(topic, 1.0)), 0.1)
             ceiling = max(1, int(max_facts_per_topic * weight))
             # Weight-aware search effort: high-weight topics consult more
@@ -395,6 +404,7 @@ class WebSearchLearner:
                         entry["topics"].append(topic)
         # Phase 2: cross-topic conflict gate, then multi-source agreement.
         learned: List[Dict[str, Any]] = []
+        pending_commits: List[tuple[WebLearningCandidate, Dict[str, Any]]] = []
         quarantined: List[Dict[str, Any]] = []
         skipped: List[Dict[str, Any]] = []
         conflicts: List[Dict[str, Any]] = []
@@ -437,6 +447,7 @@ class WebSearchLearner:
                     {
                         **triple,
                         "observations": len(urls),
+                        "required_agreement_sources": min_agreement_sources,
                         "topics": entry["topics"],
                         "skip_reason": "insufficient_source_agreement",
                     }
@@ -467,14 +478,7 @@ class WebSearchLearner:
                 "topics": entry["topics"],
             }
             if decision.decision is Decision.ALLOW:
-                self.brain.semantic_memory.store_fact(
-                    subject=candidate.subject,
-                    predicate=candidate.predicate,
-                    obj=candidate.obj,
-                    confidence=candidate.confidence,
-                    source="web_learning_batch",
-                )
-                learned.append(record)
+                pending_commits.append((candidate, record))
             else:
                 record["quarantine_reason"] = decision.reason
                 quarantined.append(record)
@@ -490,17 +494,64 @@ class WebSearchLearner:
                 ):
                     brain_quarantine.append(q)
 
+        # Capture the matched baseline before the first candidate fact is
+        # committed. Assessment failures never block the learning commit.
+        assessor = getattr(self, "post_learning_assessor", None)
+        prepared_assessment = None
+        assessment_failed = False
+        if assessor is not None and pending_commits:
+            try:
+                prepared_assessment = assessor.prepare_assessment(
+                    normalized_topics,
+                    min_agreement_sources=min_agreement_sources,
+                )
+            except Exception:
+                assessment_failed = True
+
+        for candidate, record in pending_commits:
+            fact_key = f"{candidate.subject}:{candidate.predicate}:{candidate.obj}"
+            if fact_key in self.brain.semantic_memory.facts:
+                skipped.append({**record, "skip_reason": "already_present"})
+                continue
+            try:
+                self.brain.semantic_memory.store_fact(
+                    subject=candidate.subject,
+                    predicate=candidate.predicate,
+                    obj=candidate.obj,
+                    confidence=candidate.confidence,
+                    source="web_learning_batch",
+                )
+            except Exception:
+                skipped.append({**record, "skip_reason": "commit_failed"})
+                continue
+            learned.append(record)
+
         teaching_report["learned"] = learned
         teaching_report["quarantined"] = quarantined
         teaching_report["skipped"] = skipped
         teaching_report["cross_topic_conflicts"] = conflicts
-        # Phase 37 — post-learning self-assessment loop: after every batch
-        # ingestion, the attached assessor re-runs the related benchmark
-        # cases so learning outcomes are measured, not assumed.
-        assessor = getattr(self, "post_learning_assessor", None)
+        teaching_report["committed_facts"] = len(learned)
+
         if assessor is not None:
-            try:
-                teaching_report.update(assessor.assess_after_learning(topics))
-            except Exception:  # assessment must never break learning
+            if not learned:
                 teaching_report["post_learning_assessment"] = None
+                teaching_report["assessment_status"] = "skipped_no_ingestion"
+            elif assessment_failed or prepared_assessment is None:
+                teaching_report["post_learning_assessment"] = None
+                teaching_report["assessment_status"] = "baseline_failed"
+            else:
+                try:
+                    teaching_report.update(
+                        assessor.assess_after_learning(
+                            normalized_topics,
+                            min_agreement_sources=min_agreement_sources,
+                            prepared=prepared_assessment,
+                            committed_facts=len(learned),
+                            committed_records=learned,
+                        )
+                    )
+                    teaching_report["assessment_status"] = "completed"
+                except Exception:  # assessment must never break learning
+                    teaching_report["post_learning_assessment"] = None
+                    teaching_report["assessment_status"] = "post_assessment_failed"
         return teaching_report

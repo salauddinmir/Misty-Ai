@@ -7,13 +7,13 @@ Benchmarks neuron simulation speed at different scales:
 - Target: 10,000 neurons simulated in < 10ms per timestep
 """
 
-import time
 import sys
+import time
 
 import numpy as np
 
-from brain.neurons.vectorized import VectorizedPopulation
 from brain.neurons.populations import NeuronPopulation
+from brain.neurons.vectorized import VectorizedPopulation
 
 
 def benchmark_vectorized(size: int, n_steps: int = 100) -> float:

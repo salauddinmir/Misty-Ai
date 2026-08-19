@@ -84,16 +84,13 @@ class TestPostLearningAssessor(unittest.TestCase):
         self.assertIn("baseline_score", first)
         self.assertEqual(first["baseline_score"], second["baseline_score"])
 
-    def test_first_run_improved_when_it_knows_anything(self) -> None:
-        """With no prior report available, the first run is "improved" as
-        long as it demonstrates learning produced any known answers."""
-        # Patch the gap assessor so its last_report is None (simulating a
-        # fresh brain that has never self-tested).
+    def test_first_run_without_a_commit_does_not_claim_improvement(self) -> None:
+        """A matched no-op comparison must not claim causal improvement."""
         with mock.patch.object(self.assessor.gap_assessor, "last_report", return_value=None):
             self.assessor.assess_after_learning(["কী"])
         last = self.assessor.last_run()
         self.assertIsNotNone(last)
-        self.assertTrue(last.improved)
+        self.assertFalse(last.improved)
 
     def test_history_and_trend(self) -> None:
         self.assessor.assess_after_learning(["কী"])

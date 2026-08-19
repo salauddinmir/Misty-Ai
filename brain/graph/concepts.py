@@ -58,7 +58,7 @@ class ConceptGraph:
         self._graph: nx.DiGraph = nx.DiGraph()
         self._concepts: Dict[str, Concept] = {}
         self._name_index: Dict[str, str] = {}  # name -> concept_id
-        self._relation_ids: Dict[str, str] = {}  # "source_id|target_id" -> relation_id
+        self._relation_ids: Dict[tuple[str, str, str], str] = {}
 
     def add_concept(self, concept: Concept) -> None:
         """Add a concept to the graph."""
@@ -81,6 +81,30 @@ class ConceptGraph:
         self.add_concept(concept)
         return concept
 
+    def replace_concept(self, old_id: str, concept: Concept) -> None:
+        """Replace a transient concept ID while preserving all graph edges.
+
+        This is used during persistence hydration when startup curriculum
+        created the same named concept under a new transient ID.
+        """
+        if old_id == concept.concept_id:
+            self._concepts[old_id] = concept
+            self._name_index[concept.name.lower()] = old_id
+            self._graph.nodes[old_id]["concept"] = concept
+            return
+        if old_id not in self._concepts:
+            self.add_concept(concept)
+            return
+        incoming = [(source, dict(data)) for source, _, data in self._graph.in_edges(old_id, data=True)]
+        outgoing = [(target, dict(data)) for _, target, data in self._graph.out_edges(old_id, data=True)]
+        self._graph.remove_node(old_id)
+        self._concepts.pop(old_id, None)
+        self.add_concept(concept)
+        for source, data in incoming:
+            self._graph.add_edge(concept.concept_id if source == old_id else source, concept.concept_id, **data)
+        for target, data in outgoing:
+            self._graph.add_edge(concept.concept_id, concept.concept_id if target == old_id else target, **data)
+
     def get_concept(self, concept_id: str) -> Concept | None:
         """Get a concept by its ID."""
         return self._concepts.get(concept_id)
@@ -99,17 +123,37 @@ class ConceptGraph:
         relation_type: str,
         weight: float = 1.0,
         confidence: float = 1.0,
+        relation_id: str | None = None,
     ) -> bool:
         """Add a directed relation between two concepts."""
         if source_id not in self._concepts or target_id not in self._concepts:
             return False
-        self._graph.add_edge(
-            source_id,
-            target_id,
-            relation_type=relation_type,
-            weight=weight,
-            confidence=confidence,
-        )
+        edge_data: Dict[str, Any] = {
+            "relation_type": relation_type,
+            "weight": weight,
+            "confidence": confidence,
+        }
+        if relation_id:
+            edge_data["relation_id"] = relation_id
+            self._relation_ids[(source_id, target_id, relation_type)] = relation_id
+        self._graph.add_edge(source_id, target_id, **edge_data)
+        return True
+
+    def attach_relation_id(
+        self,
+        source_id: str,
+        target_id: str,
+        relation_type: str,
+        relation_id: str,
+    ) -> bool:
+        """Attach a newly-created durable ID to its in-memory graph edge."""
+        if not self._graph.has_edge(source_id, target_id):
+            return False
+        edge = self._graph[source_id][target_id]
+        if edge.get("relation_type") != relation_type:
+            return False
+        edge["relation_id"] = relation_id
+        self._relation_ids[(source_id, target_id, relation_type)] = relation_id
         return True
 
     def update_relation_weight(self, relation_id: str, weight: float) -> bool:
@@ -144,7 +188,7 @@ class ConceptGraph:
             src, tgt = rel["source_id"], rel["target_id"]
             if src not in self._concepts or tgt not in self._concepts:
                 continue
-            self._graph.add_edge(
+            self.add_relation(
                 src,
                 tgt,
                 relation_type=rel["relation_type"],
@@ -168,6 +212,7 @@ class ConceptGraph:
                         "source": concept_id,
                         "target": target,
                         "relation_type": data.get("relation_type", "related_to"),
+                        "relation_id": data.get("relation_id"),
                         "weight": data.get("weight", 1.0),
                         "confidence": data.get("confidence", 1.0),
                     }
@@ -180,6 +225,7 @@ class ConceptGraph:
                         "source": source,
                         "target": concept_id,
                         "relation_type": data.get("relation_type", "related_to"),
+                        "relation_id": data.get("relation_id"),
                         "weight": data.get("weight", 1.0),
                         "confidence": data.get("confidence", 1.0),
                     }
@@ -239,7 +285,7 @@ class ConceptGraph:
 
         Returns:
             List of dicts with source_id, target_id, relation_type,
-            weight and confidence for every edge.
+            relation_id, weight and confidence for every edge.
         """
         relations = []
         for source_id, target_id, data in self._graph.edges(data=True):
@@ -248,6 +294,7 @@ class ConceptGraph:
                     "source_id": source_id,
                     "target_id": target_id,
                     "relation_type": data.get("relation_type", "related_to"),
+                    "relation_id": data.get("relation_id"),
                     "weight": data.get("weight", 1.0),
                     "confidence": data.get("confidence", 1.0),
                 }

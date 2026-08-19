@@ -16,8 +16,8 @@ Expected flow:
 No LLM involved at any point.
 """
 
-import sys
 import os
+import sys
 
 # Add project root to path
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -121,7 +121,8 @@ def run_mvp_test() -> bool:
     # Step 3: Query (Association & Recall)
     # =====================================================
     separator("Step 3: Query - Who created MistLook?")
-    input_3 = "MistLook \u0995\u09c7 \u09a4\u09c8\u09b0\u09bf \u0995\u09b0\u09c7\u099b\u09c7?"  # Bengali: MistLook ke toiri korechhe?
+    # Bengali: MistLook ke toiri korechhe?
+    input_3 = "MistLook \u0995\u09c7 \u09a4\u09c8\u09b0\u09bf \u0995\u09b0\u09c7\u099b\u09c7?"
     print(f"  Input: \"{input_3}\"")
     result_3 = brain.process(input_3)
     print(f"  Response: \"{result_3['response']}\"")

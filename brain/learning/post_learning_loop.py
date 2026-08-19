@@ -1,33 +1,16 @@
-"""
-Phase 37 — post-learning self-assessment loop (শেখানোর-পর-স্ব-মূল্যায়ন চক্র).
-
-After every web-learning batch, Misty automatically re-tests itself on the
-benchmark cases that relate to the topics it just learned, compares the new
-answers against the pre-learning answers, and updates its topic-wise
-scorecard. Nothing here is heuristic LLM judgement: everything is measured
-against the deterministic benchmark from Phase 28 and the gap assessor
-from Phase 33.
-
-Design (per docs/misty_master_plan_bn.md, Phase 37):
-1. Every batch ingestion auto re-runs the relevant benchmark cases.
-2. Answer differences (before vs after) are reported per case.
-3. The topic-wise scorecard is updated and history is retained.
-
-Success criterion: benchmark score demonstrably rising after learning.
-"""
+"""Deterministic pre/post assessment for web-learning batches."""
 
 from __future__ import annotations
 
+import copy
 import time
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Sequence
 
 from brain.knowledge.corpus_conversation import CONVERSATION_BENCHMARK
 from brain.learning.self_assessment import GapAssessor, GapReport
 
-# The Phase 28 CLI (tests/benchmark_conversation.py) annotates cases by id
-# prefix; mirror that mapping here so entries land in the right topic
-# buckets of the scorecard.
 _CASE_CATEGORY: Dict[str, str] = {
     "conv_bn_greeting": "greeting",
     "conv_bn_context": "context",
@@ -54,8 +37,7 @@ def _case_category(case: Dict[str, str]) -> str:
 
 
 class _CaseFilter:
-    """Deterministic filter that selects benchmark cases relevant to a set
-    of learned topics (simple keyword containment on the case input)."""
+    """Select benchmark cases whose input contains a learned topic."""
 
     @staticmethod
     def relevant_cases(topics: Sequence[str], cases: List[Dict[str, str]]) -> List[Dict[str, str]]:
@@ -65,9 +47,21 @@ class _CaseFilter:
         return [case for case in cases if any(needle in case.get("input", "").lower() for needle in needles)]
 
 
+@dataclass(frozen=True)
+class PreparedAssessment:
+    """Frozen case set and baseline captured before candidate facts commit."""
+
+    topics: tuple[str, ...]
+    cases: tuple[Dict[str, str], ...]
+    before: GapReport
+    started_at: float
+    min_agreement_sources: int
+    selection_mode: str
+    evaluation_brain: Any
+
+
 class AssessmentRun:
-    """One post-learning self-assessment run: before/after scores and the
-    per-case answer diffs for the relevant benchmark cases."""
+    """A matched before/after assessment over one frozen case set."""
 
     def __init__(
         self,
@@ -78,6 +72,10 @@ class AssessmentRun:
         before_answers: List[str],
         after_answers: List[str],
         elapsed: float,
+        *,
+        min_agreement_sources: int = 2,
+        selection_mode: str = "topic_match",
+        committed_facts: int | None = None,
     ) -> None:
         self.topics = list(topics)
         self.cases = cases
@@ -86,152 +84,211 @@ class AssessmentRun:
         self.before_answers = before_answers
         self.after_answers = after_answers
         self.elapsed = elapsed
+        self.min_agreement_sources = min_agreement_sources
+        self.selection_mode = selection_mode
+        self.committed_facts = committed_facts
         self.run_at = datetime.now(timezone.utc).isoformat()
 
     @property
     def improved(self) -> bool:
-        """True when the post-learning score is strictly higher, or the
-        before state is unavailable (first learning) and the after state
-        demonstrates learning occurred."""
-        if self.before is None:
-            return self.after.known_count > 0
+        """Report improvement only when a comparable baseline increased."""
+        if self.before is None or self.committed_facts == 0:
+            return False
         return self.after.score > self.before.score
 
     def diffs(self) -> List[Dict[str, Any]]:
-        """Per-case answer differences for cases whose outcome changed."""
+        """Return answer changes for the matched cases."""
         out: List[Dict[str, Any]] = []
         for idx, case in enumerate(self.cases):
-            changed = (
-                idx < len(self.before_answers)
-                and idx < len(self.after_answers)
-                and self.before_answers[idx] != self.after_answers[idx]
+            if idx >= len(self.before_answers) or idx >= len(self.after_answers):
+                continue
+            if self.before_answers[idx] == self.after_answers[idx]:
+                continue
+            out.append(
+                {
+                    "case_index": idx,
+                    "case_id": case.get("id", f"case_{idx}"),
+                    "input": case.get("input", ""),
+                    "expected": case.get("expected", ""),
+                    "answer_before": self.before_answers[idx],
+                    "answer_after": self.after_answers[idx],
+                }
             )
-            if changed:
-                out.append(
-                    {
-                        "case_index": idx,
-                        "input": case.get("input", ""),
-                        "expected": case.get("expected", ""),
-                        "answer_before": self.before_answers[idx],
-                        "answer_after": self.after_answers[idx],
-                    }
-                )
         return out
 
     def to_dict(self) -> Dict[str, Any]:
         return {
             "topics": self.topics,
             "assessed_cases": len(self.cases),
+            "case_ids": [case.get("id", f"case_{idx}") for idx, case in enumerate(self.cases)],
+            "selection_mode": self.selection_mode,
             "run_at": self.run_at,
             "elapsed_seconds": round(self.elapsed, 4),
             "before": self.before.to_dict() if self.before else None,
             "after": self.after.to_dict(),
+            "comparison_available": self.before is not None,
             "improved": self.improved,
             "answer_diffs": self.diffs(),
+            "committed_facts": self.committed_facts,
+            "assessment_config": {
+                "min_agreement_sources": self.min_agreement_sources,
+            },
         }
 
 
 class PostLearningAssessor:
-    """Holds assessment history and runs before/after evaluations around
-    batch ingestions (``assess_after_learning``).
+    """Capture a baseline before commit and assess the same cases after it."""
 
-    Wired into WebSearchLearner.ingest_batch (see ``attach_to_learner``)
-    and called automatically after every batch ingestion.
-    """
-
-    def __init__(self, brain: Any) -> None:
+    def __init__(self, brain: Any, *, gap_assessor: GapAssessor | None = None) -> None:
         self.brain = brain
-        self.gap_assessor = GapAssessor(brain)
+        self.gap_assessor = gap_assessor or getattr(brain, "gap_assessor", None) or GapAssessor(brain)
         self.history: List[AssessmentRun] = []
 
-    # ------------------------------------------------------------------
-    # Internal helpers
-    # ------------------------------------------------------------------
-
-    def _selected_cases(self, topics: Sequence[str]) -> List[Dict[str, str]]:
-        """Benchmark cases whose input mentions the learned topics; if none
-        match, fall back to a deterministic subset of the Phase 28
-        benchmark so the loop always produces data. Each returned case
-        carries the "category" key the gap assessor uses for topic
-        buckets."""
+    def _selected_cases(self, topics: Sequence[str]) -> tuple[List[Dict[str, str]], str]:
         filtered = _CaseFilter.relevant_cases(topics, CONVERSATION_BENCHMARK)
         if filtered:
             cases = filtered
+            selection_mode = "topic_match"
         else:
-            # Deterministic fallback: every 7th case up to 10.
-            cases = [case for case in CONVERSATION_BENCHMARK[::7]][:10]
-        return [{**case, "category": _case_category(case)} for case in cases]
+            cases = list(CONVERSATION_BENCHMARK[::7])[:10]
+            selection_mode = "deterministic_fallback"
+        return ([{**case, "category": _case_category(case)} for case in cases], selection_mode)
 
-    def _collect_answers(self, cases: List[Dict[str, str]]) -> List[str]:
-        """Run the selected cases once and return the final answers, so the
-        next evaluation can compare exact outputs (not only pass/fail)."""
-        answers: List[str] = []
-        for case in cases:
-            try:
-                result = self.brain.process(case["input"])
-            except Exception:  # pragma: no cover - defensive
-                answers.append("")
-                continue
-            response = result.get("response") if isinstance(result, dict) else None
-            answers.append(response or "")
-        return answers
+    @staticmethod
+    def _answers(report: GapReport) -> List[str]:
+        return [entry.answer for entry in report.entries]
 
-    # ------------------------------------------------------------------
-    # Public API
-    # ------------------------------------------------------------------
+    def _evaluation_clone(self) -> Any:
+        """Create an isolated evaluator with the same learned knowledge."""
+        clone = type(self.brain)(use_neural_sim=False)
+        for attribute in (
+            "semantic_memory",
+            "concept_graph",
+            "episodic_memory",
+            "procedural_memory",
+            "working_memory",
+            "emotion",
+            "state",
+            "world",
+            "goal_manager",
+            "variator",
+            "conversation_driver",
+            "dialogue_context",
+            "self_model",
+            "recall_scorer",
+            "hebbian",
+        ):
+            setattr(clone, attribute, copy.deepcopy(getattr(self.brain, attribute)))
+        clone.user_name = self.brain.user_name
+        clone.enable_assessment_mode()
+        return clone
+
+    def prepare_assessment(
+        self,
+        topics: Sequence[str],
+        *,
+        min_agreement_sources: int = 2,
+    ) -> PreparedAssessment | None:
+        """Freeze selected cases and evaluate them before any fact commit."""
+        normalized_topics = tuple(topic.strip() for topic in topics if topic.strip())
+        if not normalized_topics:
+            return None
+        cases, selection_mode = self._selected_cases(normalized_topics)
+        if not cases:
+            return None
+        started = time.monotonic()
+        baseline_brain = self._evaluation_clone()
+        evaluation_brain = self._evaluation_clone()
+        before = GapAssessor(baseline_brain).evaluate(cases)
+        return PreparedAssessment(
+            topics=normalized_topics,
+            cases=tuple(dict(case) for case in cases),
+            before=before,
+            started_at=started,
+            min_agreement_sources=int(min_agreement_sources),
+            selection_mode=selection_mode,
+            evaluation_brain=evaluation_brain,
+        )
+
+    def complete_assessment(
+        self,
+        prepared: PreparedAssessment | None,
+        *,
+        committed_facts: int | None,
+        committed_records: Sequence[Dict[str, Any]] | None = None,
+    ) -> Dict[str, Any]:
+        """Evaluate the frozen cases after applying only the committed delta."""
+        if prepared is None or committed_facts == 0:
+            return {"post_learning_assessment": None}
+        cases = [dict(case) for case in prepared.cases]
+        evaluation_brain = prepared.evaluation_brain
+        for record in committed_records or ():
+            evaluation_brain.semantic_memory.store_fact(
+                subject=str(record["subject"]),
+                predicate=str(record["predicate"]),
+                obj=str(record["obj"]),
+                confidence=float(record.get("confidence", 0.8)),
+                source="web_learning_batch",
+            )
+        after = GapAssessor(evaluation_brain).evaluate(cases)
+        self.gap_assessor.record_report(after)
+        run = AssessmentRun(
+            topics=prepared.topics,
+            cases=cases,
+            before=prepared.before,
+            after=after,
+            before_answers=self._answers(prepared.before),
+            after_answers=self._answers(after),
+            elapsed=time.monotonic() - prepared.started_at,
+            min_agreement_sources=prepared.min_agreement_sources,
+            selection_mode=prepared.selection_mode,
+            committed_facts=committed_facts,
+        )
+        self.history.append(run)
+        return {"post_learning_assessment": run.to_dict()}
 
     def assess_after_learning(
         self,
         topics: Sequence[str],
         *,
         min_agreement_sources: int = 2,
+        prepared: PreparedAssessment | None = None,
+        committed_facts: int | None = None,
+        committed_records: Sequence[Dict[str, Any]] | None = None,
     ) -> Dict[str, Any]:
-        """Re-run the relevant benchmark cases after a batch ingestion.
+        """Complete a prepared assessment or run the compatibility flow.
 
-        Returns a dict compatible with the teaching report:
-        ``{"post_learning_assessment": AssessmentRun.to_dict()}``.
+        Web ingestion supplies ``prepared`` from the pre-commit stage. Direct
+        callers still receive the established result wrapper without
+        consulting unrelated historical reports.
         """
-        if not topics:
-            return {"post_learning_assessment": None}
-        cases = self._selected_cases(topics)
-        if not cases:
-            return {"post_learning_assessment": None}
-
-        started = time.monotonic()
-        before_report: GapReport | None = self.gap_assessor.last_report()
-        before_answers: List[str] = []
-        if before_report is not None:
-            before_answers = self._collect_answers(cases)
-        after_answers = self._collect_answers(cases)
-        after_report = self.gap_assessor.evaluate(cases)
-
-        run = AssessmentRun(
-            topics=topics,
-            cases=cases,
-            before=before_report,
-            after=after_report,
-            before_answers=before_answers,
-            after_answers=after_answers,
-            elapsed=time.monotonic() - started,
+        if prepared is None:
+            prepared = self.prepare_assessment(
+                topics,
+                min_agreement_sources=min_agreement_sources,
+            )
+        return self.complete_assessment(
+            prepared,
+            committed_facts=committed_facts,
+            committed_records=committed_records,
         )
-        self.history.append(run)
-        return {"post_learning_assessment": run.to_dict()}
 
     def assess_baseline(self) -> Dict[str, Any]:
-        """Capture the pre-learning baseline so the first learning batch
-        has something to compare against. Idempotent if already set."""
+        """Capture the full benchmark baseline once."""
         if self.gap_assessor.last_report() is None:
             self.gap_assessor.evaluate(CONVERSATION_BENCHMARK)
-        return {"baseline_score": self.gap_assessor.last_report().score}
+        report = self.gap_assessor.last_report()
+        return {"baseline_score": report.score if report else 0.0}
 
     def last_run(self) -> AssessmentRun | None:
         return self.history[-1] if self.history else None
 
     def trend(self) -> Dict[str, Any]:
-        """Monotonic improvement evidence across all runs."""
+        """Expose score history without treating different case sets as causal."""
         scores = [
             {
                 "topics": run.topics,
+                "case_ids": [case.get("id", "") for case in run.cases],
                 "score": run.after.score,
                 "known": run.after.known_count,
                 "total": run.after.total,
@@ -239,17 +296,16 @@ class PostLearningAssessor:
             }
             for run in self.history
         ]
+        comparable = len(scores) >= 2 and all(item["case_ids"] == scores[0]["case_ids"] for item in scores[1:])
         return {
             "runs": len(scores),
             "scores": scores,
-            "strictly_increasing": all(scores[i]["score"] > scores[i - 1]["score"] for i in range(1, len(scores)))
-            if len(scores) >= 2
-            else None,
+            "strictly_increasing": (
+                all(scores[i]["score"] > scores[i - 1]["score"] for i in range(1, len(scores))) if comparable else None
+            ),
         }
 
 
 def attach_to_learner(learner: Any, assessor: PostLearningAssessor) -> None:
-    """Monkey-patch-free hook: store the assessor on the learner so
-    ``ingest_batch`` can call ``assessor.assess_after_learning`` and merge
-    the result into its teaching report."""
+    """Attach an assessor explicitly without monkey-patching behavior."""
     learner.post_learning_assessor = assessor

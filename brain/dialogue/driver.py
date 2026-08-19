@@ -29,7 +29,7 @@ _CLOSURE_PATTERNS = (
         r"\b(বাই|বিদায়|ঠিক আছে|অনেক ধন্যবাদ|আজকে এই পর্যন্ত|"
         r"goodbye|bye|good night|goodbye|see you|talk to you later|"
         r"that's all|that is all)\b",
-        re.UNICODE,
+        re.UNICODE | re.IGNORECASE,
     ),
 )
 

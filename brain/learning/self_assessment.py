@@ -282,6 +282,10 @@ class GapAssessor:
     def last_report(self) -> GapReport | None:
         return self._history[-1] if self._history else None
 
+    def record_report(self, report: GapReport) -> None:
+        """Record an assessment produced by an isolated evaluation brain."""
+        self._history.append(report)
+
     def gap_dicts(self) -> List[Dict[str, Any]]:
         """Current knowledge gaps as dicts — consumed by brain state and
         the ``/api/brain/state`` snapshot (key ``knowledge_gaps``)."""
