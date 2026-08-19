@@ -1841,9 +1841,31 @@ class Brain:
             "and I can converse in both Bengali and English."
         ), 0.95
 
+    def _definition_or_concept(self, name: str):
+        """Phase 29: lookup predicates that carry definition knowledge.
+
+        Curriculum packages (e.g. the mathematics curriculum) store
+        explanations under predicates such as ``definition``, ``সংজ্ঞা``,
+        ``formula`` and ``সূত্র``, not just ``is_a``. This helper bundles
+        the lookup so definition-style facts participate in head-noun
+        resolution and existence checks, preventing the generic
+        "I have not learned X yet" fallback for trained concepts.
+        """
+        for _pred in (
+            "is_a", "definition",
+            # Phase 29 curriculum definition predicates:
+            "সংজ্ঞা", "সূতr", "formula",
+            # Phase 28 topic-inheritance relational predicates:
+            "color", "use", "capability", "why_reason",
+            "day_color_reason",
+        ):
+            _found = self.semantic_memory.query(subject=name, predicate=_pred)
+            if _found:
+                return _found
+        return self.concept_graph.get_concept_by_name(name)
+
     def _act_query_what(self, parse_result: ParseResult, recall_data: Dict[str, Any]) -> tuple:
         """Handle definition (is_a / means) queries like "মিস্টি মানে কী?".
-
         Looks up is_a facts in the knowledge graph and semantic memory,
         and falls back to a humble "still learning" answer that mentions
         the asked-about entity so the user can teach it.
@@ -1892,13 +1914,7 @@ class Brain:
             for _w in _word_order:
                 if _w.lower() in _stop:
                     continue
-                _kb = (
-                    self.semantic_memory.query(subject=_w, predicate="is_a")
-                    or self.semantic_memory.query(subject=_w, predicate="color")
-                    or self.semantic_memory.query(subject=_w, predicate="use")
-                    or self.semantic_memory.query(subject=_w, predicate="capability")
-                    or self.concept_graph.get_concept_by_name(_w)
-                )
+                _kb = self._definition_or_concept(_w)
                 if _kb:
                     _head = _w
                     break
@@ -1925,31 +1941,15 @@ class Brain:
         if not target_name.isascii() and " " not in target_name:
             _base = self._normalize_bengali_word(target_name)
             if _base != target_name:
-                _bhas = (
-                    self.semantic_memory.query(subject=_base, predicate="is_a")
-                    or self.semantic_memory.query(subject=_base, predicate="color")
-                    or self.semantic_memory.query(subject=_base, predicate="use")
-                    or self.semantic_memory.query(subject=_base, predicate="capability")
-                    or self.concept_graph.get_concept_by_name(_base)
-                )
+                _bhas = self._definition_or_concept(_base)
                 if _bhas:
                     target_name = _base
                     parse_result.query["target"] = _base
         if target_name.isascii():
             _sing = _singular(target_name)
-            _has = (
-                self.semantic_memory.query(subject=target_name, predicate="is_a")
-                or self.semantic_memory.query(subject=target_name, predicate="color")
-                or self.semantic_memory.query(subject=target_name, predicate="use")
-                or self.concept_graph.get_concept_by_name(target_name)
-            )
+            _has = self._definition_or_concept(target_name)
             if not _has and _sing != target_name:
-                _shas = (
-                    self.semantic_memory.query(subject=_sing, predicate="is_a")
-                    or self.semantic_memory.query(subject=_sing, predicate="color")
-                    or self.semantic_memory.query(subject=_sing, predicate="use")
-                    or self.concept_graph.get_concept_by_name(_sing)
-                )
+                _shas = self._definition_or_concept(_sing)
                 if _shas:
                     target_name = _sing
                     parse_result.query["target"] = _sing
@@ -2002,7 +2002,13 @@ class Brain:
                     f"Its function and capability follow from that knowledge."
                 ), 0.75
 
-        facts = self.semantic_memory.query(subject=target_name, predicate="is_a")
+        facts = (
+            self.semantic_memory.query(subject=target_name, predicate="is_a")
+            + self.semantic_memory.query(subject=target_name, predicate="definition")
+            + self.semantic_memory.query(subject=target_name, predicate="সংজ্ঞা")
+            + self.semantic_memory.query(subject=target_name, predicate="সূত্র")
+            + self.semantic_memory.query(subject=target_name, predicate="formula")
+        )
         if facts:
             is_bn = any("\u0980" <= ch <= "\u09ff" for ch in parse_result.raw_text or "")
             definitions = [fact.obj for fact in facts]
@@ -2013,6 +2019,42 @@ class Brain:
                 f"{', '.join(definitions[:3])}."
             ), 0.9
 
+        # Phase 29: subject alias expansion — curriculum packages store
+        # facts under canonical names (e.g. "Quadratic Equation") that do
+        # not match the parsed target literally (e.g. "quadratic formula",
+        # "Pythagorean theorem"). When the exact lookup finds nothing,
+        # scan definition-style facts whose subject contains a content
+        # word from the target so trained concepts still surface instead
+        # of the generic "not learned" fallback.
+        if not facts and len(target_name) > 3:
+            _alias_facts: list = []
+            _alias_seen: set = set()
+            _target_words = set(re.findall(r"[A-Za-z\u0980-\u09ff]+", target_name.lower()))
+            _target_words -= {w for w in _target_words if w in self._SALIENT_STOP_TOKENS or len(w) <= 2}
+            for _word in _target_words:
+                for _subject in self.semantic_memory.query(subject=_word):
+                    if _subject.subject in _alias_seen:
+                        continue
+                    _matches = _target_words & set(
+                        w for w in re.findall(r"[A-Za-z\u0980-\u09ff]+", _subject.subject.lower())
+                        if len(w) > 2 and w not in self._SALIENT_STOP_TOKENS
+                    )
+                    if _matches and _subject.predicate in (
+                        "is_a", "definition", "সংজ্ঞা", "সূত্র", "formula",
+                    ):
+                        _alias_seen.add(_subject.subject)
+                        _alias_facts.append(_subject)
+            if _alias_facts:
+                facts = _alias_facts
+        if facts:
+            is_bn = any("\u0980" <= ch <= "\u09ff" for ch in parse_result.raw_text or "")
+            definitions = [fact.obj for fact in facts]
+            if is_bn:
+                return f"{target_name} হলো {', '.join(definitions[:3])}।", 0.9
+            return (
+                f"From my stored knowledge, {target_name} is "
+                f"{', '.join(definitions[:3])}."
+            ), 0.9
         concept = self.concept_graph.get_concept_by_name(target_name)
         if concept and concept.concept_type and concept.concept_type != "Entity":
             is_bn = any("\u0980" <= ch <= "\u09ff" for ch in parse_result.raw_text or "")

@@ -247,10 +247,13 @@ class TestBrainMathConceptQuestions:
     def test_quadratic_formula_english(self):
         answer = self._answer("what is the quadratic formula?")
         lowered = answer.lower()
-        # The brain answers from the stored curriculum fact, so it must never
-        # reply with "not learned" for a trained concept.
+        # The brain answers from the stored curriculum fact (Phase 29
+        # definition-predicate lookup), so it must never reply with
+        # "not learned" for a trained concept.
         assert "not learned" not in lowered and "শিখিনি" not in lowered
-        assert "quadratic" in lowered or "formula" in lowered
+        # The reply surfaces either the curriculum fact (contains
+        # "formula") or an engine-backed solution line ("x = ...").
+        assert "formula" in lowered or "x =" in answer.replace(" ", "")
 
     def test_quadratic_formula_bengali(self):
         answer = self._answer("দ্বিঘাত সমীকরণ কী?")

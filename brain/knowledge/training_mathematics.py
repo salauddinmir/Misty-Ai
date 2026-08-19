@@ -130,6 +130,29 @@ MATH_CONCEPTS: List[Dict[str, Any]] = [
 # Relations: branch structure of the curriculum
 # ---------------------------------------------------------------------------
 
+# Phase 29: common query aliases → canonical curriculum subjects.
+# The NLU head-noun parser produces phrasal targets ("quadratic formula",
+# "Pythagorean theorem", "sine function", "gcd definition") that would not
+# otherwise match the canonical subjects stored in MATH_FACTS.
+MATH_SYNONYMS: Dict[str, str] = {
+    "quadratic formula": "Quadratic Equation",
+    "দ্বিঘাত সমীকরণের সূত্র": "দ্বিঘাত সমীকরণ",
+    "Pythagorean theorem": "Pythagorean Theorem",
+    "পাইথাগোরাসের উপপাদ্য": "পাইথাগোরাসের উপপাদ্য",
+    "sine function": "Sine",
+    "সাইন ফাংশন": "সাইন",
+    "cosine function": "Cosine",
+    "tangent function": "Tangent",
+    "gcd definition": "GCD",
+    "lcm definition": "LCM",
+    "g.সা.গু definition": "গ.সা.গু",
+    "l.সা.গু definition": "ল.সা.গু",
+    "percentage definition": "Percentage",
+    "arithmetic progression definition": "Arithmetic Progression",
+    "সমান্তর ধারার সংজ্ঞা": "সমান্তর ধারা",
+    "geometric progression definition": "Geometric Progression",
+}
+
 MATH_RELATIONS: List[Dict[str, Any]] = [
     {"source": "Mathematics", "target": "Arithmetic", "type": "includes", "lang": "en"},
     {"source": "Mathematics", "target": "Algebra", "type": "includes", "lang": "en"},
@@ -887,6 +910,7 @@ def _build_payload() -> str:
     """Canonical payload for the content hash (order matters)."""
     import json
     parts: List[str] = []
+    parts.append(json.dumps(MATH_SYNONYMS, sort_keys=True, ensure_ascii=False))
     parts.append(json.dumps(MATH_CONCEPTS, sort_keys=True, ensure_ascii=False))
     parts.append(json.dumps(MATH_RELATIONS, sort_keys=True, ensure_ascii=False))
     parts.append(json.dumps(MATH_FACTS, sort_keys=True, ensure_ascii=False))
@@ -1000,6 +1024,27 @@ def register_mathematics_curriculum(brain: Any) -> int:
                 name=entry["name"],
                 concept_type=entry.get("type", "MathConcept"),
             )
+    # Phase 29: alias facts — the NLU head-noun parser extracts phrasal
+    # targets that do not match the canonical subjects word-for-word (e.g.
+    # "quadratic formula" vs "Quadratic Equation", "Pythagorean theorem",
+    # "sine function", "gcd definition"). Storing the same facts under
+    # these query aliases lets the definition lookup in the brain answer
+    # trained concepts instead of the "not learned" fallback.
+    for alias, canonical in MATH_SYNONYMS.items():
+        for fact in MATH_FACTS:
+            if fact["subject"] != canonical:
+                continue
+            if brain.semantic_memory.query(subject=alias, predicate=fact["predicate"]):
+                continue
+            brain.semantic_memory.store_fact(
+                subject=alias,
+                predicate=fact["predicate"],
+                obj=fact["obj"],
+                confidence=fact.get("confidence", 0.8),
+                source=PACKAGE_ID,
+            )
+            count += 1
+
     for fact in MATH_FACTS:
         if brain.semantic_memory.query(
             subject=fact["subject"], predicate=fact["predicate"]
