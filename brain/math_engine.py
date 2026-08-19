@@ -86,6 +86,9 @@ class MathEngine:
 
         for parser in (
             self._parse_combinatorics,
+            self._parse_number_theory,
+            self._parse_progression,
+            self._parse_trigonometry,
             self._parse_statistics,
             self._parse_geometry,
             self._parse_quadratic_equation,
@@ -137,8 +140,20 @@ class MathEngine:
             "আয়তন",
             "mean",
             "average",
+            "গ.সা.গু",
+            "গসাগু",
+            "ল.সা.গু",
+            "লসাগু",
+            "lcm",
+            "gcd",
+            "hcf",
+            "degrees",
+            "sin(",
+            "cos(",
+            "tan(",
+            "hypotenuse",
             "গড়",
-            "গড়",
+            "গড়",
             "median",
             "মধ্যক",
             "variance",
@@ -153,6 +168,7 @@ class MathEngine:
             "সমীকরণ",
                         "sequence", "ধারা", "combination", "permutation", "সমাবেশ", "বিন্যাস",
             "circle", "বৃত্ত", "triangle", "ত্রিভুজ", "rectangle", "আয়তক্ষেত্র", "আয়তক্ষেত্র",
+            "degree", "term of ap", "term of gp", "ap starting", "gp starting", "অন্তর", "অনুপাত",
         )
         return any(marker in lowered for marker in markers) or bool(
             re.search(r"\d", lowered) and re.search(r"[+\-*/^%=]", lowered)
@@ -180,7 +196,8 @@ class MathEngine:
 
     def _extract_expression(self, text: str) -> str | None:
         candidate = text.lower()
-        candidate = re.sub(r"^(please\s+)?(calculate|compute|evaluate|what is|equals)\s+", "", candidate)
+        candidate = re.sub(r"^(please\s+)?(calculate|compute|evaluate|what is|solve|equals)\s+", "", candidate)
+        candidate = re.sub(r"\bএর\b", "*", candidate)
         candidate = re.sub(r"^(হিসাব করো|হিসাব করুন|সমাধান করো|কত হয়|কত হয়)\s*", "", candidate)
         candidate = re.sub(r"\b(square root of|বর্গমূল(?:এর)?)\s+([0-9.]+)", r"sqrt(\2)", candidate)
         candidate = candidate.replace(" pi", " 3.141592653589793")
@@ -239,6 +256,11 @@ class MathEngine:
             return None
         # Equation marker: sides joined by "=" with x present and a squared
         # term on either side. The normalized "x**2" style is matched too.
+        # Leading directive words like "solve the equation" are stripped so
+        # inputs such as "solve x^2 - 5x + 6 = 0" parse correctly.
+        text = re.sub(
+            r"^(solve\s*(?:the\s*)?(?:equation\s*)?|equation\s*[:：]?\s*)", "", text, flags=re.I
+        )
         match = re.match(r"^(.+)\s*=\s*(.+)$", text)
         if not match:
             return None
@@ -423,6 +445,23 @@ class MathEngine:
                 (f"r = {radius:g}", "A = πr²", "C = 2πr"),
             )
         if ("triangle" in lowered or "ত্রিভুজ" in text) and len(numbers) >= 2:
+            # Hypotenuse asked with two legs given: c = sqrt(a² + b²).
+            # Hypotenuse check must run before the generic area rule.
+            if "hypotenuse" in lowered or "অতিভুজ" in text or "অতিভুজ" in text:
+                leg_a, leg_b = numbers[0], numbers[1]
+                hypotenuse = math.sqrt(leg_a**2 + leg_b**2)
+                formatted = f"{hypotenuse:.10g}"
+                return MathResult(
+                    formatted,
+                    f"c=√(a²+b²)={formatted}",
+                    "geometry",
+                    (
+                        f"a = {leg_a:g}",
+                        f"b = {leg_b:g}",
+                        "c² = a² + b² (Pythagorean theorem)",
+                        f"c = √(a² + b²) = {formatted}",
+                    ),
+                )
             area = numbers[0] * numbers[1] / 2
             return MathResult(f"area = {area:g}", f"A={area:g}", "geometry", ("A = ½ × base × height",))
         if ("rectangle" in lowered or "আয়তক্ষেত্র" in text or "আয়তক্ষেত্র" in text) and len(numbers) >= 2:
@@ -468,6 +507,109 @@ class MathEngine:
             value = math.comb(n, r)
             formula = "nCr = n! / (r!(n-r)!)"
         return MathResult(str(value), str(value), "combinatorics", (formula,))
+
+    def _parse_trigonometry(self, text: str) -> MathResult | None:
+        """Evaluate sin/cos/tan of an angle in degrees, e.g. "sin(30 degrees)",
+        "cos(60°)", "tan(45)". Known angles use exact values; others use the
+        math library with a reduced radian value."""
+        match = re.search(r"\b(sin|cos|tan)\s*\(\s*(-?[0-9]+(?:\.[0-9]+)?)\s*(?:degrees?|°)?\s*\)", text, re.I)
+        if not match:
+            return None
+        function, raw = match.group(1).lower(), float(match.group(2))
+        degrees = raw % 360.0
+        exact: dict[tuple[str, float], float] = {
+            ("sin", 0.0): 0.0,
+            ("sin", 30.0): 0.5,
+            ("sin", 45.0): math.sqrt(2) / 2,
+            ("sin", 60.0): math.sqrt(3) / 2,
+            ("sin", 90.0): 1.0,
+            ("cos", 0.0): 1.0,
+            ("cos", 30.0): math.sqrt(3) / 2,
+            ("cos", 45.0): math.sqrt(2) / 2,
+            ("cos", 60.0): 0.5,
+            ("cos", 90.0): 0.0,
+            ("tan", 0.0): 0.0,
+            ("tan", 45.0): 1.0,
+        }
+        key = (function, degrees)
+        if key in exact:
+            value = exact[key]
+            steps: tuple[str, ...] = (
+                "angle converted to radians for evaluation",
+                f"{function}({degrees:g}°) evaluated",
+            )
+        elif function == "tan" and degrees in (90.0, 270.0):
+            return MathResult("tan(90°) is undefined (division by zero).", "undefined", "trigonometry", confidence=0.7)
+        else:
+            try:
+                value = self._functions[function](math.radians(raw))
+                steps = (f"angle = {raw:g}°", f"radians = {math.radians(raw):.6g}",)
+            except (ArithmeticError, ValueError):
+                return None
+        if not math.isfinite(value):
+            return None
+        formatted = f"{value:.10g}"
+        return MathResult(formatted, f"{function}({raw:g}°) = {formatted}", "trigonometry", steps)
+
+    def _parse_progression(self, text: str) -> MathResult | None:
+        """Find the n-th term of an arithmetic or geometric progression, e.g.
+        "10th term of AP starting 3 with difference 4", "5th term of GP
+        starting 2 with ratio 3"."""
+        lowered = text.lower()
+        is_ap = any(marker in lowered for marker in ("ap", "arithmetic", "সাধারণ অন্তর", "অন্তর"))
+        is_gp = any(marker in lowered for marker in ("gp", "geometric", "সাধারণ অনুপাত", "অনুপাত"))
+        if not (is_ap or is_gp):
+            return None
+        numbers = [float(value) for value in re.findall(r"\d+(?:\.\d+)?", text)]
+        if len(numbers) < 3:
+            return None
+        ordinal = numbers[0]
+        first, step = numbers[1], numbers[2]
+        n = int(ordinal)
+        if n < 1 or n > 10000:
+            return None
+        if is_gp:
+            value = first * step ** (n - 1)
+            formula = f"a_n = a × r^(n-1) = {first:g} × {step:g}^{n - 1:g}"
+            category = "geometric_progression"
+        else:
+            value = first + step * (n - 1)
+            formula = f"a_n = a + (n-1)d = {first:g} + {n - 1:g} × {step:g}"
+            category = "arithmetic_progression"
+        return MathResult(f"{value:g}", f"{value:g}", category, (formula, f"n = {n}"))
+
+    def _parse_number_theory(self, text: str) -> MathResult | None:
+        """Solve LCM/GCD requests in English and Bengali, e.g. "lcm of 12 and
+        18", "গ.সা.গু 48 ও 36", "ল.সা.গু. 15 ও 20 কত"."""
+        lowered = text.lower()
+        numbers = [int(value) for value in re.findall(r"\d+", text)]
+        has_lcm = any(marker in lowered for marker in ("lcm", "ল.সা.গু", "লসাগু", "ল.সা.গু."))
+        has_gcd = any(marker in lowered for marker in ("gcd", "hcf", "গ.সা.গু", "গসাগু", "গ.সা.গু."))
+        if not (has_lcm or has_gcd) or len(numbers) < 2:
+            return None
+        if any(value <= 0 for value in numbers):
+            return MathResult(
+                "LCM/GCD are defined for positive integers only.",
+                "undefined",
+                "number_theory",
+                confidence=0.7,
+            )
+        a, b = numbers[0], numbers[1]
+        gcd = math.gcd(a, b)
+        lcm = a * b // gcd
+        if has_gcd or (has_gcd and has_lcm):
+            return MathResult(
+                f"GCD = {gcd:g}",
+                f"gcd({a}, {b}) = {gcd:g}",
+                "number_theory",
+                ("Euclidean algorithm: gcd(a, b) = gcd(b, a mod b)", f"gcd({a}, {b}) = {gcd:g}"),
+            )
+        return MathResult(
+            f"LCM = {lcm:g}",
+            f"lcm({a}, {b}) = {lcm:g}",
+            "number_theory",
+            ("lcm(a, b) = a × b ÷ gcd(a, b)", f"gcd({a}, {b}) = {gcd:g}", f"lcm({a}, {b}) = {lcm:g}"),
+        )
 
 
 MATH_ENGINE = MathEngine()

@@ -42,6 +42,9 @@ from brain.knowledge.commonsense import (
 )
 from brain.knowledge.inference import InferenceSynthesizer
 from brain.knowledge.personality import ResponseVariator
+from brain.knowledge.training_mathematics import (
+    register_mathematics_curriculum,
+)
 from brain.learning.consolidation import MemoryConsolidator
 from brain.learning.curiosity import CuriosityExplorer
 from brain.learning.induction import EvidenceGatedInducer
@@ -263,6 +266,10 @@ class Brain:
         # AFTER trained identity facts so user-taught facts take priority.
         register_commonsense_layer(self)
         register_conversation_corpus(self)
+        # Phase 29: load the full bilingual mathematics curriculum —
+        # algebra, geometry, trigonometry, percentages/series and
+        # number theory — into the registry, concepts and facts.
+        register_mathematics_curriculum(self)
 
     def _init_neural_simulation(self) -> None:
         """Initialize the neural simulation engine with brain regions.
