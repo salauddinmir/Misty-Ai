@@ -27,6 +27,12 @@ class BrainStateResponse(BaseModel):
     emotional_state: Dict[str, float]
     active_concepts: Dict[str, float]
     performance: Dict[str, Any]
+    # Phase 38: total retrievable facts (semantic + episodic) and the
+    # confidence/uncertainty snapshot of the last processed turn (the
+    # rolling emotional values decay each tick and would show 0%).
+    memory_recall: int = 0
+    last_confidence: float = 0.0
+    last_uncertainty: float = 0.0
     # Phase 14: latest autonomous reflection tick audit snapshot
     # (tick_index, evidence_budget, evidence_count, elapsed_ms, outcome,
     # quarantined_candidates). Absent until the first tick has run.
