@@ -197,5 +197,8 @@ def test_brain_process_synthesizes_capital(brain: Brain) -> None:
 def test_thought_trace_recorded(brain: Brain) -> None:
     brain.process("আকাশের রঙ কি?")
     trace = brain.state.thought_trace
-    assert "inference_synthesis" in trace
-    assert len(trace["inference_synthesis"]["steps"]) >= 1
+    # Either derivation mechanism may answer, but the reasoning steps that
+    # produced the answer must always be inspectable.
+    recorded = [key for key in ("inference_synthesis", "universal_resolution") if key in trace]
+    assert recorded, f"no derivation trace recorded: {trace}"
+    assert len(trace[recorded[0]]["steps"]) >= 1
