@@ -7,6 +7,7 @@ entry point for the cognitive system.
 """
 
 import copy
+import os
 import re
 import time as time_module
 from typing import Any, Dict, List
@@ -42,7 +43,10 @@ from brain.knowledge.commonsense import (
     register_conversation_corpus,
 )
 from brain.knowledge.inference import InferenceSynthesizer
+from brain.knowledge.normalize import canonicalize as canonicalize_term
+from brain.knowledge.normalize import matches as normalize_matches
 from brain.knowledge.personality import ResponseVariator
+from brain.knowledge.resolver import UNIVERSAL_RESOLVER
 from brain.knowledge.training_culture import register_culture_curriculum
 from brain.knowledge.training_literature import register_literature_curriculum
 from brain.knowledge.training_mathematics import register_mathematics_curriculum
@@ -55,6 +59,7 @@ from brain.learning.post_learning_loop import PostLearningAssessor, attach_to_le
 from brain.learning.reinforcement import ReinforcementLearner
 from brain.learning.reward import RewardSignal
 from brain.learning.self_assessment import GapAssessor
+from brain.learning.self_directed import SelfDirectedLearner
 from brain.math_engine import MATH_ENGINE
 from brain.memory.episodic import EpisodicMemory
 from brain.memory.procedural import ProceduralMemory
@@ -193,6 +198,14 @@ class Brain:
         self.post_learning_assessor = PostLearningAssessor(self, gap_assessor=self.gap_assessor)
         attach_to_learner(self.web_learner, self.post_learning_assessor)
         self._learning_quarantine: List[Dict[str, Any]] = []
+        # Self-directed study of the brain's own unanswered questions. Disabled
+        # unless MISTY_SELF_LEARNING_ENABLED is set, so offline deployments and
+        # tests keep their existing behaviour and never touch the network.
+        self.self_directed_learner = SelfDirectedLearner(
+            self,
+            enabled=os.getenv("MISTY_SELF_LEARNING_ENABLED", "false").casefold() == "true",
+            topics_per_cycle=max(1, int(os.getenv("MISTY_SELF_LEARNING_TOPICS", "2") or 2)),
+        )
 
         # Emotion
         self.emotion = EmotionalState()
@@ -224,6 +237,11 @@ class Brain:
         # Phase 18: knowledge-inference synthesis — derive answers from
         # stored concepts and rules instead of echoing memorized phrases.
         self.inference_synthesizer = InferenceSynthesizer()
+        # Universal resolver: normalized, cross-lingual, multi-strategy answer
+        # search over everything stored. Questions the brain still cannot
+        # answer are queued as explicit learning gaps.
+        self.universal_resolver = UNIVERSAL_RESOLVER
+        self.knowledge_gaps: List[Dict[str, Any]] = []
 
         # Phase 24: personality voice and response variation — reply
         # templates are drawn from a per-intent bilingual pool so two
@@ -349,6 +367,12 @@ class Brain:
         # Phase 32: load the bilingual social-cultural curriculum —
         # Bangladesh and India state, festivals, geography and world basics.
         register_culture_curriculum(self)
+        # Phase 39: bilingual general knowledge (life science, earth and space,
+        # geography, civics, technology) so ordinary everyday questions have
+        # stored knowledge to draw on.
+        from brain.knowledge.training_general import register_general_knowledge
+
+        register_general_knowledge(self)
 
     def _init_neural_simulation(self) -> None:
         """Initialize the neural simulation engine with brain regions.
@@ -1377,10 +1401,51 @@ class Brain:
                 "capability": {"capability", "ক্ষমতা"},
             }
             for predicate, markers in attribute_predicates.items():
-                if target_tokens & markers:
+                matched_markers = target_tokens & markers
+                if matched_markers:
                     relation = predicate
                     parse_result.query["relation"] = predicate
+                    # The attribute word itself is the relation, not the
+                    # subject: "হৃদয়ের কাজ" asks about হৃদয়, and leaving "কাজ"
+                    # in the target made it resolve to the physics term.
+                    remainder = " ".join(
+                        word for word in target_name.split() if word.casefold() not in matched_markers
+                    ).strip()
+                    if remainder:
+                        target_name = remainder
+                        parse_result.query["target"] = remainder
                     break
+            else:
+                # Any relation named in the question ("capital of India",
+                # "রাজধানী", "who wrote X") becomes the retrieval predicate so
+                # RECALL fetches the asked-about relation instead of a
+                # generic definition.
+                detected = self.universal_resolver.detect_predicate(parse_result.raw_text or target_name)
+                if detected and detected != "is_a":
+                    relation = detected
+                    parse_result.query["relation"] = detected
+        # "formula of kinetic energy" names a relation and a subject. Removing
+        # the relation words leaves the real subject, which may be a compound
+        # that head-noun reduction would otherwise destroy.
+        if relation and target_name and " " in target_name:
+            relation_words = {"of", "the", "a", "an", "এর", "র"}
+            relation_words.update(word.casefold() for word in re.findall(r"[A-Za-z\u0980-\u09ff]+", relation))
+            relation_words.update(
+                word.casefold()
+                for word in re.findall(
+                    r"[A-Za-z\u0980-\u09ff]+",
+                    self.universal_resolver.predicate_label(relation, not target_name.isascii()),
+                )
+            )
+            remainder = " ".join(word for word in target_name.split() if word.casefold() not in relation_words).strip()
+            if (
+                remainder
+                and remainder != target_name
+                and (self._definition_or_concept(remainder) or self.semantic_memory.query_flexible(subject=remainder))
+            ):
+                parse_result.query["target"] = remainder
+                return
+
         if not target_name or relation in {"use", "capability", "why", "how"}:
             inherited = self.dialogue_context.topic
             if not inherited:
@@ -1468,12 +1533,25 @@ class Brain:
                 "color": {"color"},
                 "use": {"use", "is_a"},
                 "capability": {"capability", "use", "is_a"},
-                "why": {"why_reason", "day_color_reason", "color", "is_a"},
-                "how": {"why_reason", "day_color_reason", "color", "use", "is_a"},
+                "why": {"why_reason", "day_color_reason", "color", "is_a", "cause", "কারণ", "definition", "সংজ্ঞা"},
+                "how": {"why_reason", "day_color_reason", "color", "use", "is_a", "cause", "কারণ"},
             }
             relevant_predicates = predicate_groups.get(relation)
             if relevant_predicates:
                 facts = [fact for fact in facts if fact.predicate in relevant_predicates]
+            elif relation:
+                # A specific relation was asked about ("capital of India",
+                # "formula of X"). Retrieve exactly that relation so REASON
+                # cannot rank an unrelated high-confidence definition first.
+                asked = self.semantic_memory.query_flexible(subject=target_name, predicate=relation)
+                if not asked:
+                    # The relation may live on an alias, translation, or
+                    # compound spelling of the subject named in the question.
+                    asked = self.universal_resolver.relation_facts(
+                        parse_result.raw_text or target_name, self, relation, target_name
+                    )
+                if asked:
+                    facts = asked
 
         if facts:
             semantic_facts = []
@@ -1886,12 +1964,26 @@ class Brain:
                     response = answer
                 elif parse_result.intent == IntentType.QUERY_WHAT:
                     answer = str(fact.get("obj", "")).strip()
-                    response = (
-                        f"{target_name} is {answer}." if target_name.isascii() else f"{target_name} হলো {answer}।"
-                    )
+                    predicate_name = str(fact.get("predicate", ""))
+                    if relation and normalize_matches(predicate_name, relation) and relation != "is_a":
+                        # Name the asked relation so the sentence reads as an
+                        # answer to the question ("The capital of India is …").
+                        label = self.universal_resolver.predicate_label(relation, not target_name.isascii())
+                        response = (
+                            f"The {label} of {target_name} is {answer}."
+                            if target_name.isascii()
+                            else f"{target_name}-এর {label} হলো {answer}।"
+                        )
+                    else:
+                        response = (
+                            f"{target_name} is {answer}." if target_name.isascii() else f"{target_name} হলো {answer}।"
+                        )
                 else:
                     continue
                 if answer:
+                    # A fact answering the relation actually asked about
+                    # outranks an unrelated but highly confident fact.
+                    asked_relation = bool(relation) and normalize_matches(str(fact.get("predicate", "")), relation)
                     answer_candidates.append(
                         {
                             "answer": answer,
@@ -1900,6 +1992,7 @@ class Brain:
                             "predicate": fact.get("predicate"),
                             "confidence": float(fact.get("confidence", 0.5)),
                             "evidence_ids": [fact["evidence_id"]] if fact.get("evidence_id") else [],
+                            "trust_priority": 5 if asked_relation else 0,
                         }
                     )
 
@@ -2547,8 +2640,22 @@ class Brain:
                 if source_concept:
                     return f"{source_concept.name}", 0.85
 
+        # Strategy 4: universal resolver over all stored knowledge. QUERY_WHO
+        # previously had no derived fallback at all, so a known answer stored
+        # under another spelling or language was reported as unknown.
+        resolved = self._resolve_universally(parse_result, target_name)
+        if resolved is not None:
+            return resolved
+
         # No answer found
         self.emotion.update_from_outcome(success=False)
+        self._record_knowledge_gap(target_name or parse_result.raw_text, relation)
+        is_bengali = any("\u0980" <= char <= "\u09ff" for char in parse_result.raw_text or "")
+        if is_bengali:
+            return (
+                f"{target_name} সম্পর্কে '{relation}' তথ্য আমার কাছে নেই, তাই অনুমান করব না। "
+                f'শেখাতে চাইলে বলুন: "মনে রাখো: X {relation} {target_name}"।'
+            ), 0.3
         return (f"I do not have information about who has '{relation}' relation with {target_name}."), 0.3
 
     def _act_capability(self, parse_result: ParseResult) -> tuple:
@@ -2609,6 +2716,14 @@ class Brain:
         """
         raw = parse_result.raw_text or "your message"
 
+        # A question naming a specific relation ("who wrote X", "capital of X")
+        # is answered by the resolver first; the synthesizer would otherwise
+        # return a generic definition of the subject instead.
+        if self.universal_resolver.detect_predicate(raw):
+            targeted = self._resolve_universally(parse_result)
+            if targeted is not None:
+                return targeted
+
         # Phase 18: before admitting confusion, try to SYNTHESIZE an answer
         # from the commonsense layer and stored knowledge so MISTY thinks
         # rather than echoing a memorized phrase.
@@ -2617,6 +2732,13 @@ class Brain:
             self.emotion.update_from_outcome(success=True)
             self.state.add_thought("inference_synthesis", synthesis.steps)
             return synthesis.answer, synthesis.confidence
+
+        # Universal resolver before the canned "teach me" reply: an unparsed
+        # question may still be answerable from stored knowledge.
+        resolved = self._resolve_universally(parse_result)
+        if resolved is not None:
+            return resolved
+        self._record_knowledge_gap(raw)
         # Phase 24: pick a varied personality template per language so
         # consecutive unknown inputs do not echo the same canned phrase.
         response = self.variator.pick("unknown", raw)
@@ -2638,6 +2760,9 @@ class Brain:
             )
         return response, 0.35
 
+    # Upper bound on remembered unanswered questions.
+    _MAX_KNOWLEDGE_GAPS = 200
+
     # Predicates whose objects name members of a category, used by list
     # answers so only genuinely enumerable knowledge is returned.
     _LIST_MEMBER_PREDICATES = (
@@ -2650,7 +2775,7 @@ class Brain:
         "type_of",
     )
 
-    def _topic_members(self, topic: str) -> List[tuple[str, str, float]]:
+    def _topic_members(self, topic: str, membership_only: bool = False) -> List[tuple[str, str, float]]:
         """Collect stored items that belong to ``topic``.
 
         Returns ``(item, source, confidence)`` triples gathered from
@@ -2658,25 +2783,50 @@ class Brain:
         real stored knowledge is returned; nothing is invented.
         """
         members: Dict[str, tuple[str, float]] = {}
+        membership_only = bool(membership_only)
 
         def _add(name: str, source: str, confidence: float) -> None:
             name = (name or "").strip()
-            if not name or name.casefold() == topic.casefold():
+            # The category itself is not one of its own members.
+            if not name or normalize_matches(name, topic):
                 return
             existing = members.get(name)
             if existing is None or confidence > existing[1]:
                 members[name] = (source or "semantic_memory", confidence)
 
         for predicate in self._LIST_MEMBER_PREDICATES:
-            for fact in self.semantic_memory.query(subject=topic, predicate=predicate):
+            for fact in self.semantic_memory.query_flexible(subject=topic, predicate=predicate):
                 for part in re.split(r"[,;\u0964]|\s+ও\s+|\s+এবং\s+", fact.obj):
                     _add(part, fact.source, float(fact.confidence))
 
-        # Reverse "X is_a topic" facts enumerate category members.
+        # Definitions often enumerate the members after a colon, for example
+        # "পৃথিবীতে সাতটি মহাদেশ আছে: এশিয়া, আফ্রিকা, ...". Reading those keeps
+        # list answers grounded without duplicating the knowledge as facts.
+        for predicate in ("definition", "সংজ্ঞা", "is_a"):
+            for fact in self.semantic_memory.query_flexible(subject=topic, predicate=predicate):
+                _, separator, enumeration = str(fact.obj).partition(":")
+                if not separator or "," not in enumeration:
+                    continue
+                for part in re.split(r"[,;\u0964]|\s+ও\s+|\s+এবং\s+|\s+and\s+", enumeration):
+                    part = re.sub(r"\(.*?\)", " ", part).strip()
+                    if part:
+                        _add(part, fact.source, float(fact.confidence))
+
+        if membership_only:
+            # Only explicit membership knowledge counts, so a broad word never
+            # contributes unrelated facts to a list answer.
+            return [(name, source, confidence) for name, (source, confidence) in members.items()]
+
+        # Reverse "X is_a topic" facts enumerate category members. Matching is
+        # per word rather than by substring, because "দেশ" (country) is a
+        # substring of "মহাদেশ" (continent) and would list countries as
+        # continents.
+        topic_key = canonicalize_term(topic)
         for fact in self.semantic_memory.facts.values():
             if fact.predicate not in {"is_a", "type_of", "সংজ্ঞা"}:
                 continue
-            if topic.casefold() in str(fact.obj).casefold():
+            object_keys = {canonicalize_term(word) for word in str(fact.obj).split()}
+            if topic_key and topic_key in object_keys:
                 _add(fact.subject, fact.source, float(fact.confidence))
 
         topic_concept = self.concept_graph.get_concept_by_name(topic)
@@ -2699,10 +2849,12 @@ class Brain:
                 if other:
                     _add(other.name, "knowledge_graph", float(relation.get("confidence", 0.8)))
 
-        # Concepts typed by the topic ("কবিতা" typed works) also qualify.
+        # Concepts typed by the topic ("কবিতা" typed works) also qualify. The
+        # type must name the same concept as the topic; substring matching
+        # listed countries as continents because "দেশ" occurs in "মহাদেশ".
         for concept in list(getattr(self.concept_graph, "_concepts", {}).values()):
             concept_type = str(getattr(concept, "concept_type", "") or "")
-            if concept_type and concept_type.casefold() in topic.casefold():
+            if concept_type and normalize_matches(concept_type, topic):
                 _add(concept.name, "knowledge_graph", 0.8)
 
         return [(name, source, confidence) for name, (source, confidence) in members.items()]
@@ -2741,18 +2893,28 @@ class Brain:
                 0.3,
             )
 
-        members = self._topic_members(topic)
-        # Fall back only to the head noun of the phrase ("ভারতের আশ্চর্য" ->
-        # "আশ্চর্য"). Broader words such as "ভারত" must never be substituted,
-        # because listing unrelated India facts as "wonders" would be wrong.
+        content_words = [
+            word
+            for word in re.findall(r"[A-Za-z\u0980-\u09ff]+", topic)
+            if len(word) > 2 and word.casefold() not in self._SALIENT_STOP_TOKENS
+        ]
+        # Explicit membership knowledge is the strongest signal and is checked
+        # first, including on individual words ("সৌরজগতের গ্রহ" -> "সৌরজগৎ
+        # অন্তর্ভুক্ত ..."). Only membership predicates are read, so an
+        # unrelated fact can never enter a list answer this way.
+        members: List[tuple[str, str, float]] = []
+        for candidate in (topic, *reversed(content_words)):
+            members = self._topic_members(candidate, membership_only=True)
+            if members:
+                break
+
+        # Otherwise derive members from the phrase, then from its head noun
+        # only. Broader words such as "ভারত" must never be substituted, because
+        # listing unrelated India facts as "wonders" would be wrong.
         if not members:
-            content_words = [
-                word
-                for word in re.findall(r"[A-Za-z\u0980-\u09ff]+", topic)
-                if len(word) > 2 and word.casefold() not in self._SALIENT_STOP_TOKENS
-            ]
-            if content_words:
-                members = self._topic_members(content_words[-1])
+            members = self._topic_members(topic)
+        if not members and content_words:
+            members = self._topic_members(content_words[-1])
 
         deduped: Dict[str, tuple[str, float]] = {}
         for name, source, confidence in members:
@@ -2786,6 +2948,26 @@ class Brain:
                 f'You can teach me with "remember: {topic} includes X, Y, Z".'
             ), 0.3
 
+        # Knowledge is stored bilingually; list one name per item in the
+        # question's language instead of "এশিয়া; Asia".
+        preferred: List[tuple[str, tuple[str, float]]] = []
+        for name, meta in ranked:
+            existing = next(
+                (index for index, (kept, _) in enumerate(preferred) if normalize_matches(name, kept)),
+                None,
+            )
+            if existing is None:
+                preferred.append((name, meta))
+                continue
+            # Same concept in the other language: keep the name that matches
+            # the question so the list reads in one language.
+            kept_name = preferred[existing][0]
+            kept_is_bengali = any("\u0980" <= char <= "\u09ff" for char in kept_name)
+            name_is_bengali = any("\u0980" <= char <= "\u09ff" for char in name)
+            if kept_is_bengali != is_bengali and name_is_bengali == is_bengali:
+                preferred[existing] = (name, meta)
+        ranked = preferred
+
         limit = requested if isinstance(requested, int) and requested > 0 else min(len(ranked), 7)
         shown = [name for name, _ in ranked[:limit]]
         self._last_query_what_fact_keys = []
@@ -2806,6 +2988,51 @@ class Brain:
                     "I will not invent the rest."
                 )
         return answer, confidence
+
+    def _resolve_universally(self, parse_result: ParseResult, target_name: str = "") -> tuple | None:
+        """Answer through the universal resolver, recording its lineage.
+
+        Returns ``(response, confidence)`` when stored knowledge supports an
+        answer, otherwise ``None`` so the caller can fall back honestly.
+        """
+        question = parse_result.raw_text or target_name
+        answer = self.universal_resolver.resolve(question, self, target=target_name or None)
+        if answer is None:
+            return None
+        # Record the exact facts used so grounding metadata stays truthful.
+        self._last_query_what_fact_keys = answer.fact_keys
+        if answer.steps:
+            self.state.add_thought("universal_resolution", [f"strategy={answer.strategy}", *answer.steps])
+        self.emotion.update_from_outcome(success=True)
+        return answer.text, answer.confidence
+
+    def _record_knowledge_gap(self, topic: str, relation: str = "") -> None:
+        """Remember a question the brain could not answer.
+
+        The autonomous loop drains this queue so repeated gaps become learning
+        targets instead of silent failures. Evaluation clones never record.
+        """
+        topic = (topic or "").strip()
+        if not topic or self._assessment_mode:
+            return
+        for entry in self.knowledge_gaps:
+            if entry["topic"].casefold() == topic.casefold() and entry.get("relation", "") == relation:
+                entry["count"] = int(entry.get("count", 1)) + 1
+                entry["last_seen"] = time_module.time()
+                return
+        self.knowledge_gaps.append(
+            {
+                "topic": topic,
+                "relation": relation,
+                "count": 1,
+                "first_seen": time_module.time(),
+                "last_seen": time_module.time(),
+            }
+        )
+        # Bounded so a long session cannot grow memory without limit.
+        if len(self.knowledge_gaps) > self._MAX_KNOWLEDGE_GAPS:
+            self.knowledge_gaps.sort(key=lambda entry: (int(entry.get("count", 1)), entry.get("last_seen", 0.0)))
+            del self.knowledge_gaps[: len(self.knowledge_gaps) - self._MAX_KNOWLEDGE_GAPS]
 
     def _act_query_self(self, parse_result: ParseResult) -> tuple:
         """Answer identity questions about MISTY herself.
@@ -2869,8 +3096,14 @@ class Brain:
             "capability",
             "why_reason",
             "day_color_reason",
+            # Phase 39: function/cause knowledge, including Bengali predicates,
+            # so an inflected subject such as "হৃদয়ের" still resolves.
+            "function",
+            "কাজ",
+            "cause",
+            "কারণ",
         ):
-            _found = self.semantic_memory.query(subject=name, predicate=_pred)
+            _found = self.semantic_memory.query_flexible(subject=name, predicate=_pred)
             if _found:
                 return _found
         return self.concept_graph.get_concept_by_name(name)
@@ -2985,6 +3218,14 @@ class Brain:
                 if _shas:
                     target_name = _sing
                     parse_result.query["target"] = _sing
+        # When the question names a specific relation ("capital of India",
+        # "who wrote X", "সূত্র"), answer that relation directly instead of
+        # falling through to a generic definition of the subject.
+        if relation and relation not in {"is_a", "use", "capability", "how", "why"}:
+            relation_answer = self._resolve_universally(parse_result, target_name)
+            if relation_answer is not None:
+                return relation_answer
+
         # Phase 28: fall back to the parser's English is_a extraction
         # ("X is a Y") before giving up, so fresh teaching turns feed
         # immediate answers.
@@ -3003,10 +3244,21 @@ class Brain:
                 + self.semantic_memory.query(subject=target_name, predicate="color")
                 + self.semantic_memory.query(subject=target_name, predicate="day_color_reason")
                 + self.semantic_memory.query(subject=target_name, predicate="why_reason")
+                # Phase 39: explicit cause/function knowledge answers
+                # "why"/"how" questions instead of a generic reflection.
+                + self.semantic_memory.query_flexible(subject=target_name, predicate="cause")
+                + self.semantic_memory.query_flexible(subject=target_name, predicate="function")
+                + self.semantic_memory.query_flexible(subject=target_name, predicate="কাজ")
+                + self.semantic_memory.query_flexible(subject=target_name, predicate="কারণ")
             )
             if facts:
-                self._last_query_what_fact_keys = [(fact.subject, fact.predicate, fact.obj) for fact in facts[:3]]
                 is_bn = any("\u0980" <= ch <= "\u09ff" for ch in parse_result.raw_text or "")
+                # Answer in the question's language when both are stored.
+                same_language = [
+                    fact for fact in facts if any("\u0980" <= ch <= "\u09ff" for ch in str(fact.obj)) == is_bn
+                ]
+                facts = same_language or facts
+                self._last_query_what_fact_keys = [(fact.subject, fact.predicate, fact.obj) for fact in facts[:3]]
                 detail_parts = [f.obj for f in facts[:3]]
                 detail = ", ".join(detail_parts)
                 # The reason fact (আকাশের day_color_reason) explains WHY;
@@ -3115,7 +3367,14 @@ class Brain:
                 synthesis.confidence,
             )
 
+        # Universal resolver: normalized, cross-lingual, multi-strategy search
+        # over everything stored before admitting ignorance.
+        resolved = self._resolve_universally(parse_result, target_name)
+        if resolved is not None:
+            return resolved
+
         self.emotion.update_from_outcome(success=False)
+        self._record_knowledge_gap(target_name, parse_result.query.get("relation", ""))
         # Phase 24: varied humble fallback so repeated "X কী?" queries
         # do not echo the same "আমি এখনো X সম্পর্কে জানি না" sentence.
         fallback = self.variator.pick("query_what_unknown", target_name, placeholders={"subject": target_name})
@@ -3210,8 +3469,12 @@ class Brain:
             return None
 
         is_bengali = any("\u0980" <= char <= "\u09ff" for char in phrase)
+        # A compound topic may be headed by either word ("বাংলা কবিতা" ->
+        # কবিতা, "আকাশের রঙ" -> আকাশ), so rank candidates by how much stored
+        # knowledge each one actually has.
+        content = [word for word in words if len(word) > 2]
         candidates = [phrase]
-        candidates.extend(word for word in words if len(word) > 2)
+        candidates.extend(sorted(content, key=lambda word: len(self._topic_members(word)), reverse=True))
 
         for candidate in candidates:
             facts = self._definition_or_concept(candidate)
@@ -3574,6 +3837,12 @@ class Brain:
         """
         started_at = time_module.monotonic()
         self._tick_index = getattr(self, "_tick_index", 0) + 1
+        # Study unanswered questions before reflecting, so knowledge gained
+        # here is available to the reflection below and to the next user turn.
+        study_summary: Dict[str, Any] | None = None
+        if self.self_directed_learner.enabled and not self._assessment_mode:
+            study = await self.self_directed_learner.study_once()
+            study_summary = study.to_dict()
         active_goal = self.goal_manager.active_goal()
         goal_text = active_goal.description if active_goal else "review unresolved knowledge"
         uncertainty = self.self_model.uncertainty
@@ -3663,6 +3932,8 @@ class Brain:
         self.last_autonomous_tick = {
             "goal": goal_text,
             "question": question,
+            "self_directed_study": study_summary,
+            "open_knowledge_gaps": len(self.knowledge_gaps),
             "tick_index": self._tick_index,
             "evidence_budget": max_evidence_per_tick,
             "evidence_count": len(evidence_records),

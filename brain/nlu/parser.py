@@ -166,8 +166,11 @@ class NLUParser:
             # "কি ব্যাপার?", "কেন?" — treated as conversational
             # continuations rather than UNKNOWN intents so the brain
             # never replies with the canned parse-failure message.
+            # "কেন" alone is a clarification follow-up, but "ভূমিকম্প কেন হয়?"
+            # is a real question about a topic, so the bare form is anchored.
             re.compile(
-                r"(বুঝলাম না|বুঝতে পারছি না|বুঝছি না|কি ব্যাপার|কী ব্যাপার|কেন|কেন কি হয়েছে)",
+                r"(বুঝলাম না|বুঝতে পারছি না|বুঝছি না|কি ব্যাপার|কী ব্যাপার|কেন কি হয়েছে)"
+                r"|^\s*(কেন|কেনো)\s*[?।\u0964\uff1f]?\s*$",
                 re.UNICODE,
             ),
         ]
