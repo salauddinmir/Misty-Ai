@@ -46,11 +46,13 @@ from brain.knowledge.training_culture import register_culture_curriculum
 from brain.knowledge.training_literature import register_literature_curriculum
 from brain.knowledge.training_mathematics import register_mathematics_curriculum
 from brain.knowledge.training_physics import register_physics_curriculum
+from brain.knowledge.web_learning import WebSearchLearner
 from brain.learning.consolidation import MemoryConsolidator
 from brain.learning.curiosity import CuriosityExplorer
 from brain.learning.induction import EvidenceGatedInducer
 from brain.learning.reinforcement import ReinforcementLearner
 from brain.learning.reward import RewardSignal
+from brain.learning.self_assessment import GapAssessor
 from brain.math_engine import MATH_ENGINE
 from brain.memory.episodic import EpisodicMemory
 from brain.memory.procedural import ProceduralMemory
@@ -142,6 +144,15 @@ class Brain:
 
         # Meta-cognition
         self.reflection = ReflectionEngine()
+        # Phase 33: autonomous self-assessment — the brain evaluates its own
+        # knowledge against benchmark cases, produces an inspectable gap list,
+        # and exposes it via the state snapshot (``knowledge_gaps``).
+        self.gap_assessor = GapAssessor(self)
+        # Phase 36: deterministic web-learning ingestion bound to this brain
+        # so learning batches (and the /api/training/web_learn route) share
+        # the same semantic memory, quarantine, and safety gate.
+        self.web_learner = WebSearchLearner(self)
+        self._learning_quarantine: List[Dict[str, Any]] = []
 
         # Emotion
         self.emotion = EmotionalState()
@@ -2680,6 +2691,9 @@ class Brain:
             "last_prediction_error": self.state.last_prediction_error,
             # Phase 12+: active autonomous evidence-gathering snapshot.
             "last_autonomous_tick": self.last_autonomous_tick,
+            # Phase 33: autonomous self-assessment — knowledge gaps from
+            # the last GapAssessor evaluation, visible via /api/brain/state.
+            "knowledge_gaps": self.gap_assessor.gap_dicts(),
             # Phase 6: goal-driven behavior snapshot.
             "active_goal": (
                 {"goal_id": g.goal_id, "description": g.description, "progress": g.progress, "status": g.status.value}

@@ -35,7 +35,7 @@ import ssl
 import urllib.parse
 import urllib.request
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, Dict, List, Sequence, Tuple
 
 from brain.safety.policy import Decision, evaluate_learning
 
@@ -277,7 +277,7 @@ class WebSearchLearner:
                 predicate=entry["predicate"],
                 obj=entry["obj"],
                 confidence=0.8,
-                source_ref=", ".join(entry["urls"]) or "web_search",
+                source_ref=", ".join(entry["urls"]),
                 observations=len(entry["urls"]),
             )
             candidate.contradicts_existing = self._contradicts_existing(candidate)
@@ -312,3 +312,186 @@ class WebSearchLearner:
             else:
                 result.quarantined.append(candidate)
         return result
+
+    # ------------------------------------------------------------------
+    # Phase 35: batch ingestion with topic weights and conflict detection
+    # ------------------------------------------------------------------
+
+    async def ingest_batch(
+        self,
+        topics: Sequence[str],
+        topic_weights: Dict[str, float] | None = None,
+        *,
+        min_agreement_sources: int = 2,
+        max_facts_per_topic: int = 6,
+    ) -> Dict[str, Any]:
+        """Learn several topics in one batch (Phase 35).
+
+        * ``topics``: topics to learn. ``topic_weights`` (optional) scales
+          the per-topic ``max_facts`` ceiling and search effort; a weight
+          below 1.0 is treated as "browse, but keep it lean".
+        * Stricter multi-source agreement: a fact now needs at least
+          ``min_agreement_sources`` (default 2) independent sources
+          before it may enter memory.
+        * Cross-topic conflict detection: the same candidate seen across
+          different topics with disagreeing objects is quarantined and
+          flagged, even if each single topic saw one source.
+        * Teaching report: returns a dict with ``learned``, ``quarantined``,
+          and ``skipped`` per topic plus the aggregate conflict list.
+        """
+        weights = topic_weights or {}
+        teaching_report: Dict[str, Any] = {"topics": [], "cross_topic_conflicts": []}
+
+        # Phase 1: collect (subject, predicate, object) -> list of urls
+        # across ALL topics, grouped by (subject, predicate) so that
+        # cross-topic conflicts (same subject+predicate, different objects)
+        # and multi-source agreement (same subject+obj, >=2 urls) can both
+        # be computed on the merged pool.
+        support: Dict[Tuple[str, str], Dict[str, Any]] = {}
+        for topic in topics:
+            weight = max(float(weights.get(topic, 1.0)), 0.1)
+            ceiling = max(1, int(max_facts_per_topic * weight))
+            # Weight-aware search effort: high-weight topics consult more
+            # sources; low-weight topics stay lean.
+            sources = await self.search(topic, max_results=ceiling)
+            seen_in_topic: set[tuple[str, str, str]] = set()
+            for source in sources:
+                for triple in self.extract_facts(source["snippet"]):
+                    _obj_key = triple["obj"].lower().rstrip(". ,;:!?\u0964").strip()
+                    triple_key = (
+                        triple["subject"].lower(),
+                        triple["predicate"].lower(),
+                        _obj_key,
+                    )
+                    group_key = (triple["subject"].lower(), triple["predicate"].lower())
+                    if group_key in support:
+                        # Already tracked this (subject, predicate) from an
+                        # earlier source — reuse the group and record the
+                        # source url / topic for agreement counting.
+                        entry = support[group_key]
+                        entry["obj_by_key"].setdefault(_obj_key, triple["obj"])
+                        if source.get("url") and source["url"] not in entry["urls"]:
+                            entry["urls"].append(source["url"])
+                        if topic not in entry["topics"]:
+                            entry["topics"].append(topic)
+                        continue
+                    if triple_key in seen_in_topic:
+                        continue
+                    seen_in_topic.add(triple_key)
+                    entry = support.setdefault(
+                        group_key,
+                        {
+                            "subject": triple["subject"],
+                            "predicate": triple["predicate"],
+                            "obj_by_key": {},
+                            "urls": [],
+                            "topics": [],
+                        },
+                    )
+                    entry["obj_by_key"].setdefault(_obj_key, triple["obj"])
+                    if source.get("url") and source["url"] not in entry["urls"]:
+                        entry["urls"].append(source["url"])
+                    if topic not in entry["topics"]:
+                        entry["topics"].append(topic)
+        # Phase 2: cross-topic conflict gate, then multi-source agreement.
+        learned: List[Dict[str, Any]] = []
+        quarantined: List[Dict[str, Any]] = []
+        skipped: List[Dict[str, Any]] = []
+        conflicts: List[Dict[str, Any]] = []
+        for entry in support.values():
+            base_triple = {
+                "subject": entry["subject"],
+                "predicate": entry["predicate"],
+            }
+            canonical_objs = list(entry["obj_by_key"].values())
+            if len(canonical_objs) > 1:
+                # Same (subject, predicate) asserted with different objects
+                # across topics -> cross-topic conflict: NONE of the
+                # competing assertions may enter memory.
+                conflicts.append(
+                    {
+                        "triple": {**base_triple, "obj": canonical_objs[0]},
+                        "disagreeing_objects": canonical_objs,
+                        "topics": entry["topics"],
+                        "urls": entry["urls"],
+                    }
+                )
+                quarantined.extend(
+                    {
+                        **base_triple,
+                        "obj": obj,
+                        "confidence": 0.5,
+                        "observations": 0,
+                        "source_ref": "web_search",
+                        "topics": entry["topics"],
+                        "quarantine_reason": "cross_topic_conflict",
+                    }
+                    for obj in canonical_objs
+                )
+                continue
+            obj = canonical_objs[0]
+            triple = {**base_triple, "obj": obj}
+            urls = entry["urls"]
+            if len(urls) < min_agreement_sources:
+                skipped.append(
+                    {
+                        **triple,
+                        "observations": len(urls),
+                        "topics": entry["topics"],
+                        "skip_reason": "insufficient_source_agreement",
+                    }
+                )
+                continue
+            candidate = WebLearningCandidate(
+                subject=entry["subject"],
+                predicate=entry["predicate"],
+                obj=obj,
+                confidence=0.8,
+                source_ref=", ".join(urls),
+                observations=len(urls),
+            )
+            candidate.contradicts_existing = self._contradicts_existing(candidate)
+            decision = evaluate_learning(
+                {
+                    "confidence": candidate.confidence,
+                    "observations": candidate.observations,
+                    "source_ref": candidate.source_ref,
+                    "contradicts_existing": candidate.contradicts_existing,
+                }
+            )
+            record = {
+                **triple,
+                "confidence": candidate.confidence,
+                "observations": candidate.observations,
+                "source_ref": candidate.source_ref,
+                "topics": entry["topics"],
+            }
+            if decision.decision is Decision.ALLOW:
+                self.brain.semantic_memory.store_fact(
+                    subject=candidate.subject,
+                    predicate=candidate.predicate,
+                    obj=candidate.obj,
+                    confidence=candidate.confidence,
+                    source="web_learning_batch",
+                )
+                learned.append(record)
+            else:
+                record["quarantine_reason"] = decision.reason
+                quarantined.append(record)
+
+        # Phase 3: register quarantine on the brain for Phase 33 review.
+        brain_quarantine = getattr(self.brain, "_learning_quarantine", None)
+        if isinstance(brain_quarantine, list):
+            for q in quarantined:
+                triple_key = (q["subject"].lower(), q["obj"].lower())
+                if not any(
+                    (existing.get("subject", "").lower(), existing.get("obj", "").lower()) == triple_key
+                    for existing in brain_quarantine
+                ):
+                    brain_quarantine.append(q)
+
+        teaching_report["learned"] = learned
+        teaching_report["quarantined"] = quarantined
+        teaching_report["skipped"] = skipped
+        teaching_report["cross_topic_conflicts"] = conflicts
+        return teaching_report
