@@ -23,7 +23,7 @@ import time
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Tuple
 
-from brain.learning.self_assessment import GapAssessor, _expected_present
+from brain.learning.self_assessment import GapAssessor
 
 
 @dataclass
@@ -129,8 +129,6 @@ class TrainingBatchVerifier:
         """Inspect the trained brain and report per-department coverage."""
         facts = getattr(brain.semantic_memory, "facts", {})
         concepts = getattr(brain.concept_graph, "_concepts", {})
-        relations = getattr(brain.concept_graph, "graph", None)
-
         verified: List[PackageVerification] = []
         for department, source_name in self.DEPARTMENTS:
             declared_facts = [
@@ -141,6 +139,20 @@ class TrainingBatchVerifier:
                 c for c in concepts.values()
                 if source_name in (getattr(c, "source", "") or "")
             ]
+            # Count stored relations attributed to this source, when the
+            # concept graph keeps an addressable relation list.
+            stored_relations: int = 0
+            for rel_attr in ("relations", "_relations", "edges", "graph"):
+                rel_store = getattr(brain.concept_graph, rel_attr, None)
+                if isinstance(rel_store, (list, dict)):
+                    items = rel_store if isinstance(rel_store, list) else list(rel_store.values())
+                    stored_relations = sum(
+                        1
+                        for rel in items
+                        if source_name in (getattr(rel, "source", "") or "")
+                    )
+                    if stored_relations:
+                        break
             verified.append(
                 PackageVerification(
                     department=department,
@@ -148,8 +160,8 @@ class TrainingBatchVerifier:
                     verified_facts=len(declared_facts),
                     declared_concepts=len(src_concepts),
                     verified_concepts=len(src_concepts),
-                    declared_relations=0,
-                    verified_relations=0,
+                    declared_relations=stored_relations,
+                    verified_relations=stored_relations,
                     status="verified" if declared_facts else "missing",
                 )
             )

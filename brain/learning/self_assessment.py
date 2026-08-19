@@ -1,3 +1,4 @@
+# ruff: noqa: RUF001  (Bengali text is visually ambiguous by design)
 """
 Phase 33: Autonomous Self-Assessment (Knowledge Gap Detection).
 
@@ -28,7 +29,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional, Sequence
+from typing import Any, Dict, List, Sequence
 
 from brain.safety.policy import Decision, evaluate_learning
 
@@ -210,7 +211,7 @@ class GapAssessor:
     # Quarantine review
     # ------------------------------------------------------------------
 
-    def review_quarantine(self, quarantine: Optional[List[Dict[str, Any]]] = None) -> List[Dict[str, Any]]:
+    def review_quarantine(self, quarantine: List[Dict[str, Any]] | None = None) -> List[Dict[str, Any]]:
         """Re-check quarantined learning candidates against the current KB.
 
         Candidates that no longer contradict stored knowledge (perhaps
@@ -282,7 +283,7 @@ class GapAssessor:
     def history(self) -> List[GapReport]:
         return self._history
 
-    def last_report(self) -> Optional[GapReport]:
+    def last_report(self) -> GapReport | None:
         return self._history[-1] if self._history else None
 
     def gap_dicts(self) -> List[Dict[str, Any]]:

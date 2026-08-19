@@ -494,4 +494,13 @@ class WebSearchLearner:
         teaching_report["quarantined"] = quarantined
         teaching_report["skipped"] = skipped
         teaching_report["cross_topic_conflicts"] = conflicts
+        # Phase 37 — post-learning self-assessment loop: after every batch
+        # ingestion, the attached assessor re-runs the related benchmark
+        # cases so learning outcomes are measured, not assumed.
+        assessor = getattr(self, "post_learning_assessor", None)
+        if assessor is not None:
+            try:
+                teaching_report.update(assessor.assess_after_learning(topics))
+            except Exception:  # assessment must never break learning
+                teaching_report["post_learning_assessment"] = None
         return teaching_report

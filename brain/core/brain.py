@@ -50,6 +50,7 @@ from brain.knowledge.web_learning import WebSearchLearner
 from brain.learning.consolidation import MemoryConsolidator
 from brain.learning.curiosity import CuriosityExplorer
 from brain.learning.induction import EvidenceGatedInducer
+from brain.learning.post_learning_loop import PostLearningAssessor
 from brain.learning.reinforcement import ReinforcementLearner
 from brain.learning.reward import RewardSignal
 from brain.learning.self_assessment import GapAssessor
@@ -152,6 +153,8 @@ class Brain:
         # so learning batches (and the /api/training/web_learn route) share
         # the same semantic memory, quarantine, and safety gate.
         self.web_learner = WebSearchLearner(self)
+        # Phase 37 — post-learning self-assessment loop.
+        self.post_learning_assessor = PostLearningAssessor(self)
         self._learning_quarantine: List[Dict[str, Any]] = []
 
         # Emotion
