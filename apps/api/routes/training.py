@@ -145,3 +145,76 @@ def _get_brain(request: Request):
     if brain is None and hasattr(request, "brain"):
         brain = request.brain  # type: ignore[attr-defined]
     return brain
+
+
+# ---------------------------------------------------------------------------
+# Self-assessment-driven learning roadmap (Phase 39)
+# ---------------------------------------------------------------------------
+@router.get("/roadmap")
+async def get_roadmap(request: Request) -> JSONResponse:
+    """Return the latest self-assessment-driven learning roadmap.
+
+    The roadmap is produced by the learning planner from the gap assessor's
+    last self-assessment report. Read-only: no training key is required
+    because no ingestion happens here. Returns
+    {"learning_roadmap": {...}} — or an empty dict if no plan exists yet.
+    """
+    brain = _get_brain(request)
+    if brain is None:
+        raise HTTPException(status_code=503, detail="brain not ready")
+
+    state = brain.get_state()
+    roadmap = state.get("learning_roadmap")
+    return JSONResponse(status_code=200, content={"learning_roadmap": roadmap or {}})
+
+
+@router.post("/roadmap")
+async def run_roadmap(request: Request) -> JSONResponse:
+    """Trigger a gap-based planning cycle and ingest the planned topics.
+
+    Body (all optional):
+    - max_topics (int, default 5): how many topics the planner may pick.
+    - boost_topics (list[str]): topic names promoted to the front of the
+      plan before gap scoring ranks the rest.
+
+    Security: same MISTY_TRAINING_API_KEY gate and rate limit as
+    /api/training/web_learn — planning triggers real web ingestion, so it
+    is treated as a write operation.
+    """
+    if _TRAINING_KEY is None:
+        raise HTTPException(status_code=401, detail="training API not configured on this deployment")
+    header_key = request.headers.get("X-Misty-Training-Key", "")
+    if not header_key or not header_key.strip():
+        raise HTTPException(status_code=401, detail="missing X-Misty-Training-Key header")
+    if not _keys_match(header_key.strip(), _TRAINING_KEY):
+        raise HTTPException(status_code=401, detail="invalid training API key")
+    if _is_rate_limited(request):
+        raise HTTPException(
+            status_code=429,
+            detail=f"rate limit exceeded: {_RATE_LIMIT} requests per {_RATE_WINDOW:.0f}s",
+        )
+
+    brain = _get_brain(request)
+    if brain is None:
+        raise HTTPException(status_code=503, detail="brain not ready")
+
+    try:
+        body = await request.json()
+    except Exception:
+        body = None
+
+    kwargs: dict = {}
+    if isinstance(body, dict):
+        max_topics = body.get("max_topics")
+        if max_topics is not None:
+            if not isinstance(max_topics, int) or not (1 <= max_topics <= 20):
+                raise HTTPException(status_code=400, detail="`max_topics` must be an int between 1 and 20")
+            kwargs["max_topics"] = max_topics
+        boost_topics = body.get("boost_topics")
+        if boost_topics is not None:
+            if not isinstance(boost_topics, list) or not all(isinstance(t, str) and t.strip() for t in boost_topics):
+                raise HTTPException(status_code=400, detail="`boost_topics` must be a list of non-empty strings")
+            kwargs["boost_topics"] = tuple(t.strip() for t in boost_topics)
+
+    result = await brain.run_learning_roadmap(**kwargs)
+    return JSONResponse(status_code=200, content=result)

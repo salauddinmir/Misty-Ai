@@ -9,7 +9,7 @@ entry point for the cognitive system.
 import copy
 import re
 import time as time_module
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Sequence
 
 import numpy as np
 
@@ -51,6 +51,7 @@ from brain.knowledge.web_learning import WebSearchLearner
 from brain.learning.consolidation import MemoryConsolidator
 from brain.learning.curiosity import CuriosityExplorer
 from brain.learning.induction import EvidenceGatedInducer
+from brain.learning.learning_roadmap import LearningPlanner
 from brain.learning.post_learning_loop import PostLearningAssessor, attach_to_learner
 from brain.learning.reinforcement import ReinforcementLearner
 from brain.learning.reward import RewardSignal
@@ -192,6 +193,10 @@ class Brain:
         # Phase 37 — post-learning self-assessment loop.
         self.post_learning_assessor = PostLearningAssessor(self, gap_assessor=self.gap_assessor)
         attach_to_learner(self.web_learner, self.post_learning_assessor)
+        # Phase 39: self-assessment-driven learning roadmap — the brain plans
+        # what to learn next from its own gap report, and executes the plan
+        # through the safety-gated web learner.
+        self.learning_planner = LearningPlanner(self)
         self._learning_quarantine: List[Dict[str, Any]] = []
 
         # Emotion
@@ -3713,6 +3718,12 @@ class Brain:
             # Phase 33: autonomous self-assessment — knowledge gaps from
             # the last GapAssessor evaluation, visible via /api/brain/state.
             "knowledge_gaps": self.gap_assessor.gap_dicts(),
+            # Phase 39: the brain's own learning roadmap — what it decided to
+            # study next, why, and with how much effort. Empty until the
+            # brain runs an assessment and plans from its gaps.
+            "learning_roadmap": (
+                self.learning_planner.last_plan().to_dict() if self.learning_planner.last_plan() is not None else None
+            ),
             # Phase 6: goal-driven behavior snapshot.
             "active_goal": (
                 {"goal_id": g.goal_id, "description": g.description, "progress": g.progress, "status": g.status.value}
@@ -3721,7 +3732,6 @@ class Brain:
             ),
             "goal_stats": self.goal_manager.stats(),
         }
-
         # Add neural simulation state if active
         if self.use_neural_sim and self._neural_sim_engine is not None:
             state_dict["neural_simulation"] = {
@@ -3731,6 +3741,22 @@ class Brain:
             }
 
         return state_dict
+
+    async def run_learning_roadmap(self, *, max_topics: int = 5, boost_topics: Sequence[str] = ()) -> Dict[str, Any]:
+        """Plan the next learning roadmap and execute it.
+
+        The brain assesses its own gaps, ranks topics deterministically, and
+        ingests the top ``max_topics`` through the safety-gated web learner
+        (Phase 35/36), which then runs the post-learning self-assessment
+        loop (Phase 37) automatically.
+        """
+        plan = self.learning_planner.plan_next_topics(max_topics=max_topics, boost_topics=boost_topics)
+        if not plan.items:
+            return {"plan": plan.to_dict(), "ingestion": None, "reason": "no gaps to plan for"}
+        topics = [item.topic for item in plan.items]
+        weights = {item.topic: item.weight for item in plan.items}
+        ingestion = await self.web_learner.ingest_batch(topics, topic_weights=weights)
+        return {"plan": plan.to_dict(), "ingestion": ingestion}
 
     def __repr__(self) -> str:
         sim_info = ", neural_sim=True" if self.use_neural_sim else ""

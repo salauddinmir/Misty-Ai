@@ -37,6 +37,10 @@ class BrainStateResponse(BaseModel):
     # (tick_index, evidence_budget, evidence_count, elapsed_ms, outcome,
     # quarantined_candidates). Absent until the first tick has run.
     last_autonomous_tick: Dict[str, Any]
+    # Phase 39: current self-assessment-driven learning roadmap (plan_id,
+    # total_planned_topics, ranked items, topic_scores). None until the
+    # brain has run its first gap-based planning cycle.
+    learning_roadmap: Dict[str, Any] | None = None
 
 
 class ConceptResponse(BaseModel):

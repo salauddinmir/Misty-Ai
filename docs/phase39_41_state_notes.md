@@ -1,0 +1,71 @@
+# Phase 39-41 State Notes (persistent across compaction)
+
+## Task plan (current)
+Phase 39 (learning roadmap) → 40 (long-term memory/personalization) → 41 (self-correction) → gates+push each → final Bengali report.
+
+## User direction
+- Continue phases per plan; ONA reasoning layer deferred to later if needed.
+- Push to main after each phase; CI must be green; user speaks Bengali.
+
+## Key facts (from earlier in session)
+- Repo: /home/ubuntu/Misty-Ai, main branch, shell session "verify1".
+- CI: ruff 0.16.3, `ruff check brain/ apps/ tools/ tests/` + `ruff format --check` on same paths; pytest tests/ -q matrix 3.10/3.11/3.12. First line of any file with Bengali visual-ambiguity needs `# ruff: noqa: RUF001`.
+- Baselines: 840 tests pass, benchmark `PYTHONPATH=. python3 tests/benchmark_conversation.py` → 57/57=100%, `python3 tests/smoke_production.py` ALL PASS against https://misty-brain.onrender.com.
+- Render auto-deploys from GitHub push (check via browser dashboard.render.com → web/srv-da16bpe7bikc738f34j0). Vercel frontend misty-ai-web.vercel.app (redeployed via vercel MCP earlier).
+- GapAssessor (brain/learning/self_assessment.py): `evaluate(cases)`, `last_report()` returns GapReport; GapReport has entries (GapEntry: case_id, topic, query, expected, answer, status∈{known,unknown_honest,incorrect,missing}, confidence), counts known_count/unknown_honest_count/incorrect_count/missing_count, score/total are @property, to_dict() has 'gaps','honest_unknowns','total_cases'.
+- brain.learning.training_scorecard.TrainingBatchVerifier.DEPARTMENTS: (("identity","training"),("commonsense","commonsense_layer"),("conversation","conversation_corpus"),("mathematics","misty-mathematics"),("physics","misty-physics"),("literature","misty-literature"),("culture","misty-culture")).
+- WebSearchLearner (brain/knowledge/web_learning.py): async `ingest_batch(topics, topic_weights=None, min_agreement_sources=2, max_facts_per_topic=6)` → report dict. Has `post_learning_assessor` hook (Phase 37) set via `attach_to_learner(self.web_learner, self.post_learning_assessor)`.
+- brain/core/brain.py: `self.gap_assessor = GapAssessor(self)` (line ~187), `self.web_learner = WebSearchLearner(self)`, `self.post_learning_assessor`, `autonomous_reflection_tick` (line ~3566), `self._learning_quarantine`, `self._assessment_mode`. get_state builds dict around line ~3400+; route model apps/api/routes/brain.py is a Pydantic-like response model — new brain state keys must be added there too (learned from Phase 38 fix).
+- Brain wires imports alphabetical; brain.py already imports from brain.learning.self_assessment.
+
+## Phase 39 implementation (learning_roadmap.py) — DONE
+File written at brain/learning/learning_roadmap.py:
+- LearningPlanner(brain): plan_next_topics(max_topics, budget, boost_topics) → LearningPlan(items: RoadmapItem(rank,topic,reason,gap_cases,gap_ratio,severity,weight,aliases)).
+- Uses last gap report from gap_assessor, topic scores (asked/known/incorrect/unknown_honest/missing, severity = (2*incorrect + 1*unknown_honest + missing)/asked, recency_decay 0.15).
+- TOPIC_ALIAS dict maps gap-case categories → web search topics (Bengali/English).
+- Still TODO for Phase 39:
+  1. Wire into brain: `self.learning_planner = LearningPlanner(self)` in Brain.__init__; add `learning_roadmap` to get_state output (plan.to_dict() if last_plan else []); add convenience `run_learning_roadmap(topics=None)` async method that uses web_learner.ingest_batch with weights then triggers post-learning assessor.
+  2. Import at top (alphabetical within group): `from brain.learning.learning_roadmap import LearningPlanner`.
+  3. Tests: tests/test_phase39_learning_roadmap.py (~10 tests) — plan from gap report, severity weights, boost_topics, budget distribution, coverage estimate, history, integration with brain.process.
+  4. Run gates, commit, push, wait CI.
+
+## Phase 40 plan (long-term memory/personalization)
+- brain/memory/user_memory.py: UserProfileMemory — stores per-user conversation summaries (episodic digest), user facts ("বলেছেন তুমি ছাত্র"), last-seen timestamp. Keyed by user_id (default "default").
+- Brain wires `self.user_memory`; process() writes episodic digest when session ends / per-turn digest append; response references user facts ("আপনি আগে বলেছিলেন...").
+- /api/brain/users (optional) GET list; keep simple. Tests ~10. State field `user_memory` in get_state + route model.
+
+## Phase 41 plan (self-correction)
+- brain/learning/self_correction.py: CorrectionAuditor — detects challenge patterns ("ভুল", "এটা আগে বলেছিলে", "এটা ঠিক নয়"), re-checks fact vs semantic_memory, admits error with warm Bengali phrasing, stores corrected fact, tracks correction_count in state.
+- Brain wires in process(): after response, check stored turn for challenge pattern → run auditor. Tests ~10.
+
+## Report delivery
+Final: docs/phase39_41_report_bn.md, attach to message.
+
+
+## Phase 39 IMPLEMENTATION STATUS (updated)
+
+### DONE
+- brain/learning/learning_roadmap.py written: LearningPlanner(brain), LearningPlan, RoadmapItem. Methods: plan_next_topics(max_topics=5, boost_topics=()), estimate_coverage(gap_report=None), last_plan() -> plan, history. Topic alias map: identity,commonsense,conversation,mathematics,physics,literature,culture. Weights: _INCORRECT_WEIGHT=2.0, _HONEST_UNKNOWN_WEIGHT=1.0.
+- brain/core/brain.py wired: self.learning_planner = LearningPlanner(self) (after post_learning_assessor); get_state includes "learning_roadmap" (plan.to_dict() or None); added async run_learning_roadmap(max_topics, boost_topics) hook (plans + calls web_learner.ingest_batch(topics, topic_weights=weights) -> returns dict with plan/ingestion); typing Sequence imported.
+- lint clean (ruff check + format on both files).
+- Gates: 861 tests pass, benchmark 57/57=100%, Render production live (memory_recall=815, active_concepts=12, learning_roadmap=None until first plan run).
+
+### NEXT STEPS (in order)
+1. apps/api/routes/brain.py BrainStateResponse model: ADD optional field `learning_roadmap: Dict[str, Any] | None = None` (currently NOT present — route drops it). Ruff format after.
+2. Optional: add /api/training/roadmap endpoint (GET latest plan, POST to trigger) in apps/api/routes/training.py — guarded by MISTY_TRAINING_API_KEY like web_learn. Trigger: `await brain.run_learning_roadmap(...)`.
+3. Write tests/test_phase39_learning_roadmap.py (plan generation, gap-based ranking, incorrect>honest severity, boost, history, run_learning_roadmap integration, API route key gate).
+4. Commit+push, verify CI (runs d3e71dd-style: lint format + pytest 3.10/3.11/3.12), wait Render deploy, verify learning_roadmap appears in GET /api/brain/state after plan run.
+5. Then Phase 40 (long-term memory/personalization) and Phase 41 (self-correction) per plan file docs/phase39_next_plan_bn.md.
+
+### Environment facts
+- Repo: /home/ubuntu/Misty-Ai, main branch, user account salauddinmir, GH_TOKEN works.
+- Deploy: push to main → Render auto-deploys misty-brain.onrender.com (takes 5-10 min; verify after ~3 min).
+- Frontend: Vercel misty-ai-web.vercel.app deployed via manus-mcp-cli tool call deploy_to_vercel --server vercel (projectName='misty-ai-web', files JSON via --input-file).
+- Benchmark: PYTHONPATH=. python3 tests/benchmark_conversation.py → expect "57 passed, score=1.0000 (PASS)".
+- Regression: PYTHONPATH=. python3 -m pytest -q (861 passed baseline).
+- Smoke: PYTHONPATH=. python3 tests/smoke_production.py (transient SSL EOF ok, retry).
+- ruff 0.16.3 CI; line-length 120; first line noqa RUF001 needed only if ambiguous Bengali chars flagged.
+
+## Phase 39 COMPLETE (commit pending)
+
+All Phase 39 work finished and gate-passed: route model now exposes `learning_roadmap` in `apps/api/routes/brain.py` BrainStateResponse; new `GET /api/training/roadmap` (read-only, no key needed) and `POST /api/training/roadmap` (MISTY_TRAINING_API_KEY gate + rate limit; body: max_topics 1-20, boost_topics list) added to training.py; `tests/test_phase39_learning_roadmap.py` (15 tests, all pass). End-to-end verified via TestClient: plan generates, ingestion runs, state key populated, GET roadmap echoes plan. Final gates: ruff check+format clean, pytest 876 passed (861+15), benchmark 57/57=100%, smoke production PASS. Note: gap_assessor stores reports via record_report() into _history; learning_roadmap to_dict keys are created_at, plan_id, total_planned_topics, items, topic_scores; RoadmapItem dict has no "priority" key. All-known topics get weight 0 but still appear in items (inspectability). Next: commit+push, then Phase 40 (long-term memory/personalization: brain/memory/user_memory.py UserProfileMemory) and Phase 41 (self-correction: brain/learning/self_correction.py CorrectionAuditor).
