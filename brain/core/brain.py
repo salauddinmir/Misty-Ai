@@ -42,9 +42,8 @@ from brain.knowledge.commonsense import (
 )
 from brain.knowledge.inference import InferenceSynthesizer
 from brain.knowledge.personality import ResponseVariator
-from brain.knowledge.training_mathematics import (
-    register_mathematics_curriculum,
-)
+from brain.knowledge.training_mathematics import register_mathematics_curriculum
+from brain.knowledge.training_physics import register_physics_curriculum
 from brain.learning.consolidation import MemoryConsolidator
 from brain.learning.curiosity import CuriosityExplorer
 from brain.learning.induction import EvidenceGatedInducer
@@ -270,6 +269,9 @@ class Brain:
         # algebra, geometry, trigonometry, percentages/series and
         # number theory — into the registry, concepts and facts.
         register_mathematics_curriculum(self)
+        # Phase 30: load the full bilingual physics curriculum — mechanics,
+        # energy, gravitation, electricity, waves and thermal concepts.
+        register_physics_curriculum(self)
 
     def _init_neural_simulation(self) -> None:
         """Initialize the neural simulation engine with brain regions.
@@ -1854,7 +1856,7 @@ class Brain:
         for _pred in (
             "is_a", "definition",
             # Phase 29 curriculum definition predicates:
-            "সংজ্ঞা", "সূতr", "formula",
+            "সংজ্ঞা", "\u09b8\u09c2\u09a4\u09b0", "formula",
             # Phase 28 topic-inheritance relational predicates:
             "color", "use", "capability", "why_reason",
             "day_color_reason",
@@ -2040,7 +2042,7 @@ class Brain:
                         if len(w) > 2 and w not in self._SALIENT_STOP_TOKENS
                     )
                     if _matches and _subject.predicate in (
-                        "is_a", "definition", "সংজ্ঞা", "সূত্র", "formula",
+                        "is_a", "definition", "সংজ্ঞা", "\u09b8\u09c2\u09a4\u09b0", "formula",
                     ):
                         _alias_seen.add(_subject.subject)
                         _alias_facts.append(_subject)

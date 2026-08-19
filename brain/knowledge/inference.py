@@ -34,13 +34,16 @@ _BN_STOP = {
 
 _EXTRA_BN_STOP = {"কি", "কী", "কে", "এর", "ের", "র", "হলো"}
 
+# Phase 30: the possessive particle "'s" (as in "Ohm's Law") is treated
+# as a stop token so possessive concept names keep matching their stored
+# subjects after tokenization.
 _EN_STOP = {
     "what", "is", "the", "a", "an", "of", "and", "or", "why", "how",
     "when", "where", "who", "does", "do", "have", "has", "can", "could",
     "would", "tell", "me", "please", "about", "its", "your", "my", "it",
     "i", "you", "we", "they", "this", "that", "these", "those", "are",
     "was", "were", "being", "known", "say",
-    "by", "from", "in", "to", "at", "on", "with",
+    "by", "from", "in", "to", "at", "on", "with", "s",
 }
 
 
@@ -162,13 +165,40 @@ class InferenceSynthesizer:
         """
         concepts: List[str] = []
         stored = {subj.lower() for subj, _ in self._iter_stored_concepts(brain)}
+        # Phase 30: possessive normalization — stored subjects keep their
+        # original form (e.g. "ohm's law definition") but questions
+        # tokenize "Ohm's" into "ohm". Compare against the normalized
+        # set (apostrophe-s stripped) and record the ORIGINAL subject.
+        def _poss_norm(text: str) -> str:
+            # Phase 30: strip possessive "'s" tokens and collapse spaces so
+            # "Ohm's Law" (tokens "ohm", "law") matches stored subjects.
+            return " ".join(
+                part for part in text.replace("'s", " ").split() if part != "s"
+            )
+
+        _norm_to_stored = {_poss_norm(subj): subj for subj in stored}
+        _norm_keys = set(_norm_to_stored.keys())
         # Exact equality first (longer spans preferred)
         for length in (3, 2, 1):
             for start in range(len(tokens) - length + 1):
                 span = " ".join(tokens[start : start + length])
+                span_norm = _poss_norm(span)
                 if span in stored and span not in concepts:
                     concepts.append(span)
+                elif span_norm in _norm_keys and _norm_to_stored[span_norm] not in concepts:
+                    concepts.append(_norm_to_stored[span_norm])
         # Fallback 1: a question token fully contains a stored subject
+        # — also try each token with "'s" stripped so "ohm's" matches
+        # the stored subject "ohm's law" prefix.
+        for token in tokens:
+            token_base = token[:-2] if token.endswith("'s") else token
+            for subject in stored:
+                if subject in token and len(subject) >= 2:
+                    if subject not in concepts:
+                        concepts.append(subject)
+                if token_base and len(subject) >= 2:
+                    if subject in token_base and subject not in concepts:
+                        concepts.append(subject)
         # (e.g. "আকাশের" contains "আক"-free subject "আকা" -> "আকাশ")
         for token in tokens:
             for subject in stored:

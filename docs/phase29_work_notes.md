@@ -1,4 +1,10 @@
-# Phase 29 — Work Notes (CURRENT STATE)
+# Phase 29 — COMPLETE AND PUSHED (commits c3d1919 + 1c57ecd on main)
+- All fixes landed: MATH_SYNONYMS alias facts, _definition_or_concept helper (is_a/definition/সংজ্ঞা/সূতr/formula/color/use/capability/why_reason/day_color_reason), alias expansion in _act_query_what.
+- Final results: pytest file 10/10 clean (was flaky 3-6/15 before fix), benchmark 57/57 = 100%, regression 654 passed, ruff ALL PASSED, smoke ALL PASSED.
+- Flaky test root cause: response variator picked "not learned" template ~25%; fixed by alias facts so topic facts always surface.
+- bm_bn_context_why regression fixed: helper now includes Phase 28 topic-inheritance predicates.
+
+# PHASE 29 PRE-STABILITY NOTES (historical)
 
 ## DONE AND PUSHED TO MAIN
 - Commit **c3d1919** on main: "Phase 29: full bilingual mathematics curriculum — 6 topics (arithmetic/percentages, algebra, geometry, trigonometry, series, number theory), TrainingPackageV2 registry package with provenance, LCM/GCD/AP/GP/trig-degree/hypotenuse engine support; regression green (654 passed)"

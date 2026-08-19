@@ -53,18 +53,46 @@ class PhysicsEngine:
         "মহাকর্ষ",
         "g =",
         "newton",
+        "ohm",
+        "ওহম",
+        "resistance",
+        "রোধ",
+        "series",
+        "সমবায়",
+        "parallel",
+        "সমান্তরাল",
+        "wave",
+        "তরঙ্গ",
+        "frequency",
+        "কম্পাঙ্ক",
+        "circuit",
+        "বর্তনী",
+        "fall",
+        "পতন",
+        "voltage",
+        "current",
     )
 
     @classmethod
     def _has_marker(cls, text: str, marker: str) -> bool:
-        """Match a physics term as a token, not as a substring."""
+        """Match a physics term as a token, not as a substring.
+
+        Bengali-only markers match by substring instead, because Bengali
+        inflections (for example "ওহম" inside "ওহমে") would otherwise fail
+        the token boundary check against vowel-sign code points.
+        """
         if marker == "g =":
+            return marker in text
+        if all("\u0980" <= char <= "\u09FF" for char in marker):
             return marker in text
         escaped = re.escape(marker)
         return re.search(rf"(?<![\w\u0980-\u09FF]){escaped}(?![\w\u0980-\u09FF])", text) is not None
 
+    _BN_DIGITS = str.maketrans("\u09e6\u09e7\u09e8\u09e9\u09ea\u09eb\u09ec\u09ed\u09ee\u09ef", "0123456789")
+
     def solve(self, text: str) -> PhysicsResult | None:
         lowered = text.lower().strip()
+        lowered = lowered.translate(self._BN_DIGITS)
         if not any(self._has_marker(lowered, marker) for marker in self._markers):
             return None
         numbers = [float(value) for value in re.findall(r"-?\d+(?:\.\d+)?", lowered)]
@@ -74,6 +102,21 @@ class PhysicsEngine:
                 "missing_values",
                 "physics_help",
                 confidence=0.45,
+            )
+
+        # Wave speed first: a "speed ... wave/frequency" question must not be
+        # caught by the plain velocity branch.
+        _is_wave = ("wave" in lowered or "frequency" in lowered
+                    or "\u09a4\u09b0\u0999\u09cd\u0997" in lowered
+                    or "\u0995\u09ae\u09cd\u09aa\u09be\u0999\u09cd\u0995" in lowered)
+        if _is_wave and len(numbers) >= 2:
+            freq, wavelength = numbers[:2]
+            value = freq * wavelength
+            return PhysicsResult(
+                f"wave speed = {value:g} m/s",
+                f"v = {value:g} m/s",
+                "waves",
+                ("v = f x wavelength", f"v = {freq:g} x {wavelength:g}", f"v = {value:g} m/s"),
             )
 
         if (
@@ -101,16 +144,6 @@ class PhysicsEngine:
                 ("F = m x a", f"F = {mass:g} x {acceleration:g}", f"F = {value:g} N"),
             )
 
-        if any(self._has_marker(lowered, marker) for marker in ("work", "কাজ")) and len(numbers) >= 2:
-            force, displacement = numbers[:2]
-            value = force * displacement
-            return PhysicsResult(
-                f"work = {value:g} J",
-                f"W = {value:g} J",
-                "energy",
-                ("W = F x s", f"W = {force:g} x {displacement:g}", f"W = {value:g} J"),
-            )
-
         if any(self._has_marker(lowered, marker) for marker in ("kinetic", "গতিশক্তি")) and len(numbers) >= 2:
             mass, velocity = numbers[:2]
             value = 0.5 * mass * velocity**2
@@ -131,6 +164,20 @@ class PhysicsEngine:
                 ("p = m x v", f"p = {mass:g} x {velocity:g}", f"p = {value:g} kg·m/s"),
             )
 
+        # Work W = F x s — requires an explicit force cue so that phrases like
+        # "power when 100 J work in 5 s" are not mis-parsed as work.
+        _is_force = any(self._has_marker(lowered, marker)
+                        for marker in ("force", "বল", "newton"))
+        if _is_force and "work" in lowered and len(numbers) >= 2:
+            force, displacement = numbers[:2]
+            value = force * displacement
+            return PhysicsResult(
+                f"work = {value:g} J",
+                f"W = {value:g} J",
+                "energy",
+                ("W = F x s", f"W = {force:g} x {displacement:g}", f"W = {value:g} J"),
+            )
+
         if (
             any(self._has_marker(lowered, marker) for marker in ("potential", "বিভবশক্তি", "gravitational"))
             and len(numbers) >= 2
@@ -143,6 +190,96 @@ class PhysicsEngine:
                 f"U = {value:g} J",
                 "gravitation",
                 ("U = mgh", f"U = {mass:g} x {g:g} x {height:g}", f"U = {value:g} J"),
+            )
+
+        # Free fall distance: s = 1/2 g t^2 — marker "fall"/"পতন" not in
+        # token markers, so this branch fires when "fall" appears as a word
+        # and at least one number (time) is given.
+        _is_fall = (re.search(r"\b(free|fall|falling|fallen|freely)\b", lowered)
+                      or "\u09aa\u09a4\u09a8" in lowered)
+        if _is_fall and len(numbers) >= 1:
+            time = numbers[0]
+            g = numbers[1] if len(numbers) >= 2 else 9.8
+            value = 0.5 * g * time**2
+            return PhysicsResult(
+                f"distance fallen = {value:g} m",
+                f"s = {value:g} m",
+                "gravitation",
+                ("s = 1/2 g t^2", f"s = 1/2 x {g:g} x {time:g}^2", f"s = {value:g} m"),
+            )
+
+        # Series resistance: R = R1 + R2 — checked before the ohm branch so
+        # that "6 ohm and 3 ohm in series" is not parsed as V/R.
+        if ("series" in lowered or "সমবায়" in lowered) and len(numbers) >= 2:
+            value = sum(numbers)
+            return PhysicsResult(
+                f"total series resistance = {value:g} ohm",
+                f"R = {value:g} ohm",
+                "electricity",
+                ("R = R1 + R2 + ...", f"R = {' + '.join(f'{n:g}' for n in numbers)}", f"R = {value:g} ohm"),
+            )
+
+        # Parallel resistance: 1/R = 1/R1 + 1/R2 + ...
+        if ("parallel" in lowered or "সমান্তরাল" in lowered) and len(numbers) >= 2:
+            reciprocal = sum(1.0 / r for r in numbers if r != 0)
+            if reciprocal == 0:
+                return PhysicsResult(
+                    "সমান্তরাল সংযোগের সমতুল্য রোধ শূন্য হতে পারে না।",
+                    "undefined", "electricity", confidence=0.7,
+                )
+            value = 1.0 / reciprocal
+            return PhysicsResult(
+                f"total parallel resistance = {value:g} ohm",
+                f"R = {value:g} ohm",
+                "electricity",
+                ("1/R = 1/R1 + 1/R2 + ...",
+                 "1/R = " + " + ".join(f"1/{r:g}" for r in numbers),
+                 f"R = {value:g} ohm"),
+            )
+
+        # Ohm's law: current I = V / R — fires only for ohm-law phrasings so
+        # that series/parallel resistor questions are handled first.
+        if (
+            ("ohm" in lowered or "ওহম" in lowered or "resistance" in lowered or "রোধ" in lowered)
+            and ("volt" in lowered or "ভোল্ট" in lowered or "v " in lowered)
+            and len(numbers) >= 2
+        ):
+            voltage, resistance = numbers[:2]
+            if resistance == 0:
+                return PhysicsResult("রোধ শূন্য হতে পারে না (short circuit)।", "undefined", "electricity", confidence=0.7)
+            value = voltage / resistance
+            return PhysicsResult(
+                f"current = {value:g} A",
+                f"I = {value:g} A",
+                "electricity",
+                ("I = V / R (Ohm's law)", f"I = {voltage:g} / {resistance:g}", f"I = {value:g} A"),
+            )
+
+        # Electrical/mechanical power.
+        if ("power" in lowered or "ক্ষমতা" in lowered) and len(numbers) >= 2:
+            first, second = numbers[:2]
+            if "volt" in lowered or "joule" in lowered or "j " in lowered or " j" in lowered:
+                if "joule" in lowered or "j " in lowered or " j" in lowered:
+                    value = first / second
+                    return PhysicsResult(
+                        f"power = {value:g} W",
+                        f"P = {value:g} W",
+                        "energy",
+                        ("P = W / t", f"P = {first:g} / {second:g}", f"P = {value:g} W"),
+                    )
+                value = first * second
+                return PhysicsResult(
+                    f"electrical power = {value:g} W",
+                    f"P = {value:g} W",
+                    "electricity",
+                    ("P = V x I", f"P = {first:g} x {second:g}", f"P = {value:g} W"),
+                )
+            value = first * second
+            return PhysicsResult(
+                f"power = {value:g} W",
+                f"P = {value:g} W",
+                "energy",
+                ("P = V x I", f"P = {first:g} x {second:g}", f"P = {value:g} W"),
             )
 
         return PhysicsResult(
@@ -205,6 +342,12 @@ PHYSICS_FACTS = [
         "subject": "Misty",
         "predicate": "has_capability",
         "obj": "deterministic introductory Physics reasoning without an LLM",
+    },
+    {
+        "subject": "PhysicsEngine",
+        "predicate": "solves",
+        "obj": ("velocity, force, work, kinetic energy, momentum, potential energy, "
+                "free fall, Ohm's law, resistance, power and wave speed"),
     },
 ]
 
