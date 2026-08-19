@@ -56,6 +56,7 @@ from brain.learning.post_learning_loop import PostLearningAssessor, attach_to_le
 from brain.learning.reinforcement import ReinforcementLearner
 from brain.learning.reward import RewardSignal
 from brain.learning.self_assessment import GapAssessor
+from brain.learning.self_correction import CorrectionAuditor
 from brain.math_engine import MATH_ENGINE
 from brain.memory.episodic import EpisodicMemory
 from brain.memory.procedural import ProceduralMemory
@@ -203,6 +204,11 @@ class Brain:
         # conversation episodes, so personal questions ("কাল আমি কী
         # বলেছিলাম?") are answered from real recollection.
         self.user_memory = UserProfileMemory()
+        # Phase 41: self-correction — when a visitor challenges the brain
+        # ("এটা ভুল", "that's wrong"), the auditor re-checks the previous
+        # answer against the brain's own knowledge, accepts provable
+        # corrections, and logs every attempt for inspection.
+        self.correction_auditor = CorrectionAuditor()
         self._learning_quarantine: List[Dict[str, Any]] = []
 
         # Emotion
@@ -549,6 +555,15 @@ class Brain:
         processing_time = time_module.time() - start_time
         response = act_result.data.get("response", "")
 
+        # Phase 41: self-correction — if the new input challenges the
+        # previous answer, re-check the prior claim against the brain's
+        # own stored knowledge before replying, and prepend the auditor's
+        # note (warm Bengali admission or epistemic humility) when
+        # warranted.
+        correction_note = self._run_correction_audit(text_input, response)
+        if correction_note:
+            response = f"{correction_note} {response}".strip()
+
         # Phase 25: let the conversation driver decide whether this reply
         # should end with a follow-up of its own. The driver respects
         # cooldown (never two driver questions back-to-back) and closure
@@ -583,6 +598,8 @@ class Brain:
             if tone_plan.opener and response and not response.startswith(tone_plan.opener):
                 response = f"{tone_plan.opener} {response}"
         self.state.last_output = response
+        # Phase 41: remember this answer so the next turn can challenge it.
+        self.correction_auditor.last_output = response
         workspace_summary = self.workspace.summary()
         thought_trace = ThoughtTraceSummary(
             focus=self.workspace.focus,
@@ -3733,6 +3750,10 @@ class Brain:
             # Phase 40: per-user memory and personalization — how many
             # visitors Misty remembers and their fact/episode totals.
             "user_memory": self.user_memory.summary(),
+            # Phase 41: self-correction audit — how many challenges the
+            # brain received, how many it accepted, and the last
+            # correction event (claim, marker, reason).
+            "self_correction": self.correction_auditor.summary(),
             # Phase 6: goal-driven behavior snapshot.
             "active_goal": (
                 {"goal_id": g.goal_id, "description": g.description, "progress": g.progress, "status": g.status.value}
@@ -3766,6 +3787,39 @@ class Brain:
         weights = {item.topic: item.weight for item in plan.items}
         ingestion = await self.web_learner.ingest_batch(topics, topic_weights=weights)
         return {"plan": plan.to_dict(), "ingestion": ingestion}
+
+    def _run_correction_audit(self, text_input: str, current_response: str) -> str | None:
+        """Phase 41: audit the current turn for a challenge to the previous
+        answer and return an optional warm correction note.
+
+        A correction is only *accepted* when the brain can prove the
+        contradiction from facts it already stores — otherwise the auditor
+        answers with epistemic humility instead of a guess.  The last
+        answer is remembered so the very next turn can challenge it.
+        """
+        if not self.correction_auditor.last_output and not self.state.last_output:
+            return None
+        previous = self.correction_auditor.last_output or self.state.last_output
+
+        def check_fn(claim_tokens: List[str]) -> Dict[str, Any]:
+            """Re-check candidate claim tokens against stored knowledge."""
+            for token in claim_tokens:
+                matches = self.semantic_memory.query(obj=token)
+                if matches:
+                    # A stored fact contains this token as an object — the
+                    # challenge plausibly contradicts a remembered answer.
+                    return {
+                        "contradicted": True,
+                        "reason": f"stored fact contradicts claim token {token!r}",
+                    }
+            return {"contradicted": False, "reason": "no stored fact contradicts the claims"}
+
+        detected, note = self.correction_auditor.audit(text_input, previous, check_fn)
+        if detected:
+            # The corrected turn's answer replaces the challenged one, so
+            # it no longer stands as the "previous answer".
+            self.correction_auditor.last_output = ""
+        return note
 
     def __repr__(self) -> str:
         sim_info = ", neural_sim=True" if self.use_neural_sim else ""

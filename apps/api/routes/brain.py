@@ -45,6 +45,10 @@ class BrainStateResponse(BaseModel):
     # known_users, total_facts, total_episodes). Empty until the first
     # visitor has spoken to the brain.
     user_memory: Dict[str, Any] | None = None
+    # Phase 41: self-correction audit (challenges_received,
+    # corrections_accepted, last_correction event). Empty until the first
+    # visitor challenges one of the brain's answers.
+    self_correction: Dict[str, Any] | None = None
 
 
 class ConceptResponse(BaseModel):
