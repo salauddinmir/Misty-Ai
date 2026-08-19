@@ -128,7 +128,7 @@ class ConsolidationEngine:
         semantic = self.brain.semantic_memory
         quarantine: Dict[str, Any] = getattr(self.brain, "_learning_quarantine", None) or {}
         quarantined_keys: set = set()
-        for entry in (quarantine if isinstance(quarantine, list) else []):
+        for entry in quarantine if isinstance(quarantine, list) else []:
             key = (
                 entry.get("fact_key") or f"{entry.get('subject')}:{entry.get('predicate')}:{entry.get('obj')}"
                 if isinstance(entry, dict)
