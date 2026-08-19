@@ -73,7 +73,7 @@ class Database:
         # ``data/misty_brain.db`` even when a test or deployment overrides
         # the URL (for example ``MISTY_DB_URL=sqlite:///test.db``).
         if resolved_url.startswith("sqlite:///"):
-            self.db_path = db_path or resolved_url[len("sqlite:///"):]
+            self.db_path = db_path or resolved_url[len("sqlite:///") :]
         else:
             self.db_path = db_path or DEFAULT_DB_PATH
         self._url = resolved_url

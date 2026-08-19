@@ -103,10 +103,10 @@ def _is_bengali(text: str) -> bool:
 class TonePlan:
     """The style the response should take this turn."""
 
-    opener: str = ""          # short emotional opener prepended
-    length_hint: str = ""     # "short" | "normal" | "detailed"
-    joke: str = ""            # safe joke when humor requested
-    style: str = ""           # "enthusiastic" | "calm" | "short" | "warm" | "normal"
+    opener: str = ""  # short emotional opener prepended
+    length_hint: str = ""  # "short" | "normal" | "detailed"
+    joke: str = ""  # safe joke when humor requested
+    style: str = ""  # "enthusiastic" | "calm" | "short" | "warm" | "normal"
 
 
 class ToneMapper:
@@ -140,18 +140,11 @@ class ToneMapper:
             return plan
 
         # Internal state decides the register.
-        high_interest = (
-            emotion.interest > _HIGH_INTEREST_THRESHOLD
-            and emotion.curiosity > _HIGH_INTEREST_THRESHOLD
-        )
+        high_interest = emotion.interest > _HIGH_INTEREST_THRESHOLD and emotion.curiosity > _HIGH_INTEREST_THRESHOLD
         low_attention = emotion.attention < _LOW_ATTENTION_THRESHOLD
 
         if high_interest:
-            pool = (
-                _ENTHUSIASTIC_OPENERS_BN
-                if _is_bengali(response)
-                else _ENTHUSIASTIC_OPENERS_EN
-            )
+            pool = _ENTHUSIASTIC_OPENERS_BN if _is_bengali(response) else _ENTHUSIASTIC_OPENERS_EN
             plan.opener = pool[int(emotion.satisfaction * len(pool)) % len(pool)]
             plan.style = "enthusiastic"
             plan.length_hint = "detailed"

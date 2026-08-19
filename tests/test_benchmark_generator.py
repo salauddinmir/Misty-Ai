@@ -16,8 +16,16 @@ from brain.evaluation.bilingual import BenchmarkCase, default_bilingual_cases
 class BenchmarkGeneratorTest(unittest.TestCase):
     def test_all_departments_have_specs(self):
         expected = (
-            "language", "mathematics", "physics", "literature", "reasoning",
-            "commonsense", "memory", "perception", "emotion", "self_model",
+            "language",
+            "mathematics",
+            "physics",
+            "literature",
+            "reasoning",
+            "commonsense",
+            "memory",
+            "perception",
+            "emotion",
+            "self_model",
         )
         for department in expected:
             self.assertIn(department, UNIT_CASE_SPECS)

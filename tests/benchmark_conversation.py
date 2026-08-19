@@ -249,10 +249,7 @@ def main() -> int:
             for turn in turns:
                 last = brain2.process(turn)["response"]
             exp = case["expected"] or "(নন-এরর)"
-            lines.append(
-                f"- **{case['id']}** ({case['category']}): "
-                f"প্রত্যাশা `{exp}` - পাওয়া: `{last[:120]}`"
-            )
+            lines.append(f"- **{case['id']}** ({case['category']}): প্রত্যাশা `{exp}` - পাওয়া: `{last[:120]}`")
     else:
         lines.append("কোনো ব্যর্থ কেস নেই।")
     lines += [

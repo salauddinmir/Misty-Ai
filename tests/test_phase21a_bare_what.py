@@ -30,6 +30,7 @@ def brain() -> Brain:
 # NLU: bare "X কি?" must be QUERY_WHAT, not UNKNOWN
 # ---------------------------------------------------------------------------
 
+
 def test_bare_what_query_parsed(parser: NLUParser) -> None:
     for text in ["স্যাটেলাইট কি?", "স্যাটেলাইট কী।", "পানি কি?", "রোবট কী?"]:
         result = parser.parse(text)
@@ -58,6 +59,7 @@ def test_bare_what_excludes_misty_self_query(parser: NLUParser) -> None:
 # ---------------------------------------------------------------------------
 # Commonsense layer coverage
 # ---------------------------------------------------------------------------
+
 
 def test_technology_facts_loaded(brain: Brain) -> None:
     subjects = {fact.subject for fact in _COMMONSENSE_FACTS}

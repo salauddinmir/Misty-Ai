@@ -78,7 +78,7 @@ _COMMONSENSE_FACTS: List[CommonsenseFact] = [
     CommonsenseFact("Bangladesh", "continent", "Asia"),
     CommonsenseFact("কলকাতা", "is_a", "বাংলাদেশের পাশের শহর"),
     CommonsenseFact("Dhaka", "is_a", "capital city"),
-    CommonsenseFact("ঢাকা", "is_a", "রাজধানী শহর"),
+    CommonsenseFact("ঢাকা", "is_a", "রাজধনী শহর"),
     CommonsenseFact("নদী", "water_flows_in", "নদী"),
     CommonsenseFact("water", "flows_in", "river"),
     CommonsenseFact("পানি", "flows_in", "নদী"),
@@ -86,7 +86,6 @@ _COMMONSENSE_FACTS: List[CommonsenseFact] = [
     CommonsenseFact("sea water", "taste", "salty"),
     CommonsenseFact("নদীর পানি", "taste", "তাড়া"),
     CommonsenseFact("river water", "taste", "fresh"),
-
     # ---------- পানি ও পদার্থ (water, matter) ----------
     CommonsenseFact("পানি", "is_a", "তরল পদার্থ"),
     CommonsenseFact("water", "is_a", "liquid"),
@@ -110,7 +109,6 @@ _COMMONSENSE_FACTS: List[CommonsenseFact] = [
     CommonsenseFact("water", "boils_at", "100 degrees celsius"),
     CommonsenseFact("পানি", "freezes_at", "০ (শূন্য) ডিগ্রি সেলসিয়াস"),  # noqa: RUF001
     CommonsenseFact("water", "freezes_at", "0 degrees celsius"),
-
     # ---------- আগুন ও তাপ (fire, heat) ----------
     CommonsenseFact("আগুন", "heat", "গরম"),
     CommonsenseFact("fire", "heat", "hot"),
@@ -120,7 +118,6 @@ _COMMONSENSE_FACTS: List[CommonsenseFact] = [
     CommonsenseFact("fire", "danger", "can burn"),
     CommonsenseFact("সূর্যের আলো", "color", "সাদা/কিছুটা সোনালি"),
     CommonsenseFact("sunlight", "color", "white/golden"),
-
     # ---------- উদ্ভিদ ও প্রাণী (plants, animals) ----------
     CommonsenseFact("গাছ", "makes_food_by", "সালোকসংশ্লেষণ"),
     CommonsenseFact("trees", "makes_food_by", "photosynthesis"),
@@ -154,7 +151,6 @@ _COMMONSENSE_FACTS: List[CommonsenseFact] = [
     CommonsenseFact("sugar", "taste", "sweet"),
     CommonsenseFact("লবণ", "taste", "নোনা"),
     CommonsenseFact("salt", "taste", "salty"),
-
     # ---------- মানবদেহ (human body) ----------
     CommonsenseFact("মানুষের চোখ", "function", "দেখা"),
     CommonsenseFact("human eyes", "function", "sight"),
@@ -180,7 +176,6 @@ _COMMONSENSE_FACTS: List[CommonsenseFact] = [
     CommonsenseFact("air", "is_a", "mixture of gases"),
     CommonsenseFact("অক্সিজেন", "need_for", "বাঁচা"),
     CommonsenseFact("oxygen", "need_for", "breathing/life"),
-
     # ---------- সংখ্যা, সময় ও সাধারণ (numbers, time, general) ----------
     CommonsenseFact("সপ্তাহ", "has", "সাত দিন"),
     CommonsenseFact("week", "has", "seven days"),
@@ -211,7 +206,6 @@ _COMMONSENSE_FACTS: List[CommonsenseFact] = [
     CommonsenseFact("Pixline Incorporate", "founder", "Salauddin Mir"),
     CommonsenseFact("Salauddin Mir", "known_as", "Netvai"),
     CommonsenseFact("Netvai", "real_name", "Salauddin Mir"),
-
     # ---------- প্রযুক্তি (technology) ----------
     CommonsenseFact("স্যাটেলাইট", "is_a", "পৃথিবীর চারদিকে ঘূর্ণনরত যন্ত্র"),
     CommonsenseFact("satellite", "is_a", "a machine that orbits the earth"),
@@ -258,9 +252,9 @@ QUESTION_PATTERNS: List[Dict[str, Any]] = [
     },
     {
         "predicate": "capital",
-        "en": ["capital", "রাজধানী"],
-        "bn": ["রাজধানী"],
-        "ans_bn": "রাজধানী",
+        "en": ["capital", "রাজধনী"],
+        "bn": ["রাজধনী"],
+        "ans_bn": "রাজধনী",
         "ans_en": "capital",
     },
     {
@@ -452,9 +446,7 @@ def register_conversation_corpus(brain: Any) -> int:
 
     for entry in CONVERSATION_CONCEPTS:
         if brain.concept_graph.get_concept_by_name(entry["name"]) is None:
-            brain.concept_graph.create_concept(
-                name=entry["name"], concept_type=entry["type"]
-            )
+            brain.concept_graph.create_concept(name=entry["name"], concept_type=entry["type"])
 
     count = 0
     for fact in CONVERSATION_FACTS:

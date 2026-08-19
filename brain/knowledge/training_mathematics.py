@@ -906,9 +906,11 @@ MATH_TESTS: List[Dict[str, Any]] = [
 # Provenance: content hash computed from the canonical payload
 # ---------------------------------------------------------------------------
 
+
 def _build_payload() -> str:
     """Canonical payload for the content hash (order matters)."""
     import json
+
     parts: List[str] = []
     parts.append(json.dumps(MATH_SYNONYMS, sort_keys=True, ensure_ascii=False))
     parts.append(json.dumps(MATH_CONCEPTS, sort_keys=True, ensure_ascii=False))
@@ -958,20 +960,24 @@ def mathematics_curriculum_package() -> TrainingPackageV2:
         }
         out: List[Dict[str, Any]] = []
         for topic, description in topics.items():
-            out.append({
-                "subject": "Misty",
-                "predicate": "knows_topic",
-                "obj": topic,
-                "lang": "en",
-                "source_ref": _RECORD_SOURCE,
-            })
-            out.append({
-                "subject": topic,
-                "predicate": "description",
-                "obj": description,
-                "lang": "en",
-                "source_ref": _RECORD_SOURCE,
-            })
+            out.append(
+                {
+                    "subject": "Misty",
+                    "predicate": "knows_topic",
+                    "obj": topic,
+                    "lang": "en",
+                    "source_ref": _RECORD_SOURCE,
+                }
+            )
+            out.append(
+                {
+                    "subject": topic,
+                    "predicate": "description",
+                    "obj": description,
+                    "lang": "en",
+                    "source_ref": _RECORD_SOURCE,
+                }
+            )
         return out
 
     all_facts = _topic_concepts() + _attach(MATH_FACTS)
@@ -1001,9 +1007,7 @@ def mathematics_curriculum_package() -> TrainingPackageV2:
         relations=MATH_RELATIONS,
         facts=all_facts,
         rules=[dict(r, source_ref=_RECORD_SOURCE) for r in MATH_RULES],
-        formulas=[
-            dict(f, source_ref=_RECORD_SOURCE) for f in MATH_FORMULAS
-        ],
+        formulas=[dict(f, source_ref=_RECORD_SOURCE) for f in MATH_FORMULAS],
         examples=_attach(MATH_EXAMPLES),
         tests=_attach(MATH_TESTS),
         confidence_policy={"default": 0.8, "requires_source": True},
@@ -1046,9 +1050,7 @@ def register_mathematics_curriculum(brain: Any) -> int:
             count += 1
 
     for fact in MATH_FACTS:
-        if brain.semantic_memory.query(
-            subject=fact["subject"], predicate=fact["predicate"]
-        ):
+        if brain.semantic_memory.query(subject=fact["subject"], predicate=fact["predicate"]):
             continue
         brain.semantic_memory.store_fact(
             subject=fact["subject"],

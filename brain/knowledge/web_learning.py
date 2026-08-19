@@ -41,9 +41,37 @@ from brain.safety.policy import Decision, evaluate_learning
 
 # Stop words that must not become triple heads or tails.
 _EN_STOP = {
-    "a", "an", "the", "is", "are", "was", "were", "be", "of", "in", "to",
-    "for", "on", "and", "or", "it", "that", "this", "with", "from", "by",
-    "as", "at", "which", "but", "not", "no", "so", "if", "then", "than",
+    "a",
+    "an",
+    "the",
+    "is",
+    "are",
+    "was",
+    "were",
+    "be",
+    "of",
+    "in",
+    "to",
+    "for",
+    "on",
+    "and",
+    "or",
+    "it",
+    "that",
+    "this",
+    "with",
+    "from",
+    "by",
+    "as",
+    "at",
+    "which",
+    "but",
+    "not",
+    "no",
+    "so",
+    "if",
+    "then",
+    "than",
 }
 _BN_STOP = {"এর", "র", "এ", "যে", "ও", "বা", "না", "নি"}
 
@@ -110,8 +138,10 @@ class WebSearchLearner:
 
     def _collect(self, snippets: list[dict[str, str]], items: list[dict[str, str]]) -> None:
         for item in items:
-            if item["snippet"] and len(item["snippet"]) > 15 and not any(
-                item["snippet"] == existing["snippet"] for existing in snippets
+            if (
+                item["snippet"]
+                and len(item["snippet"]) > 15
+                and not any(item["snippet"] == existing["snippet"] for existing in snippets)
             ):
                 snippets.append(item)
 
@@ -162,8 +192,8 @@ class WebSearchLearner:
             match = _COPULAS.search(sentence)
             if not match:
                 continue
-            subject = sentence[:match.start()].strip()
-            obj = sentence[match.end():].strip()
+            subject = sentence[: match.start()].strip()
+            obj = sentence[match.end() :].strip()
             subject, obj = WebSearchLearner._clean(subject), WebSearchLearner._clean(obj)
             if not subject or not obj:
                 continue
@@ -183,7 +213,7 @@ class WebSearchLearner:
 
     @staticmethod
     def _first_alternative(subject: str) -> str:
-        """"A satellite or an artificial satellite" -> "A satellite".
+        """ "A satellite or an artificial satellite" -> "A satellite".
 
         Copula definitions often repeat a near-synonym ("X or an artificial
         X is ..."); the shorter head phrase is the cleaner subject.
@@ -251,21 +281,25 @@ class WebSearchLearner:
                 observations=len(entry["urls"]),
             )
             candidate.contradicts_existing = self._contradicts_existing(candidate)
-            decision = evaluate_learning({
-                "confidence": candidate.confidence,
-                "observations": candidate.observations,
-                "source_ref": candidate.source_ref,
-                "contradicts_existing": candidate.contradicts_existing,
-            })
-            result.decisions.append({
-                "triple": {
-                    "subject": candidate.subject,
-                    "predicate": candidate.predicate,
-                    "obj": candidate.obj,
-                },
-                "decision": decision.decision.value,
-                "reason": decision.reason,
-            })
+            decision = evaluate_learning(
+                {
+                    "confidence": candidate.confidence,
+                    "observations": candidate.observations,
+                    "source_ref": candidate.source_ref,
+                    "contradicts_existing": candidate.contradicts_existing,
+                }
+            )
+            result.decisions.append(
+                {
+                    "triple": {
+                        "subject": candidate.subject,
+                        "predicate": candidate.predicate,
+                        "obj": candidate.obj,
+                    },
+                    "decision": decision.decision.value,
+                    "reason": decision.reason,
+                }
+            )
             if decision.decision is Decision.ALLOW:
                 self.brain.semantic_memory.store_fact(
                     subject=candidate.subject,

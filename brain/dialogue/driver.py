@@ -162,8 +162,7 @@ class ConversationDriver:
         state = self._user_state(user_text)
         if state == "distress":
             plan.question = (
-                "আপনার কথা শুনে আমার খারাপ লাগছে। আমি শুনছি — "
-                "চাইলে আরো বিষয়টা বলতে পারেন।"
+                "আপনার কথা শুনে আমার খারাপ লাগছে। আমি শুনছি — চাইলে আরো বিষয়টা বলতে পারেন।"
                 if _is_bengali(user_text)
                 else "I'm sorry to hear that. I'm listening — feel free to tell me more."
             )
@@ -171,8 +170,7 @@ class ConversationDriver:
             plan.needs_followup = True
         elif state == "joy":
             plan.question = (
-                "আপনার আনন্দ শুনে আমারও ভালো লাগল! এই মুহূর্তটা নিয়ে "
-                "আরো কিছু বলতে চান?"
+                "আপনার আনন্দ শুনে আমারও ভালো লাগল! এই মুহূর্তটা নিয়ে আরো কিছু বলতে চান?"
                 if _is_bengali(user_text)
                 else "Glad to hear you're feeling good! Want to tell me more about it?"
             )
@@ -182,8 +180,7 @@ class ConversationDriver:
             # The user explicitly asked for more / the brain has no answer:
             # keep the thread with a clarifying offer.
             offer = (
-                "আমি কি আপনাকে আরো কিছু শেখাতে পারি, নাকি আগের কথাটাই "
-                "এগিয়ে নিয়ে যাব?"
+                "আমি কি আপনাকে আরো কিছু শেখাতে পারি, নাকি আগের কথাটাই এগিয়ে নিয়ে যাব?"
                 if _is_bengali(user_text)
                 else "Is there something else you'd like me to teach or continue with?"
             )
@@ -198,11 +195,9 @@ class ConversationDriver:
             can_ask = self.turns_since_question >= self.question_interval
             if shallow and can_ask and bool(topic):
                 plan.question = (
-                    f"{topic} নিয়ে আপনি কি আরো জানতে চান, নাকি অন্য কিছু "
-                    f"নিয়ে কথা বলব?"
+                    f"{topic} নিয়ে আপনি কি আরো জানতে চান, নাকি অন্য কিছু নিয়ে কথা বলব?"
                     if _is_bengali(user_text)
-                    else f"Would you like to know more about {topic}, or talk about "
-                    "something else?"
+                    else f"Would you like to know more about {topic}, or talk about something else?"
                 )
                 plan.kind = "expansion"
                 plan.needs_followup = True

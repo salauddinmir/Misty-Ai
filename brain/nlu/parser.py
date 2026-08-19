@@ -222,10 +222,37 @@ class NLUParser:
         # phrasing so relations ('use' / 'capability') are unambiguous.
         # Order: most specific phrasings first, generic 'কাজ কি' last.
         self._bn_capability_followups = [
-            (re.compile(r"(?:([A-Za-z\u0980-\u09ff]+(?:\s+[A-Za-z\u0980-\u09ff]+){0,2})\s*-?এর)?\s*কিসের\s*কাজে?\s*লাগে?\s*[?।\u0964\uff1f]?", re.UNICODE), "use"),
-            (re.compile(r"(সেট|এট|ওট|এটা|সেটা|ওটা)?\s*কি\s*কাজ\s*করতে?\s*পারে\s*[?।\u0964\uff1f]?", re.UNICODE), "capability"),
-            (re.compile(r"(এটা|সেটা|ওটা)?\s*কি\s*করতে?\s*পারে\s*[?।\u0964\uff1f]?", re.UNICODE), "capability"),
-            (re.compile(r"(?:([A-Za-z\u0980-\u09ff]+(?:\s+[A-Za-z\u0980-\u09ff]+){0,2})\s*-?এর)?\s*কাজ\s*কি\s*[?।\u0964\uff1f]?", re.UNICODE), "use"),
+            (
+                re.compile(
+                    r"(?:([A-Za-z\u0980-\u09ff]+(?:\s+[A-Za-z\u0980-\u09ff]+){0,2})"
+                    r"\s*-?এর)?\s*কিসের\s*কাজে?\s*লাগে?\s*[?।\u0964\uff1f]?",
+                    re.UNICODE,
+                ),
+                "use",
+            ),
+            (
+                re.compile(
+                    r"(সেট|এট|ওট|এটা|সেটা|ওটা)?\s*কি\s*কাজ\s*করতে?\s*পারে"
+                    r"\s*[?।\u0964\uff1f]?",
+                    re.UNICODE,
+                ),
+                "capability",
+            ),
+            (
+                re.compile(
+                    r"(এটা|সেটা|ওটা)?\s*কি\s*করতে?\s*পারে\s*[?।\u0964\uff1f]?",
+                    re.UNICODE,
+                ),
+                "capability",
+            ),
+            (
+                re.compile(
+                    r"(?:([A-Za-z\u0980-\u09ff]+(?:\s+[A-Za-z\u0980-\u09ff]+){0,2})"
+                    r"\s*-?এর)?\s*কাজ\s*কি\s*[?।\u0964\uff1f]?",
+                    re.UNICODE,
+                ),
+                "use",
+            ),
         ]
         # Bengali pronoun-targeted queries with an empty target, to be
         # resolved against the dialogue context by the brain:
@@ -344,46 +371,60 @@ class NLUParser:
         )
 
         # Humor / safe-joke requests (Bengali and English). Kept at class
+
     # level like the closure patterns so 'মজার কিছু বলো।' / 'Tell me a
     # joke' are recognized before intent classification.
-    _BN_HUMOR_REQUEST_RE = re.compile(r"(?<![A-Za-z\u0980-\u09ff])(মজার|রসিকতা|জোকস|হাসার)(?![A-Za-z\u0980-\u09ff]).*(?<![A-Za-z\u0980-\u09ff])(বলো|বলুন|দাও|শোনাও)(?![A-Za-z\u0980-\u09ff])", re.UNICODE)
-    _EN_HUMOR_REQUEST_RE = re.compile(r"(?<![A-Za-z])(tell\s+me\s+a\s+joke|say\s+something\s+funny|make\s+me\s+laugh)(?![A-Za-z])", re.IGNORECASE)
+    _BN_HUMOR_REQUEST_RE = re.compile(
+        r"(?<![A-Za-z\u0980-\u09ff])(মজার|রসিকতা|জোকস|হাসার)"
+        r"(?![A-Za-z\u0980-\u09ff]).*"
+        r"(?<![A-Za-z\u0980-\u09ff])(বলো|বলুন|দাও|শোনাও)"
+        r"(?![A-Za-z\u0980-\u09ff])",
+        re.UNICODE,
+    )
+    _EN_HUMOR_REQUEST_RE = re.compile(
+        r"(?<![A-Za-z])(tell\s+me\s+a\s+joke|say\s+something\s+funny"
+        r"|make\s+me\s+laugh)(?![A-Za-z])",
+        re.IGNORECASE,
+    )
 
     @classmethod
     def _is_humor_request(cls, text: str) -> bool:
-        return bool(
-            cls._BN_HUMOR_REQUEST_RE.search(text)
-            or cls._EN_HUMOR_REQUEST_RE.search(text)
-        )
+        return bool(cls._BN_HUMOR_REQUEST_RE.search(text) or cls._EN_HUMOR_REQUEST_RE.search(text))
 
-# Bengali pronoun-targeted queries with an empty target (Bengali and English). Kept in the
+    # Bengali pronoun-targeted queries with an empty target (Bengali and English). Kept in the
     # parser so both Bengali and English inputs are caught before intent
     # classification rather than only inside the dialogue driver.
-    _BN_CLOSURE_RE = re.compile(r'\b(বাই|বিদায়|ঠিক আছে|অনেক ধন্যবাদ|আজকে এই পর্যন্ত|টাটা|শুভরাত্রি|ঘুমিয়ে পড়লাম)\b', re.UNICODE)
-    _EN_CLOSURE_RE = re.compile(r'\b(bye|goodbye|good night|see you|that\'?s all|farewell|goodbye!)\b', re.IGNORECASE)
+    _BN_CLOSURE_RE = re.compile(
+        r"\b(বাই|বিদায়|ঠিক আছে|অনেক ধন্যবাদ|আজকে এই পর্যন্ত|টাটা"
+        r"|শুভরাত্রি|ঘুমিয়ে পড়লাম)\b",
+        re.UNICODE,
+    )
+    _EN_CLOSURE_RE = re.compile(
+        r"\b(bye|goodbye|good night|see you|that'?s all|farewell"
+        r"|goodbye!)\b",
+        re.IGNORECASE,
+    )
 
     @classmethod
     def _is_closure(cls, text: str) -> bool:
         """True when the input is a conversation closing phrase."""
-        return bool(
-            cls._BN_CLOSURE_RE.search(text or "")
-            or cls._EN_CLOSURE_RE.search(text or "")
-        )
+        return bool(cls._BN_CLOSURE_RE.search(text or "") or cls._EN_CLOSURE_RE.search(text or ""))
 
     # Bengali who-created-X queries: "X তৈরি করেছে কে?", "X কে তৈরি করেছে?"
     _bn_who_creator_re = re.compile(
-        r'([A-Za-z\u0980-\u09FF][A-Za-z\u0980-\u09FF0-9\s\-]*?)\s*(?:এর|র)?\s*'
-        r'(?:তৈরি\s+(?:কর|বান)\w*\s+কে|কে\s+তৈরি\s+(?:কর|বান)\w*|'
-        r'(?:নির্মাতা|প্রস্তুতকারী)\s+(?:কে|কি)\b'
-        r'(?:\s*[?।\uff1f]|\s*$))',
+        r"([A-Za-z\u0980-\u09FF][A-Za-z\u0980-\u09FF0-9\s\-]*?)\s*(?:এর|র)?\s*"
+        r"(?:তৈরি\s+(?:কর|বান)\w*\s+কে|কে\s+তৈরি\s+(?:কর|বান)\w*|"
+        r"(?:নির্মাতা|প্রস্তুতকারী)\s+(?:কে|কি)\b"
+        r"(?:\s*[?।\uff1f]|\s*$))",
         re.IGNORECASE | re.UNICODE,
     )
     # English who-created queries: "who created you?", "who made misty?"
     _en_who_creator_re = re.compile(
-        r'who\s+(created|made|built|invented|developed)'
-        r'\s+([a-z\u0980-\u09FF][a-z\u0980-\u09FF0-9\s\-]*)',
+        r"who\s+(created|made|built|invented|developed)"
+        r"\s+([a-z\u0980-\u09FF][a-z\u0980-\u09FF0-9\s\-]*)",
         re.IGNORECASE,
     )
+
     def parse(self, text: str) -> ParseResult:
         """Parse input text and extract structured information.
 
@@ -460,10 +501,26 @@ class NLUParser:
             confidence=0.3,
         )
 
-    _BN_CLAUSE_STOPS = frozenset({
-        "মানে", "এবং", "কিন্তু", "যে", "তা", "এটি", "হলে", "এব", "বা", "তখন",
-        "মনে", "এটাই", "সেট", "ওটাই", "এখানে", "সেখানে",
-    })
+    _BN_CLAUSE_STOPS = frozenset(
+        {
+            "মানে",
+            "এবং",
+            "কিন্তু",
+            "যে",
+            "তা",
+            "এটি",
+            "হলে",
+            "এব",
+            "বা",
+            "তখন",
+            "মনে",
+            "এটাই",
+            "সেট",
+            "ওটাই",
+            "এখানে",
+            "সেখানে",
+        }
+    )
 
     @staticmethod
     def _trim_bn_clause(obj: str) -> str:
@@ -474,6 +531,7 @@ class NLUParser:
                 break
             keep.append(word)
         return " ".join(keep)
+
     def _try_bengali(self, text: str) -> ParseResult:
         """Try Bengali pattern matching."""
         # Check corrections first (a correction overrides anything else)
@@ -735,7 +793,11 @@ class NLUParser:
             # "কি" ("আমি ভালো কি?", "সে খারাপ কি?") is a conversational
             # turn, not a definition query.
             if len(target.split()) == 2 and target.split()[0] in {
-                "আমি", "তুমি", "আপনি", "সে", "তার",
+                "আমি",
+                "তুমি",
+                "আপনি",
+                "সে",
+                "তার",
             }:
                 bare_match = None
             # Possessive-start guard: "এর কাজ কি?" / "এর রঙ কী?" are
@@ -743,7 +805,11 @@ class NLUParser:
             # blocks handle them with an empty target anchored to the
             # previous topic), not definition queries about "এর".
             if target.split() and target.split()[0] in {
-                "এর", "আমার", "তার", "এটার", "সেটার",
+                "এর",
+                "আমার",
+                "তার",
+                "এটার",
+                "সেটার",
             }:
                 bare_match = None
         if bare_match:
@@ -775,7 +841,7 @@ class NLUParser:
                     confidence=0.75,
                 )
 
-# Pronoun-targeted query "সে কে?" / "এটা কী?"
+        # Pronoun-targeted query "সে কে?" / "এটা কী?"
         pron_match = self._bn_pronoun_query_pattern.search(text)
         if pron_match:
             pronoun = pron_match.group(1)

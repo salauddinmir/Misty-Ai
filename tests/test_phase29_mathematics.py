@@ -44,9 +44,7 @@ def _new_brain() -> Brain:
 def _engine_answer(text: str) -> str:
     result = MATH_ENGINE.solve(text)
     assert result is not None, f"engine returned None for {text!r}"
-    assert result.exact not in (None, "unsupported", "error"), (
-        f"engine error for {text!r}: {result.answer}"
-    )
+    assert result.exact not in (None, "unsupported", "error"), f"engine error for {text!r}: {result.answer}"
     return str(result.exact)
 
 
@@ -151,9 +149,7 @@ class TestMathEngineMathTests:
                         break
                 except ValueError:
                     pass
-        assert matched == len(expected_numbers), (
-            f"expected {expected!r} numeric values not in {result.exact!r}"
-        )
+        assert matched == len(expected_numbers), f"expected {expected!r} numeric values not in {result.exact!r}"
 
     def test_determinism(self):
         first = _engine_answer("solve x^2 - 5x + 6 = 0")

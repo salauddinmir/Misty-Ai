@@ -154,9 +154,7 @@ def test_brain_high_interest_enthusiastic(brain):
     brain.emotion.interest = 0.95
     brain.emotion.curiosity = 0.95
     response = brain.process("সেতু কী?")["response"]
-    assert (
-        "চমৎকার" in response or "ভালো প্রশ্ন" in response or "পছন্দের" in response
-    ), response
+    assert "চমৎকার" in response or "ভালো প্রশ্ন" in response or "পছন্দের" in response, response
 
 
 def test_tone_preserves_content(brain):

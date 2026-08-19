@@ -156,9 +156,7 @@ def extract_entity_candidates(text: str) -> List[str]:
     # "does", "mean" never pollute salience and break pronoun resolution.
     for match in re.finditer(r"\b(?:a|an|the)\s+([a-z][a-z0-9_-]{2,})\b", text, re.IGNORECASE):
         word = match.group(1)
-        if word not in _banned and word not in {
-            c.lower() for c in candidates
-        }:
+        if word not in _banned and word not in {c.lower() for c in candidates}:
             candidates.append(word)
     # Deduplicate while preserving order
     seen: set = set()

@@ -24,12 +24,18 @@ def _new_brain() -> Brain:
 # Deterministic extraction
 # ---------------------------------------------------------------------------
 
+
 class TestExtraction:
     def test_copula_definition(self) -> None:
         text = "A satellite is an artificial object placed in orbit around the earth."
         triples = WebSearchLearner.extract_facts(text)
-        assert triples == [{"subject": "A satellite", "predicate": "is_a",
-                            "obj": "an artificial object placed in orbit around the earth."}]
+        assert triples == [
+            {
+                "subject": "A satellite",
+                "predicate": "is_a",
+                "obj": "an artificial object placed in orbit around the earth.",
+            }
+        ]
 
     def test_alternative_subject_shortened(self) -> None:
         text = "A satellite or an artificial satellite is an object in orbit."
@@ -58,6 +64,7 @@ class TestExtraction:
 # Mocked pipeline: safety gate behavior
 # ---------------------------------------------------------------------------
 
+
 @pytest.fixture(name="mock_learner")
 def mock_learner() -> WebSearchLearner:
     brain = _new_brain()
@@ -79,9 +86,11 @@ def test_allow_with_two_sources(mock_learner: WebSearchLearner) -> None:
 
 
 def test_single_source_quarantined(mock_learner: WebSearchLearner) -> None:
-    mock_learner.search = AsyncMock(return_value=[  # type: ignore[assignment]
-        {"snippet": "Quarks are fundamental particles of matter.", "url": "OnlySource"},
-    ])
+    mock_learner.search = AsyncMock(
+        return_value=[  # type: ignore[assignment]
+            {"snippet": "Quarks are fundamental particles of matter.", "url": "OnlySource"},
+        ]
+    )
     result = asyncio.run(mock_learner.ingest("quark"))
     assert not result.facts_learned
     assert any(d["decision"] == "quarantine" for d in result.decisions)
@@ -98,6 +107,7 @@ def test_learned_fact_queryable(mock_learner: WebSearchLearner) -> None:
 # ---------------------------------------------------------------------------
 # Live network check (skipped gracefully when offline)
 # ---------------------------------------------------------------------------
+
 
 def test_live_ddg_search_reachable() -> None:
     learner = WebSearchLearner(_new_brain())

@@ -78,9 +78,8 @@ class MemoryConsolidator:
             content = item.content
             candidate = {
                 "confidence": float(item.activation),
-                "observations": int(
-                    content.get("observations", 1) if isinstance(content, dict) else 1
-                ) + self.consolidation_count,
+                "observations": int(content.get("observations", 1) if isinstance(content, dict) else 1)
+                + self.consolidation_count,
                 "source_ref": content.get("source") if isinstance(content, dict) else None,
                 "contradicts_existing": bool(isinstance(content, dict) and content.get("contradicts_existing", False)),
             }

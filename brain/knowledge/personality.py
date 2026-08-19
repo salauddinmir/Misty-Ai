@@ -105,8 +105,8 @@ RESPONSE_POOLS: Dict[str, Dict[str, List[str]]] = {
         "en": [
             (
                 "I tried to understand your message, but I could not parse its intent "
-                "precisely yet. You can teach me with \"remember that ...\", "
-                "\"X is Y\", or \"my name is X\", or ask a supported math/physics "
+                'precisely yet. You can teach me with "remember that ...", '
+                '"X is Y", or "my name is X", or ask a supported math/physics '
                 "question. I have kept this input in working memory as a learning "
                 "opportunity."
             ),
@@ -123,10 +123,8 @@ RESPONSE_POOLS: Dict[str, Dict[str, List[str]]] = {
         "bn": [
             "আমি আপনার কথাটি শুনলাম। চাইলে এটি আরও স্পষ্টভাবে বলতে পারেন - "
             '"মনে রাখো ..." বা "X হলো Y" ফরম্যাটে - তাহলে আমি এটি আমার জ্ঞান গ্রাফে সংরক্ষণ করব।',
-            "আপনার কথাটি নোট করে রাখলাম। যদি এটি কোনো জ্ঞান হয়, তাহলে "
-            '"মনে রাখো: ..." হিসেবে বলুন, আমি সেটি মনে রাখব।',
-            "ঠিক আছে, আমি শুনছি। এই বাক্যটি থেকে এখনো নির্দিষ্ট কোনো fact extract করতে পারিনি। "
-            "চাইলে সহজভাবে শেখাতে পারেন।",
+            'আপনার কথাটি নোট করে রাখলাম। যদি এটি কোনো জ্ঞান হয়, তাহলে "মনে রাখো: ..." হিসেবে বলুন, আমি সেটি মনে রাখব।',
+            "ঠিক আছে, আমি শুনছি। এই বাক্যটি থেকে এখনো নির্দিষ্ট কোনো fact extract করতে পারিনি। চাইলে সহজভাবে শেখাতে পারেন।",
         ],
         "en": [
             "I heard your statement. If it contains knowledge you want me to keep, say it as "
@@ -193,8 +191,7 @@ RESPONSE_POOLS: Dict[str, Dict[str, List[str]]] = {
             'আমি এখনো {subject} সম্পর্কে জানি না। আপনি বলতে পারেন: "{subject} হলো X" - তাহলে আমি মনে রাখব।',
             "আমার কাছে {subject} নিয়ে এখনো জ্ঞান নেই। শেখানোর জন্য আপনি পারেন বলতে: "
             '"মনে রাখো: {subject} হলো ..."। আমি আগ্রহের সাথে শিখব।',
-            "{subject} আমার এখনো শেখা হয়নি। কীভাবে শেখাবেন: \"{subject} হলো Y\" - এভাবে বললে আমার "
-            "জ্ঞান গ্রাফে যোগ হয়ে যাবে।",
+            '{subject} আমার এখনো শেখা হয়নি। কীভাবে শেখাবেন: "{subject} হলো Y" - এভাবে বললে আমার জ্ঞান গ্রাফে যোগ হয়ে যাবে।',
         ],
         "en": [
             'I do not know about {subject} yet. You can say: "{subject} is X" and I will remember it.',
@@ -202,7 +199,7 @@ RESPONSE_POOLS: Dict[str, Dict[str, List[str]]] = {
             '"remember that: {subject} is ..." - I will learn with interest.',
             (
                 "{subject} is something I have not learned yet. Teach me by saying: "
-                "\"{subject} is Y\" - it will be added to my knowledge graph."
+                '"{subject} is Y" - it will be added to my knowledge graph.'
             ),
         ],
     },

@@ -69,7 +69,12 @@ class TestAutonomousTickBudget:
         snapshot = state["last_autonomous_tick"]
         assert snapshot is not None
         required_keys = (
-            "tick_index", "evidence_budget", "evidence_count", "elapsed_ms", "outcome", "quarantined_candidates",
+            "tick_index",
+            "evidence_budget",
+            "evidence_count",
+            "elapsed_ms",
+            "outcome",
+            "quarantined_candidates",
         )
         for key in required_keys:
             assert key in snapshot, f"missing metric: {key}"

@@ -48,7 +48,8 @@ def main() -> int:
     data2 = resp2.json() if resp2.headers.get("content-type", "").startswith("application/json") else {}
     text2 = (data2.get("response") or data2.get("reply") or str(data2))[:160]
     check(
-        "chat_en", resp2.status_code == 200 and len(data2) > 0,
+        "chat_en",
+        resp2.status_code == 200 and len(data2) > 0,
         f"{resp2.status_code} ({took2}ms) body starts: {text2!r}",
     )
 
@@ -74,7 +75,8 @@ def main() -> int:
     data4 = resp4.json() if resp4.status_code == 200 else {}
     packages = data4.get("packages", [])
     check(
-        "training_catalog", resp4.status_code == 200 and isinstance(packages, list),
+        "training_catalog",
+        resp4.status_code == 200 and isinstance(packages, list),
         f"{resp4.status_code} packages={len(packages)}",
     )
 

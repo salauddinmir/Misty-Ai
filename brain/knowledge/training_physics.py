@@ -778,25 +778,34 @@ PHYSICS_EXAMPLES: List[Dict[str, Any]] = [
         "output": "velocity = 20 m/s, because v = 200 / 10 = 20",
         "lang": "en",
     },
-    {"input": "১০ সেকেন্ডে ২০০ মিটার পথ অতিক্রম করলে বেগ কত?",
-     "output": "বেগ = ২০ ম/সে, কারণ ২০০ / ১০ = ২০",
-     "lang": "bn", "confidence": 0.95},
+    {
+        "input": "১০ সেকেন্ডে ২০০ মিটার পথ অতিক্রম করলে বেগ কত?",
+        "output": "বেগ = ২০ ম/সে, কারণ ২০০ / ১০ = ২০",
+        "lang": "bn",
+        "confidence": 0.95,
+    },
     {
         "input": "a 5 kg object accelerates at 2 m/s^2; find the force",
         "output": "force = 10 N, because F = 5 x 2 = 10",
         "lang": "en",
     },
-    {"input": "৫ কেজি ভরের বস্তুতে ১০ N বল প্রয়োগ করলে ত্বরণ কত?",
-     "output": "ত্বরণ = ২ ম/সে^২, কারণ a = F/m = ১০/৫ = ২",
-     "lang": "bn", "confidence": 0.95},
+    {
+        "input": "৫ কেজি ভরের বস্তুতে ১০ N বল প্রয়োগ করলে ত্বরণ কত?",
+        "output": "ত্বরণ = ২ ম/সে^২, কারণ a = F/m = ১০/৫ = ২",
+        "lang": "bn",
+        "confidence": 0.95,
+    },
     {
         "input": "a body falls freely for 5 seconds; how far does it fall",
         "output": "122.5 m, because s = 1/2 x 9.8 x 25 = 122.5",
         "lang": "en",
     },
-    {"input": "5 সেকেন্ড মুক্তপতনে বস্তু কতদূর পড়ে?",
-     "output": "১২২.৫ মিটার, কারণ s = 1/2 x 9.8 x 25 = 122.5",
-     "lang": "bn", "confidence": 0.95},
+    {
+        "input": "5 সেকেন্ড মুক্তপতনে বস্তু কতদূর পড়ে?",
+        "output": "১২২.৫ মিটার, কারণ s = 1/2 x 9.8 x 25 = 122.5",
+        "lang": "bn",
+        "confidence": 0.95,
+    },
     {
         "input": "a 2 kg object moves at 3 m/s; find its kinetic energy",
         "output": "kinetic energy = 9 J, because K = 1/2 x 2 x 9 = 9",
@@ -852,23 +861,24 @@ PHYSICS_EXAMPLES: List[Dict[str, Any]] = [
 # ---------------------------------------------------------------------------
 
 PHYSICS_TESTS: List[Dict[str, Any]] = [
-    {"id": "p30_velocity_200_10", "input": "velocity of 200 m in 10 s",
-     "expected_output": "20", "lang": "en"},
-    {"id": "p30_velocity_bn", "input": "২০০ মিটার ১০ সেকেন্ডে অতিক্রমের বেগ",
-     "expected_output": "২০", "lang": "bn", "confidence": 0.95},
-    {"id": "p30_force_5_2", "input": "force of mass 5 kg acceleration 2 m/s^2",
-     "expected_output": "10", "lang": "en"},
+    {"id": "p30_velocity_200_10", "input": "velocity of 200 m in 10 s", "expected_output": "20", "lang": "en"},
+    {
+        "id": "p30_velocity_bn",
+        "input": "২০০ মিটার ১০ সেকেন্ডে অতিক্রমের বেগ",
+        "expected_output": "২০",
+        "lang": "bn",
+        "confidence": 0.95,
+    },
+    {"id": "p30_force_5_2", "input": "force of mass 5 kg acceleration 2 m/s^2", "expected_output": "10", "lang": "en"},
     {"id": "p30_work_10_4", "input": "work done by force 10 N over 4 m", "expected_output": "40", "lang": "en"},
-    {"id": "p30_ke_2_3", "input": "kinetic energy of mass 2 kg at 3 m/s",
-     "expected_output": "9", "lang": "en"},
+    {"id": "p30_ke_2_3", "input": "kinetic energy of mass 2 kg at 3 m/s", "expected_output": "9", "lang": "en"},
     {
         "id": "p30_free_fall_5",
         "input": "distance fallen freely in 5 seconds",
         "expected_output": "122.5",
         "lang": "en",
     },
-    {"id": "p30_pe_2_10", "input": "potential energy of 2 kg at height 10 m",
-     "expected_output": "196", "lang": "en"},
+    {"id": "p30_pe_2_10", "input": "potential energy of 2 kg at height 10 m", "expected_output": "196", "lang": "en"},
     {
         "id": "p30_ohm_12_4",
         "input": "current with voltage 12 V and resistance 4 ohm",
@@ -960,20 +970,24 @@ def physics_curriculum_package() -> TrainingPackageV2:
         }
         out: List[Dict[str, Any]] = []
         for topic, description in topics.items():
-            out.append({
-                "subject": "Misty",
-                "predicate": "knows_topic",
-                "obj": topic,
-                "lang": "en",
-                "source_ref": _RECORD_SOURCE,
-            })
-            out.append({
-                "subject": topic,
-                "predicate": "description",
-                "obj": description,
-                "lang": "en",
-                "source_ref": _RECORD_SOURCE,
-            })
+            out.append(
+                {
+                    "subject": "Misty",
+                    "predicate": "knows_topic",
+                    "obj": topic,
+                    "lang": "en",
+                    "source_ref": _RECORD_SOURCE,
+                }
+            )
+            out.append(
+                {
+                    "subject": topic,
+                    "predicate": "description",
+                    "obj": description,
+                    "lang": "en",
+                    "source_ref": _RECORD_SOURCE,
+                }
+            )
         return out
 
     all_facts = _topic_concepts() + _attach(PHYSICS_FACTS)
@@ -1039,9 +1053,7 @@ def register_physics_curriculum(brain: Any) -> int:
             count += 1
 
     for fact in PHYSICS_FACTS:
-        if brain.semantic_memory.query(
-            subject=fact["subject"], predicate=fact["predicate"]
-        ):
+        if brain.semantic_memory.query(subject=fact["subject"], predicate=fact["predicate"]):
             continue
         brain.semantic_memory.store_fact(
             subject=fact["subject"],

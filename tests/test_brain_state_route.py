@@ -33,7 +33,12 @@ class TestBrainStateRoute:
         tick = payload["last_autonomous_tick"]
         assert tick, "expected at least one autonomous tick before this request"
         required_keys = (
-            "tick_index", "evidence_budget", "evidence_count", "elapsed_ms", "outcome", "quarantined_candidates",
+            "tick_index",
+            "evidence_budget",
+            "evidence_count",
+            "elapsed_ms",
+            "outcome",
+            "quarantined_candidates",
         )
         for key in required_keys:
             assert key in tick, f"missing metric: {key}"

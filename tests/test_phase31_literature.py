@@ -31,8 +31,7 @@ from brain.knowledge.training_literature import (
 )
 
 _BN_TAGORE_WHO = (
-    "\u09b0\u09ac\u09c0\u09a8\u09cd\u09a6\u09cd\u09b0\u09a8\u09be\u09a5 \u09a0\u09be\u0995\u09c1\u09b0 "
-    "\u0995\u09c7?"
+    "\u09b0\u09ac\u09c0\u09a8\u09cd\u09a6\u09cd\u09b0\u09a8\u09be\u09a5 \u09a0\u09be\u0995\u09c1\u09b0 \u0995\u09c7?"
 )
 _BN_GITANJALI = "\u0997\u09c0\u09a4\u09be\u099e\u09cd\u099c\u09b2\u09bf \u0995\u09c0?"
 _BN_BIDROHI = "\u09ac\u09bf\u09a6\u09cd\u09b0\u09cb\u09b9\u09c0 \u0995\u09ac\u09bf\u09a4\u09be "
@@ -102,7 +101,11 @@ class TestLiteraturePackage:
     def test_facts_have_topics(self):
         for fact in LITERATURE_FACTS:
             assert "topic" in fact and fact["topic"] in (
-                "tagore", "nazrul", "jibanananda", "renaissance", "songs",
+                "tagore",
+                "nazrul",
+                "jibanananda",
+                "renaissance",
+                "songs",
             )
 
     def test_no_uncertain_facts(self):
@@ -153,9 +156,9 @@ class TestLiteratureEngineTests:
 
         target = _unify_digits(case["expected_output"].lower())
         en_target = case["expected_output"]
-        assert target in lowered or en_target in lowered or \
-            _unify_digits(en_target) in lowered, \
+        assert target in lowered or en_target in lowered or _unify_digits(en_target) in lowered, (
             f"case={case['id']} answer={answer!r}"
+        )
 
 
 class TestBrainLiteratureConceptQuestions:

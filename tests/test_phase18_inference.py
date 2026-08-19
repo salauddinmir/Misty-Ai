@@ -11,7 +11,6 @@ import pytest
 
 from brain.core.brain import Brain
 from brain.knowledge.commonsense import register_commonsense_layer
-from brain.knowledge.inference import InferenceSynthesizer
 
 
 @pytest.fixture()
@@ -27,12 +26,9 @@ def synthesize(brain: Brain, question: str):
 # Commonsense layer loading
 # ---------------------------------------------------------------------------
 
+
 def test_commonsense_loaded_after_init(brain: Brain) -> None:
-    facts = [
-        f
-        for f in brain.semantic_memory.facts.values()
-        if f.source == "commonsense_layer"
-    ]
+    facts = [f for f in brain.semantic_memory.facts.values() if f.source == "commonsense_layer"]
     assert len(facts) >= 100
     subjects = {f.subject for f in facts}
     assert "আকাশ" in subjects
@@ -52,6 +48,7 @@ def test_commonsense_idempotent_registration(brain: Brain) -> None:
 # ---------------------------------------------------------------------------
 # Direct synthesis from commonsense facts
 # ---------------------------------------------------------------------------
+
 
 def test_sky_color_question_bn(brain: Brain) -> None:
     result = synthesize(brain, "আকাশের রঙ কি?")
@@ -77,7 +74,7 @@ def test_water_property_question(brain: Brain) -> None:
 
 
 def test_bangladesh_capital(brain: Brain) -> None:
-    result = synthesize(brain, "বাংলাদেশের রাজধানী কি?")
+    result = synthesize(brain, "বাংলাদেশের রাজধনী কি?")
     assert result is not None
     assert "ঢাকা" in result.answer
     assert result.matched_predicate == "capital"
@@ -111,6 +108,7 @@ def test_fire_heat(brain: Brain) -> None:
 # Chain reasoning (depth-1 derivation)
 # ---------------------------------------------------------------------------
 
+
 def test_chain_reasoning_bn(brain: Brain) -> None:
     # No direct fact "রোদ comes_from" chain: rain falls_from clouds
     # and clouds are made_of water vapor — verify chaining at least
@@ -132,6 +130,7 @@ def test_chain_finds_intermediate(brain: Brain) -> None:
 # Graceful fallback: unknown input is NOT a canned parse error
 # ---------------------------------------------------------------------------
 
+
 def test_unknown_question_no_canned_parse_failure(brain: Brain) -> None:
     raw = "এলিফেন্ট কিভাবে খায়?"
     output = brain.process(raw)
@@ -150,7 +149,7 @@ def test_random_statement_no_canned_parse_failure(brain: Brain) -> None:
 def test_genuine_unknown_still_humble(brain: Brain) -> None:
     # A question about something genuinely not in any knowledge base
     # should return an honest humble reply, never hallucinated facts.
-    output = brain.process("কেলোনিয়ার রাজধানী কি?")
+    output = brain.process("কেলোনিয়ার রাজধনী কি?")
     answer = output.get("response", "")
     confidence = output.get("confidence", 1.0)
     assert isinstance(answer, str)
@@ -161,6 +160,7 @@ def test_genuine_unknown_still_humble(brain: Brain) -> None:
 # Confidence discipline
 # ---------------------------------------------------------------------------
 
+
 def test_synthesized_confidence_bounded(brain: Brain) -> None:
     result = synthesize(brain, "আকাশের রঙ কি?")
     assert result is not None
@@ -168,7 +168,7 @@ def test_synthesized_confidence_bounded(brain: Brain) -> None:
 
 
 def test_synthesis_has_derivation_steps(brain: Brain) -> None:
-    result = synthesize(brain, "বাংলাদেশের রাজধানী কি?")
+    result = synthesize(brain, "বাংলাদেশের রাজধনী কি?")
     assert result is not None
     assert len(result.steps) >= 1
     # steps carry the derivation triple
@@ -179,6 +179,7 @@ def test_synthesis_has_derivation_steps(brain: Brain) -> None:
 # Brain-level routing: synthesis reached via process()
 # ---------------------------------------------------------------------------
 
+
 def test_brain_process_synthesizes_sky_answer(brain: Brain) -> None:
     output = brain.process("আকাশের রঙ কি?")
     answer = output.get("response", "")
@@ -188,7 +189,7 @@ def test_brain_process_synthesizes_sky_answer(brain: Brain) -> None:
 
 
 def test_brain_process_synthesizes_capital(brain: Brain) -> None:
-    output = brain.process("বাংলাদেশের রাজধানী কি?")
+    output = brain.process("বাংলাদেশের রাজধনী কি?")
     answer = output.get("response", "")
     assert "ঢাকা" in answer, f"capital answer missing 'ঢাকা': {answer!r}"
 

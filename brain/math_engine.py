@@ -166,9 +166,26 @@ class MathEngine:
             "বর্গমূল",
             "equation",
             "সমীকরণ",
-                        "sequence", "ধারা", "combination", "permutation", "সমাবেশ", "বিন্যাস",
-            "circle", "বৃত্ত", "triangle", "ত্রিভুজ", "rectangle", "আয়তক্ষেত্র", "আয়তক্ষেত্র",
-            "degree", "term of ap", "term of gp", "ap starting", "gp starting", "অন্তর", "অনুপাত",
+            "sequence",
+            "ধারা",
+            "combination",
+            "permutation",
+            "সমাবেশ",
+            "বিন্যাস",
+            "circle",
+            "বৃত্ত",
+            "triangle",
+            "ত্রিভুজ",
+            "rectangle",
+            "আয়তক্ষেত্র",
+            "আয়তক্ষেত্র",
+            "degree",
+            "term of ap",
+            "term of gp",
+            "ap starting",
+            "gp starting",
+            "অন্তর",
+            "অনুপাত",
         )
         return any(marker in lowered for marker in markers) or bool(
             re.search(r"\d", lowered) and re.search(r"[+\-*/^%=]", lowered)
@@ -258,9 +275,7 @@ class MathEngine:
         # term on either side. The normalized "x**2" style is matched too.
         # Leading directive words like "solve the equation" are stripped so
         # inputs such as "solve x^2 - 5x + 6 = 0" parse correctly.
-        text = re.sub(
-            r"^(solve\s*(?:the\s*)?(?:equation\s*)?|equation\s*[:：]?\s*)", "", text, flags=re.I
-        )
+        text = re.sub(r"^(solve\s*(?:the\s*)?(?:equation\s*)?|equation\s*[:：]?\s*)", "", text, flags=re.I)
         match = re.match(r"^(.+)\s*=\s*(.+)$", text)
         if not match:
             return None
@@ -543,7 +558,10 @@ class MathEngine:
         else:
             try:
                 value = self._functions[function](math.radians(raw))
-                steps = (f"angle = {raw:g}°", f"radians = {math.radians(raw):.6g}",)
+                steps = (
+                    f"angle = {raw:g}°",
+                    f"radians = {math.radians(raw):.6g}",
+                )
             except (ArithmeticError, ValueError):
                 return None
         if not math.isfinite(value):

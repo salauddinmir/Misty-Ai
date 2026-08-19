@@ -81,7 +81,6 @@ def _engine_answer(text: str) -> str:
 
 
 class TestPhysicsPackage:
-
     def test_package_validates(self):
         package = physics_curriculum_package()
         assert validate_package(package) is package
@@ -147,7 +146,6 @@ class TestPhysicsPackage:
 
 class TestPhysicsEnginePhysicsTests:
     @pytest.mark.parametrize("case", PHYSICS_TESTS, ids=[case["id"] for case in PHYSICS_TESTS])
-
     def test_physics_test_case(self, case: dict):
         result = PHYSICS_ENGINE.solve(case["input"])
         assert result is not None, f"engine returned None for {case['input']!r}"
@@ -173,9 +171,7 @@ class TestPhysicsEnginePhysicsTests:
                         break
                 except ValueError:
                     pass
-        assert matched == len(expected_numbers), (
-            f"expected {expected!r} numeric values not in {result.exact!r}"
-        )
+        assert matched == len(expected_numbers), f"expected {expected!r} numeric values not in {result.exact!r}"
 
     def test_determinism(self):
         first = _engine_answer("velocity of 200 m in 10 s")
@@ -189,7 +185,6 @@ class TestPhysicsEnginePhysicsTests:
 
 
 class TestPhysicsEnginePhase30Features:
-
     def test_velocity_english(self):
         assert "20" in _engine_answer("velocity of 200 m in 10 s")
 

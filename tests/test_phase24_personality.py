@@ -89,8 +89,7 @@ def test_teaching_acknowledgment_varies(brain):
     brain.process("মনে রাখো: বাঘ হলো বাংলাডেশের জাতীয় পশু")
     replies = _ask(brain, "মনে রাখো: নীল হলো একটি রঙ", "মনে রাখো: সূর্য হলো তারা")
     # The stored-fact acknowledgment rotates across the pool variants.
-    assert "মনে রাখা হয়েছে" in replies[0] or "শেখা হয়ে গেল" in replies[0] \
-        or "ধন্যবাদ" in replies[0], replies
+    assert "মনে রাখা হয়েছে" in replies[0] or "শেখা হয়ে গেল" in replies[0] or "ধন্যবাদ" in replies[0], replies
 
 
 # ---------------------------------------------------------------------------

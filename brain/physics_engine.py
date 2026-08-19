@@ -83,7 +83,7 @@ class PhysicsEngine:
         """
         if marker == "g =":
             return marker in text
-        if all("\u0980" <= char <= "\u09FF" for char in marker):
+        if all("\u0980" <= char <= "\u09ff" for char in marker):
             return marker in text
         escaped = re.escape(marker)
         return re.search(rf"(?<![\w\u0980-\u09FF]){escaped}(?![\w\u0980-\u09FF])", text) is not None
@@ -106,9 +106,12 @@ class PhysicsEngine:
 
         # Wave speed first: a "speed ... wave/frequency" question must not be
         # caught by the plain velocity branch.
-        _is_wave = ("wave" in lowered or "frequency" in lowered
-                    or "\u09a4\u09b0\u0999\u09cd\u0997" in lowered
-                    or "\u0995\u09ae\u09cd\u09aa\u09be\u0999\u09cd\u0995" in lowered)
+        _is_wave = (
+            "wave" in lowered
+            or "frequency" in lowered
+            or "\u09a4\u09b0\u0999\u09cd\u0997" in lowered
+            or "\u0995\u09ae\u09cd\u09aa\u09be\u0999\u09cd\u0995" in lowered
+        )
         if _is_wave and len(numbers) >= 2:
             freq, wavelength = numbers[:2]
             value = freq * wavelength
@@ -166,8 +169,7 @@ class PhysicsEngine:
 
         # Work W = F x s — requires an explicit force cue so that phrases like
         # "power when 100 J work in 5 s" are not mis-parsed as work.
-        _is_force = any(self._has_marker(lowered, marker)
-                        for marker in ("force", "বল", "newton"))
+        _is_force = any(self._has_marker(lowered, marker) for marker in ("force", "বল", "newton"))
         if _is_force and "work" in lowered and len(numbers) >= 2:
             force, displacement = numbers[:2]
             value = force * displacement
@@ -195,8 +197,7 @@ class PhysicsEngine:
         # Free fall distance: s = 1/2 g t^2 — marker "fall"/"পতন" not in
         # token markers, so this branch fires when "fall" appears as a word
         # and at least one number (time) is given.
-        _is_fall = (re.search(r"\b(free|fall|falling|fallen|freely)\b", lowered)
-                      or "\u09aa\u09a4\u09a8" in lowered)
+        _is_fall = re.search(r"\b(free|fall|falling|fallen|freely)\b", lowered) or "\u09aa\u09a4\u09a8" in lowered
         if _is_fall and len(numbers) >= 1:
             time = numbers[0]
             g = numbers[1] if len(numbers) >= 2 else 9.8
@@ -225,16 +226,16 @@ class PhysicsEngine:
             if reciprocal == 0:
                 return PhysicsResult(
                     "সমান্তরাল সংযোগের সমতুল্য রোধ শূন্য হতে পারে না।",
-                    "undefined", "electricity", confidence=0.7,
+                    "undefined",
+                    "electricity",
+                    confidence=0.7,
                 )
             value = 1.0 / reciprocal
             return PhysicsResult(
                 f"total parallel resistance = {value:g} ohm",
                 f"R = {value:g} ohm",
                 "electricity",
-                ("1/R = 1/R1 + 1/R2 + ...",
-                 "1/R = " + " + ".join(f"1/{r:g}" for r in numbers),
-                 f"R = {value:g} ohm"),
+                ("1/R = 1/R1 + 1/R2 + ...", "1/R = " + " + ".join(f"1/{r:g}" for r in numbers), f"R = {value:g} ohm"),
             )
 
         # Ohm's law: current I = V / R — fires only for ohm-law phrasings so
@@ -346,8 +347,10 @@ PHYSICS_FACTS = [
     {
         "subject": "PhysicsEngine",
         "predicate": "solves",
-        "obj": ("velocity, force, work, kinetic energy, momentum, potential energy, "
-                "free fall, Ohm's law, resistance, power and wave speed"),
+        "obj": (
+            "velocity, force, work, kinetic energy, momentum, potential energy, "
+            "free fall, Ohm's law, resistance, power and wave speed"
+        ),
     },
 ]
 

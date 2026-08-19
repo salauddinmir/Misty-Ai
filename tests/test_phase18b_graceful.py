@@ -33,6 +33,7 @@ def brain() -> Brain:
 # NLU classification
 # ---------------------------------------------------------------------------
 
+
 def test_bn_clarification_is_conversation(parser: NLUParser) -> None:
     for text in ["বুঝলাম না", "বুঝতে পারছি না", "কি ব্যাপার?", "কী ব্যাপার", "কেন?"]:
         assert parser.parse(text).intent is IntentType.CONVERSATION
@@ -49,6 +50,7 @@ def test_en_clarification_is_conversation(parser: NLUParser) -> None:
 # ---------------------------------------------------------------------------
 # Live brain responses
 # ---------------------------------------------------------------------------
+
 
 def test_bn_clarification_no_canned_reply(brain: Brain) -> None:
     for text in ["বুঝলাম না", "কি ব্যাপার?"]:

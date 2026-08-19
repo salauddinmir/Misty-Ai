@@ -136,9 +136,7 @@ def test_closure_bengali_has_no_followup_question(brain):
 def test_closure_english_has_no_followup_question(brain):
     response = brain.process("Alright, that's all for today, goodbye!")["response"]
     assert "?" not in response, response
-    assert brain.conversation_driver.user_intent_closed(
-        "Alright, that's all for today, goodbye!"
-    )
+    assert brain.conversation_driver.user_intent_closed("Alright, that's all for today, goodbye!")
 
 
 def test_user_intent_closed_detection(driver):

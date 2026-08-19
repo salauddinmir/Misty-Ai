@@ -712,70 +712,70 @@ LITERATURE_EXAMPLES: List[Dict[str, Any]] = [
 ]
 
 LITERATURE_TESTS: List[Dict[str, Any]] = [
-        {
+    {
         "id": "p31_tagore_nobel",
         "input": "tagore definition?",
         "expected_output": "1913",
         "lang": "en",
         "confidence": 0.95,
     },
-        {
+    {
         "id": "p31_tagore_nobel_bn",
         "input": "রবীন্দ্রনাথ ঠাকুরের পরিচয়?",
         "expected_output": "১৯১৩",
         "lang": "bn",
         "confidence": 0.95,
     },
-        {
+    {
         "id": "p31_gitanjali_year",
         "input": "gitanjali definition?",
         "expected_output": "1913",
         "lang": "en",
         "confidence": 0.95,
     },
-        {
+    {
         "id": "p31_tagore_birth",
         "input": "rabindranath tagore definition?",
         "expected_output": "1861",
         "lang": "en",
         "confidence": 0.95,
     },
-        {
+    {
         "id": "p31_nazrul_death",
         "input": "kazi nazrul islam definition?",
         "expected_output": "1976",
         "lang": "en",
         "confidence": 0.95,
     },
-        {
+    {
         "id": "p31_bidrohi_year",
         "input": "bidrohi definition?",
         "expected_output": "1922",
         "lang": "en",
         "confidence": 0.95,
     },
-        {
+    {
         "id": "p31_jibanananda_death",
         "input": "jibanananda das definition?",
         "expected_output": "1954",
         "lang": "en",
         "confidence": 0.95,
     },
-        {
+    {
         "id": "p31_vande_mataram_year",
         "input": "vande mataram definition?",
         "expected_output": "1882",
         "lang": "en",
         "confidence": 0.95,
     },
-        {
+    {
         "id": "p31_visva_bharati_year",
         "input": "visva-bharati definition?",
         "expected_output": "1921",
         "lang": "en",
         "confidence": 0.95,
     },
-        {
+    {
         "id": "p31_bonolata_year",
         "input": "bonolata sen definition?",
         "expected_output": "1942",
@@ -787,6 +787,7 @@ LITERATURE_TESTS: List[Dict[str, Any]] = [
 # ---------------------------------------------------------------------------
 # Provenance: content hash computed from the canonical payload
 # ---------------------------------------------------------------------------
+
 
 def _build_payload() -> str:
     """Canonical payload for the content hash (order matters)."""
@@ -802,6 +803,7 @@ def _build_payload() -> str:
     parts.append(json.dumps(LITERATURE_EXAMPLES, sort_keys=True, ensure_ascii=False))
     parts.append(json.dumps(LITERATURE_TESTS, sort_keys=True, ensure_ascii=False))
     return "".join(parts)
+
 
 LITERATURE_FORMULAS: List[Dict[str, Any]] = []
 
@@ -839,20 +841,24 @@ def literature_curriculum_package() -> TrainingPackageV2:
         }
         out: List[Dict[str, Any]] = []
         for topic, description in topics.items():
-            out.append({
-                "subject": "Misty",
-                "predicate": "knows_topic",
-                "obj": topic,
-                "lang": "en",
-                "source_ref": _RECORD_SOURCE,
-            })
-            out.append({
-                "subject": topic,
-                "predicate": "description",
-                "obj": description,
-                "lang": "en",
-                "source_ref": _RECORD_SOURCE,
-            })
+            out.append(
+                {
+                    "subject": "Misty",
+                    "predicate": "knows_topic",
+                    "obj": topic,
+                    "lang": "en",
+                    "source_ref": _RECORD_SOURCE,
+                }
+            )
+            out.append(
+                {
+                    "subject": topic,
+                    "predicate": "description",
+                    "obj": description,
+                    "lang": "en",
+                    "source_ref": _RECORD_SOURCE,
+                }
+            )
         return out
 
     all_facts = _topic_concepts() + _attach(LITERATURE_FACTS)
@@ -863,19 +869,17 @@ def literature_curriculum_package() -> TrainingPackageV2:
         languages=["bn", "en"],
         license=PACKAGE_LICENSE,
         source=SourceRef(
-            title="Misty Bengali literature curriculum (Phase 31) "
-            "— verified facts only",
+            title="Misty Bengali literature curriculum (Phase 31) — verified facts only",
             url="https://misty-brain.onrender.com",
             retrieved_at=datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
             content_hash=_CONTENT_HASH,
         ),
         concepts=[
-            *({"name": "Literature", "type": "Field",
-               "source_ref": _RECORD_SOURCE},
-              {"name": "Poetry", "type": "Branch",
-               "source_ref": _RECORD_SOURCE},
-              {"name": "কবিতা", "type": "শাখা",
-               "source_ref": _RECORD_SOURCE}),
+            *(
+                {"name": "Literature", "type": "Field", "source_ref": _RECORD_SOURCE},
+                {"name": "Poetry", "type": "Branch", "source_ref": _RECORD_SOURCE},
+                {"name": "কবিতা", "type": "শাখা", "source_ref": _RECORD_SOURCE},
+            ),
             *_attach(LITERATURE_CONCEPTS),
         ],
         relations=_attach(LITERATURE_RELATIONS),
@@ -912,9 +916,7 @@ def register_literature_curriculum(brain: Any) -> int:
             )
             count += 1
     for fact in LITERATURE_FACTS:
-        if brain.semantic_memory.query(
-            subject=fact["subject"], predicate=fact["predicate"]
-        ):
+        if brain.semantic_memory.query(subject=fact["subject"], predicate=fact["predicate"]):
             continue
         brain.semantic_memory.store_fact(
             subject=fact["subject"],

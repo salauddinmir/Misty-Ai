@@ -297,9 +297,7 @@ def generated_benchmark_cases() -> List[BenchmarkCase]:
     return cases_from_specs(UNIT_CASE_SPECS)
 
 
-def curriculum_cases(
-    department: str, languages: Tuple[str, ...] = ("bn", "en")
-) -> List[BenchmarkCase]:
+def curriculum_cases(department: str, languages: Tuple[str, ...] = ("bn", "en")) -> List[BenchmarkCase]:
     """Generated cases scoped to one department, or empty for unmapped departments."""
     specs = UNIT_CASE_SPECS.get(department, ())
     return cases_from_specs({department: specs}, languages=languages)

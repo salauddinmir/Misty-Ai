@@ -25,11 +25,48 @@ from brain.knowledge.commonsense import (
 
 # Very common Bengali stop words stripped before concept matching.
 _BN_STOP = {
-    "কি", "কী", "কিছু", "এটা", "ওটা", "সেটা", "আমি", "তুমি", "আপনি",
-    "আমার", "তার", "এর", "কেন", "কীভাবে", "কোথায়", "কখন", "হয়", "হয়ে",
-    "থেকে", "জন্য", "দিয়ে", "হয়েছে", "যা", "যে", "এই", "ওই", "সেই",
-    "তাহলে", "আছে", "আর", "এবং", "বা", "তো", "না", "বলুন",
-    "জানতে", "চাই", "ভালো", "পারি", "পারো", "পারবে", "নেই",
+    "কি",
+    "কী",
+    "কিছু",
+    "এটা",
+    "ওটা",
+    "সেটা",
+    "আমি",
+    "তুমি",
+    "আপনি",
+    "আমার",
+    "তার",
+    "এর",
+    "কেন",
+    "কীভাবে",
+    "কোথায়",
+    "কখন",
+    "হয়",
+    "হয়ে",
+    "থেকে",
+    "জন্য",
+    "দিয়ে",
+    "হয়েছে",
+    "যা",
+    "যে",
+    "এই",
+    "ওই",
+    "সেই",
+    "তাহলে",
+    "আছে",
+    "আর",
+    "এবং",
+    "বা",
+    "তো",
+    "না",
+    "বলুন",
+    "জানতে",
+    "চাই",
+    "ভালো",
+    "পারি",
+    "পারো",
+    "পারবে",
+    "নেই",
 }
 
 _EXTRA_BN_STOP = {"কি", "কী", "কে", "এর", "ের", "র", "হলো"}
@@ -38,12 +75,56 @@ _EXTRA_BN_STOP = {"কি", "কী", "কে", "এর", "ের", "র", "হ�
 # as a stop token so possessive concept names keep matching their stored
 # subjects after tokenization.
 _EN_STOP = {
-    "what", "is", "the", "a", "an", "of", "and", "or", "why", "how",
-    "when", "where", "who", "does", "do", "have", "has", "can", "could",
-    "would", "tell", "me", "please", "about", "its", "your", "my", "it",
-    "i", "you", "we", "they", "this", "that", "these", "those", "are",
-    "was", "were", "being", "known", "say",
-    "by", "from", "in", "to", "at", "on", "with", "s",
+    "what",
+    "is",
+    "the",
+    "a",
+    "an",
+    "of",
+    "and",
+    "or",
+    "why",
+    "how",
+    "when",
+    "where",
+    "who",
+    "does",
+    "do",
+    "have",
+    "has",
+    "can",
+    "could",
+    "would",
+    "tell",
+    "me",
+    "please",
+    "about",
+    "its",
+    "your",
+    "my",
+    "it",
+    "i",
+    "you",
+    "we",
+    "they",
+    "this",
+    "that",
+    "these",
+    "those",
+    "are",
+    "was",
+    "were",
+    "being",
+    "known",
+    "say",
+    "by",
+    "from",
+    "in",
+    "to",
+    "at",
+    "on",
+    "with",
+    "s",
 }
 
 
@@ -125,8 +206,11 @@ class InferenceSynthesizer:
             effective_predicate = pred_counts.most_common(1)[0][0]
 
         return self._compose_answer(
-            text, matched_facts[:3], concepts[0],
-            effective_predicate, is_bengali,
+            text,
+            matched_facts[:3],
+            concepts[0],
+            effective_predicate,
+            is_bengali,
         )
 
     # ------------------------------------------------------------------
@@ -142,9 +226,7 @@ class InferenceSynthesizer:
         lowered = text.lower()
         tokens: List[str] = []
         if is_bengali:
-            tokens.extend(
-                m.group(0) for m in InferenceSynthesizer._BN_WORD_RE.finditer(lowered)
-            )
+            tokens.extend(m.group(0) for m in InferenceSynthesizer._BN_WORD_RE.finditer(lowered))
         else:
             tokens.extend(token for token in re.split(r"\W+", lowered) if token)
         stop = _BN_STOP if is_bengali else _EN_STOP
@@ -155,9 +237,7 @@ class InferenceSynthesizer:
             tokens = [t for t in tokens if t not in _EXTRA_BN_STOP]
         return tokens
 
-    def _extract_concepts(
-        self, tokens: List[str], brain: Any, is_bengali: bool
-    ) -> List[str]:
+    def _extract_concepts(self, tokens: List[str], brain: Any, is_bengali: bool) -> List[str]:
         """Return question tokens that correspond to stored concept
         names (case-insensitive). Exact token-to-subject equality wins;
         a token may also count when it equals the whole question topic
@@ -169,14 +249,20 @@ class InferenceSynthesizer:
         # original form (e.g. "ohm's law definition") but questions
         # tokenize "Ohm's" into "ohm". Compare against the normalized
         # set (apostrophe-s stripped) and record the ORIGINAL subject.
+        # Phase 32: common relational stop words ("of", "and", "the",
+        # "a", "an") are stripped when normalizing both stored subjects
+        # and query spans so "independence day of india" reaches the
+        # India-specific subject instead of a generic homonym.
+        _stop_drop = {"of", "and", "the", "a", "an"}
+
         def _poss_norm(text: str) -> str:
             # Phase 30: strip possessive "'s" tokens and collapse spaces so
             # "Ohm's Law" (tokens "ohm", "law") matches stored subjects.
             # Phase 31: also collapse hyphens so "Visva-Bharati" tokens
             # "visva" + "bharati" match the hyphenated stored subject.
+            # Phase 32: also drop relational stop words.
             return " ".join(
-                part for part in text.replace("'s", " ").replace("-", " ").split()
-                if part != "s"
+                part for part in text.replace("'s", " ").replace("-", " ").split() if part not in ("s", *_stop_drop)
             )
 
         _norm_to_stored = {_poss_norm(subj): subj for subj in stored}
@@ -213,9 +299,7 @@ class InferenceSynthesizer:
         if is_bengali and not concepts:
             for suffix in ("ের", "কে", "র", "টি", "টা"):
                 stripped: List[str] = [
-                    token[: -len(suffix)]
-                    for token in tokens
-                    if token.endswith(suffix) and len(token) > len(suffix) + 1
+                    token[: -len(suffix)] for token in tokens if token.endswith(suffix) and len(token) > len(suffix) + 1
                 ]
                 for base in stripped:
                     for subject in stored:
@@ -235,9 +319,7 @@ class InferenceSynthesizer:
     # Predicate detection
     # ------------------------------------------------------------------
 
-    def _detect_predicate(
-        self, text: str, tokens: List[str], is_bengali: bool
-    ) -> str | None:
+    def _detect_predicate(self, text: str, tokens: List[str], is_bengali: bool) -> str | None:
         """Map question wording to a semantic predicate, e.g.
         'আকাশের রঙ' -> 'color', 'capital of India' -> 'capital'.
 
@@ -252,13 +334,9 @@ class InferenceSynthesizer:
             # Also check both scripts for questions with mixed code
             for phrase in phrases:
                 if phrase.lower() in lowered:
-                    scored[pattern["predicate"]] = scored.get(
-                        pattern["predicate"], 0
-                    ) + len(phrase)
+                    scored[pattern["predicate"]] = scored.get(pattern["predicate"], 0) + len(phrase)
         # Phrase match among specific (non-generic) predicates wins
-        specific = max(
-            (p for p in scored if p != "is_a"), key=scored.get, default=None
-        )
+        specific = max((p for p in scored if p != "is_a"), key=scored.get, default=None)
         if specific:
             return specific
         if "is_a" in scored:
@@ -273,23 +351,15 @@ class InferenceSynthesizer:
     # Fact lookup and chaining
     # ------------------------------------------------------------------
 
-    def _lookup(
-        self, brain: Any, subject: str, predicate: str | None
-    ) -> List[Any]:
+    def _lookup(self, brain: Any, subject: str, predicate: str | None) -> List[Any]:
         """Direct semantic-memory lookup for ``subject``."""
         facts: List[Any] = []
         # 1. Exact-concept facts (case-insensitive)
-        exact = [
-            f
-            for f in brain.semantic_memory.facts.values()
-            if f.subject.lower() == subject.lower()
-        ]
+        exact = [f for f in brain.semantic_memory.facts.values() if f.subject.lower() == subject.lower()]
         facts.extend(exact)
         # 2. If a predicate was asked about, prioritize matching facts
         if predicate:
-            pred_facts = [
-                f for f in exact if f.predicate.lower() == predicate.lower()
-            ]
+            pred_facts = [f for f in exact if f.predicate.lower() == predicate.lower()]
             if pred_facts:
                 return pred_facts
         # 3. Substring-subject matches (e.g. question "আকাশ" matches
@@ -298,10 +368,7 @@ class InferenceSynthesizer:
             facts.extend(
                 fact
                 for fact in brain.semantic_memory.facts.values()
-                if (
-                    subject in fact.subject.lower()
-                    or fact.subject.lower() in subject
-                )
+                if (subject in fact.subject.lower() or fact.subject.lower() in subject)
                 and fact.subject.lower() != subject.lower()
             )
         return facts
@@ -367,14 +434,8 @@ class InferenceSynthesizer:
                     break
 
         values = ", ".join(objects)
-        strength = (
-            "নিশ্চিত ভাবে জানি"
-            if confidence >= 0.9
-            else "আমার সংরক্ষিত জ্ঞান অনুযায়ী"
-        )
-        is_derived = confidence < 1.0 or any(
-            f.source != "commonsense_layer" for f in facts
-        )
+        strength = "নিশ্চিত ভাবে জানি" if confidence >= 0.9 else "আমার সংরক্ষিত জ্ঞান অনুযায়ী"
+        is_derived = confidence < 1.0 or any(f.source != "commonsense_layer" for f in facts)
 
         if is_bengali:
             # Possessive form: attach "ের" only when the subject does not
@@ -388,10 +449,7 @@ class InferenceSynthesizer:
                 body = f"{subject} হলো {values}"
             else:
                 body = f"{possessive} {ans_bn} হলো {values}"
-            answer = (
-                f"আমি {strength} বলতে পারি: {body}। "
-                f"এটি আমার সংরক্ষিত কনসেপ্ট ও নিয়ম থেকে ডেরাইভ করা হয়েছে।"
-            )
+            answer = f"আমি {strength} বলতে পারি: {body}। এটি আমার সংরক্ষিত কনসেপ্ট ও নিয়ম থেকে ডেরাইভ করা হয়েছে।"
         else:
             answer = (
                 f"Based on my stored knowledge, the {ans_en} of "
