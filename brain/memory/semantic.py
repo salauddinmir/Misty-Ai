@@ -4,8 +4,14 @@ Semantic Memory.
 Stores facts and concepts linked to the knowledge graph.
 """
 
+import time
 from dataclasses import dataclass, field
 from typing import Dict, List
+
+
+def now_ts() -> float:
+    """Current epoch timestamp; overridable for deterministic tests."""
+    return time.time()
 
 
 @dataclass
@@ -17,6 +23,8 @@ class SemanticFact:
     obj: str
     confidence: float = 1.0
     source: str = "user_input"
+    created_at: float = field(default_factory=lambda: 0.0)
+    accessed_at: float = field(default_factory=lambda: 0.0)
 
 
 @dataclass
@@ -36,12 +44,21 @@ class SemanticMemory:
     ) -> str:
         """Store a semantic fact (subject-predicate-object triple)."""
         key = f"{subject}:{predicate}:{obj}"
+        now = now_ts()
+        if key in self.facts:
+            existing = self.facts[key]
+            existing.confidence = confidence
+            existing.source = source
+            existing.accessed_at = now
+            return key
         fact = SemanticFact(
             subject=subject,
             predicate=predicate,
             obj=obj,
             confidence=confidence,
             source=source,
+            created_at=now,
+            accessed_at=now,
         )
         self.facts[key] = fact
 

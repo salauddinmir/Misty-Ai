@@ -50,6 +50,7 @@ from brain.knowledge.training_physics import register_physics_curriculum
 from brain.knowledge.web_learning import WebSearchLearner
 from brain.learning.consolidation import MemoryConsolidator
 from brain.learning.curiosity import CuriosityExplorer
+from brain.learning.fact_aging import FactAger
 from brain.learning.induction import EvidenceGatedInducer
 from brain.learning.learning_roadmap import LearningPlanner
 from brain.learning.post_learning_loop import PostLearningAssessor, attach_to_learner
@@ -218,6 +219,11 @@ class Brain:
         # learning: multi-source corroboration, internal consistency
         # checks, and an inspectable verdict audit trail.
         self.fact_verifier = self.web_learner.fact_verifier
+        # Phase 44: fact aging — web-learned knowledge decays slowly over
+        # calendar time (half-life ~90 days) so stale facts fade from
+        # confidence while curated facts stay stable; facts that fall
+        # below the prune threshold are removed with an audit log.
+        self.fact_ager = FactAger(self)
         self._learning_quarantine: List[Dict[str, Any]] = []
 
         # Emotion
@@ -3676,6 +3682,9 @@ class Brain:
         """
         started_at = time_module.monotonic()
         self._tick_index = getattr(self, "_tick_index", 0) + 1
+        # Phase 44: one bounded aging sweep per reflection tick — web-learned
+        # facts decay and stale facts prune with an inspectable log.
+        self.fact_ager.age_facts()
         active_goal = self.goal_manager.active_goal()
         goal_text = active_goal.description if active_goal else "review unresolved knowledge"
         uncertainty = self.self_model.uncertainty
@@ -3831,6 +3840,9 @@ class Brain:
             # Phase 42: fact-verification audit — corroboration and
             # conflict verdicts from the latest verification run.
             "fact_verification": self.fact_verifier.summary(),
+            # Phase 44: fact-aging audit — decay and pruning decisions
+            # made on web-learned facts since boot.
+            "fact_aging": self.fact_ager.summary(),
             # Phase 43: the visitor id this cycle is bound to and the
             # personal facts/episodes that grounded the last reply.
             "current_user_id": self.current_user_id,

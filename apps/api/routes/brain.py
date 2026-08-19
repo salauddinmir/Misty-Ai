@@ -48,6 +48,10 @@ class BrainStateResponse(BaseModel):
     # Phase 42: fact-verification audit (verified_total, corroborated,
     # retracted, conflicted, single_source, recent verdicts).
     fact_verification: Dict[str, Any] | None = None
+    # Phase 44: fact-aging audit (total_decisions, counts by action,
+    # recent decay/prune decisions, half-life config). Empty until the
+    # brain runs its first autonomous reflection tick.
+    fact_aging: Dict[str, Any] | None = None
     # Phase 41: self-correction audit (challenges_received,
     # corrections_accepted, last_correction event). Empty until the first
     # visitor challenges one of the brain's answers.

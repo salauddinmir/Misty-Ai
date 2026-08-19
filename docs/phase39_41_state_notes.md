@@ -143,3 +143,38 @@ NEXT: commit+push Phase 42, wait CI, then Phase 43 (personal recall integration 
 - DONE: tests/test_phase43_personal_recall.py — 11 tests pass (chat client needs database on app.state + brain router).
 - ruff clean. Regression 946 passed.
 - TODO: ruff format, benchmark 57/57, smoke, commit+push, CI, then phase43 report (phase 10 of plan).
+
+## Phase 44+45 PLAN (current task, Aug 20)
+User: "কন্টিনিউ ভাই, যেকোনো ভাবে একে এক্সপার্ট বানাতে হবে সব বিষয়ে" — continue phases.
+
+### Baseline after Phase 43 (commit 771fc17; report commit a049156)
+- 946 tests pass, benchmark 57/57=100%, smoke PASS, CI green, Render live.
+- docs/phase42_43_completion_report_bn.md delivered.
+
+### Phase 44 design: fact aging / confidence decay (DONE → see status below)
+brain/learning/fact_aging.py — FactAger(brain):
+- SemanticFact currently has NO timestamp/source_time! store_fact needs created_at + accessed_at fields (default time.time()) — ADD to SemanticFact dataclass + store_fact(params).
+- aging: per-cycle, facts decay confidence by factor (1 - decay_rate)^(days_since_stored/30) or linear; NEVER touch source=user_input/core curriculum; only decay web_learning/source=web (and maybe episodic).
+- age_facts(max_age_days=365): prune facts confidence < PRUNE_THRESHOLD (0.35) → remove_fact; log decisions (bounded log 100).
+- refresh access: query() bumps accessed_at (optional — used in run_aging_sweep).
+- run_aging_sweep() → summary dict (scanned, decayed, refreshed, pruned, skipped, recent decisions).
+- Wire: brain.py __init__ self.fact_ager = FactAger(self); get_state key "fact_aging": summary(); also called in autonomous_reflection_tick (async) once per tick.
+- Route: BrainStateResponse add fact_aging: Dict|None = None.
+- Tests: tests/test_phase44_fact_aging.py (~12): decay formula, no-decay user_input/core, prune threshold, access refresh, sweep summary, no-op empty, state field, route field.
+
+### Phase 45 design: consolidation sweep (rehearsal + pruning) (after 44)
+brain/learning/consolidation.py — ConsolidationEngine(brain):
+- consolidation_sweep(): (1) REHEARSE: take low-confidence (0.4-0.7) non-pruned facts, re-instantiate into working memory as evidence (broadcast) so knowledge graph strengthens associations (activate concepts subject/obj +0.1, relation if concept_graph supports); (2) FORGET: remove facts below 0.35 or quarantined; (3) merge duplicate subjects (if ≥2 facts same subject+predicate keep max confidence, drop weaker — bounded to web-learning sources only).
+- Log bounded 100 decisions. summary(): rehearsed/merged/removed/decisions.
+- Wire: brain.consolidation_engine; get_state key "consolidation"; attach to autonomous_reflection_tick after fact_ager.
+- Route: BrainStateResponse add consolidation field.
+- Tests: tests/test_phase45_consolidation.py (~12): rehearsal boosts concept activation, merge duplicates, prune below threshold, protected sources, sweep summary, bounded log, state/route fields.
+
+### Implementation guardrails (same as all phases)
+- imports alphabetical within groups; ruff check brain/ apps/ tools/ tests/ + ruff format --check same paths; line-length 120.
+- New get_state() key MUST be added to apps/api/routes/brain.py BrainStateResponse (Pydantic drops unknown).
+- Tests via fresh Brain() fixture locally; chat client test needs app.state.brain + app.state.database (Database()) + brain router prefix /api/brain.
+- asyncio.run() NOT get_event_loop().run_until_complete() in tests.
+- Commit+push main after each phase; CI: gh run list --repo salauddinmir/Misty-Ai --limit 2 --json headSha,status,conclusion; wait ~200s before check.
+- Smoke: python3 tests/smoke_production.py; Benchmark: PYTHONPATH=. python3 tests/benchmark_conversation.py (57/57).
+- Final: docs/phase44_45_completion_report_bn.md attached to user message.
