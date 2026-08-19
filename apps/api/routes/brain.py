@@ -41,6 +41,10 @@ class BrainStateResponse(BaseModel):
     # total_planned_topics, ranked items, topic_scores). None until the
     # brain has run its first gap-based planning cycle.
     learning_roadmap: Dict[str, Any] | None = None
+    # Phase 40: per-user memory and personalization summary (user_count,
+    # known_users, total_facts, total_episodes). Empty until the first
+    # visitor has spoken to the brain.
+    user_memory: Dict[str, Any] | None = None
 
 
 class ConceptResponse(BaseModel):

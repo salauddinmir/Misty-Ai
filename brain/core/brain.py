@@ -60,6 +60,7 @@ from brain.math_engine import MATH_ENGINE
 from brain.memory.episodic import EpisodicMemory
 from brain.memory.procedural import ProceduralMemory
 from brain.memory.semantic import SemanticMemory
+from brain.memory.user_memory import UserProfileMemory
 from brain.memory.weighted_recall import WeightedRecall
 from brain.memory.working import WorkingMemory
 from brain.neurons.populations import NeuronPopulation
@@ -197,6 +198,11 @@ class Brain:
         # what to learn next from its own gap report, and executes the plan
         # through the safety-gated web learner.
         self.learning_planner = LearningPlanner(self)
+        # Phase 40: per-user long-term memory and personalization — each
+        # visitor gets their own profile of remembered facts and
+        # conversation episodes, so personal questions ("কাল আমি কী
+        # বলেছিলাম?") are answered from real recollection.
+        self.user_memory = UserProfileMemory()
         self._learning_quarantine: List[Dict[str, Any]] = []
 
         # Emotion
@@ -3724,6 +3730,9 @@ class Brain:
             "learning_roadmap": (
                 self.learning_planner.last_plan().to_dict() if self.learning_planner.last_plan() is not None else None
             ),
+            # Phase 40: per-user memory and personalization — how many
+            # visitors Misty remembers and their fact/episode totals.
+            "user_memory": self.user_memory.summary(),
             # Phase 6: goal-driven behavior snapshot.
             "active_goal": (
                 {"goal_id": g.goal_id, "description": g.description, "progress": g.progress, "status": g.status.value}

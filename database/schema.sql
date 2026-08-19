@@ -85,3 +85,14 @@ CREATE INDEX IF NOT EXISTS idx_relations_type ON relations(relation_type);
 CREATE INDEX IF NOT EXISTS idx_episodes_timestamp ON episodes(timestamp);
 CREATE INDEX IF NOT EXISTS idx_brain_states_timestamp ON brain_states(timestamp);
 CREATE INDEX IF NOT EXISTS idx_procedures_name ON procedures(name);
+
+-- Phase 40: per-user long-term memory and personalization.
+CREATE TABLE IF NOT EXISTS misty_user_memory (
+    user_id TEXT NOT NULL,
+    memory_kind TEXT NOT NULL,           -- 'profile' | 'fact' | 'episode'
+    memory_key TEXT NOT NULL DEFAULT '', -- fact_id / episode_id / 'profile'
+    memory_json TEXT NOT NULL DEFAULT '{}',
+    updated_at REAL NOT NULL,
+    PRIMARY KEY (user_id, memory_kind, memory_key)
+);
+CREATE INDEX IF NOT EXISTS idx_user_memory_user ON misty_user_memory(user_id);

@@ -69,3 +69,21 @@ Final: docs/phase39_41_report_bn.md, attach to message.
 ## Phase 39 COMPLETE (commit pending)
 
 All Phase 39 work finished and gate-passed: route model now exposes `learning_roadmap` in `apps/api/routes/brain.py` BrainStateResponse; new `GET /api/training/roadmap` (read-only, no key needed) and `POST /api/training/roadmap` (MISTY_TRAINING_API_KEY gate + rate limit; body: max_topics 1-20, boost_topics list) added to training.py; `tests/test_phase39_learning_roadmap.py` (15 tests, all pass). End-to-end verified via TestClient: plan generates, ingestion runs, state key populated, GET roadmap echoes plan. Final gates: ruff check+format clean, pytest 876 passed (861+15), benchmark 57/57=100%, smoke production PASS. Note: gap_assessor stores reports via record_report() into _history; learning_roadmap to_dict keys are created_at, plan_id, total_planned_topics, items, topic_scores; RoadmapItem dict has no "priority" key. All-known topics get weight 0 but still appear in items (inspectability). Next: commit+push, then Phase 40 (long-term memory/personalization: brain/memory/user_memory.py UserProfileMemory) and Phase 41 (self-correction: brain/learning/self_correction.py CorrectionAuditor).
+
+## Phase 40 IN PROGRESS (snapshot)
+
+Phase 39 DONE: commit f2848cd pushed to main, CI green. Render auto-deploys from main.
+
+Phase 40 done so far:
+1. brain/memory/user_memory.py - COMPLETE (UserProfileMemory, UserProfile/UserFact/UserEpisode; record_turn extracts self-facts via _is_identity_claim markers; categories identity|occupation|preference|general; dedup via _fact_matches; personal_recall token-overlap; to_dicts/summary; _classify_language bn/en). ruff clean.
+2. database/schema.sql + schema_postgres.sql - appended misty_user_memory table (user_id, memory_kind TEXT, memory_key TEXT, memory_json TEXT/JSONB, updated_at; PK triple; idx_user_memory_user).
+3. apps/api/database.py - appended save_user_memory(user_id, payload{kind,memory_key,memory_json}) upsert (postgres ON CONFLICT DO UPDATE / sqlite INSERT OR REPLACE) and load_user_memory(user_id).
+
+REMAINING Phase 40 steps:
+- Brain.__init__: self.user_memory = UserProfileMemory(); get_state key "user_memory": self.user_memory.summary(); optional restore_user_memory(user_id) async via database.load_user_memory.
+- apps/api/routes/chat.py: X-Misty-User-Id header (default "anon"); in persistence task call brain.user_memory.record_turn(user_id, utterance=body.message, reply=result["response"]).
+- BrainStateResponse (apps/api/routes/brain.py): add user_memory optional field.
+- New route apps/api/routes/memory.py: GET /api/memory/user?user_id=X&query=... -> personal_recall; include router in apps/api/main.py.
+- Tests tests/test_phase40_user_memory.py (~10). Gates: ruff, pytest, benchmark 57/57, smoke. Commit+push main, CI, Render verify.
+- Then Phase 41: brain/learning/self_correction.py CorrectionAuditor (challenge patterns; re-check vs semantic memory; warm bn apology; correction log). Wire in process cycle. Tests ~10. get_state "self_correction" + route model field.
+- Final: docs/phase39_41_completion_report_bn.md attached to user message.

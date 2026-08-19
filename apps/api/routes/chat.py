@@ -70,6 +70,38 @@ class ChatResponse(BaseModel):
     grounding: Dict[str, Any] = Field(default_factory=dict)
 
 
+def _resolve_user_id(request: Request) -> str:
+    """Determine the visitor id for Phase 40 personalization.
+
+    Clients can set ``X-Misty-User-Id`` (a stable anonymous id the client
+    generates and keeps per device) to make Misty remember them across
+    conversations; otherwise turns are folded into the shared ``anon``
+    bucket so older clients see no behavior change.
+    """
+    header = request.headers.get("x-misty-user-id", "").strip()
+    return header or "anon"
+
+
+def _record_user_turn(brain: Any, user_id: str, message: str, result: Dict[str, Any]) -> None:
+    """Remember one turn for ``user_id`` — never let memory failures hurt the turn."""
+    try:
+        user_memory = getattr(brain, "user_memory", None)
+        if user_memory is None:
+            return
+        emotional_state = result.get("emotional_state", {}) or {}
+        user_memory.record_turn(
+            user_id=user_id,
+            utterance=message,
+            reply=result.get("response", ""),
+            intent=str(result.get("intent", "general") or "general"),
+            emotional_valence=float(
+                emotional_state.get("valence", emotional_state.get("emotional_valence", 0.0)) or 0.0
+            ),
+        )
+    except Exception as error:  # Memory recording must never break the chat
+        logger.error("User memory recording failed: %s", error)
+
+
 def _ensure_persistence_indexes(app_state: Any) -> None:
     """Create empty indexes before a turn when startup did not provide them."""
     if not hasattr(app_state, "persisted_concept_ids"):
@@ -105,8 +137,14 @@ def _track_persistence_task(app_state: Any, task: asyncio.Task[Any]) -> None:
     task.add_done_callback(_completed)
 
 
-async def _persist_chat_state(app_state: Any, database: Any, brain: Any, message: str, result: Dict[str, Any]) -> None:
-    """Persist state without allowing database latency/failure to block chat."""
+async def _persist_chat_state(
+    app_state: Any, database: Any, brain: Any, message: str, result: Dict[str, Any], user_id: str = "anon"
+) -> None:
+    """Persist state without allowing database latency/failure to block chat.
+
+    Phase 40: also persists the turn into the per-user memory table so a
+    cold-started worker rebuilds each visitor's recollection from the DB.
+    """
     try:
         state = result.get("brain_state", {})
         await database.save_brain_state(
@@ -117,6 +155,25 @@ async def _persist_chat_state(app_state: Any, database: Any, brain: Any, message
             last_input=message,
             last_output=result["response"],
         )
+        # Phase 40: persist the turn into the per-user memory table.
+        try:
+            user_memory = getattr(brain, "user_memory", None)
+            if user_memory is not None:
+                profile = user_memory.get_profile(user_id)
+                if profile is not None:
+                    episode = profile.episodes[-1] if profile.episodes else None
+                    if episode is not None:
+                        await database.save_user_memory(
+                            user_id=user_id,
+                            payload={
+                                "kind": "episode",
+                                "memory_key": episode.episode_id,
+                                "memory_json": episode.to_dict(),
+                            },
+                        )
+        except Exception as error:
+            logger.error("User memory persistence failed: %s", error)
+
         persistence_lock = getattr(app_state, "chat_persistence_lock", None)
         if persistence_lock is None:
             persistence_lock = asyncio.Lock()
@@ -276,7 +333,14 @@ async def _process_chat_turn(request: Request, body: ChatRequest) -> ChatRespons
     result = brain.process(body.message)
     response_text = str(result.get("response") or "").strip()
     result["response"] = response_text or "I need a moment to form that reply. Please try asking again."
-    persistence_task = asyncio.create_task(_persist_chat_state(app_state, database, brain, body.message, result))
+    # Phase 40: per-user memory — remember this turn for the visitor so
+    # facts and follow-up recollection are personalized, and persist it
+    # through the same background persistence task.
+    user_id = _resolve_user_id(request)
+    _record_user_turn(brain, user_id, body.message, result)
+    persistence_task = asyncio.create_task(
+        _persist_chat_state(app_state, database, brain, body.message, result, user_id=user_id)
+    )
     _track_persistence_task(app_state, persistence_task)
 
     return ChatResponse(

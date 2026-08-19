@@ -25,6 +25,7 @@ from apps.api.routes.actuators import router as actuators_router
 from apps.api.routes.brain import router as brain_router
 from apps.api.routes.chat import router as chat_router
 from apps.api.routes.media import router as media_router
+from apps.api.routes.memory import router as memory_router
 from apps.api.routes.sensors import router as sensors_router
 from apps.api.routes.training import router as training_router
 from apps.api.routes.voice import router as voice_router
@@ -295,6 +296,7 @@ app.include_router(chat_router, prefix="/api")
 app.include_router(media_router, prefix="/api")
 app.include_router(voice_router, prefix="/api")
 app.include_router(brain_router, prefix="/api/brain")
+app.include_router(memory_router, prefix="/api/memory")
 app.include_router(training_router, prefix="")
 app.include_router(sensors_router, prefix="/api")
 app.include_router(actuators_router, prefix="/api")

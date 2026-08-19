@@ -599,3 +599,55 @@ class Database:
                 }
             )
         return result
+
+    # ==================== User Memory (Phase 40) ====================
+    async def save_user_memory(self, user_id: str, payload: Mapping[str, Any]) -> None:
+        """Upsert per-user memory rows (profile summary, facts, episodes).
+
+        ``payload`` carries ``kind`` (profile|fact|episode), ``memory_key``
+        and ``memory_json`` (a plain dict — JSON-encoded here so both
+        drivers store the same shape; PostgreSQL's JSONB column accepts
+        text automatically).
+        """
+        timestamp = time_module.time()
+        memory_json = json.dumps(payload.get("memory_json", {}))
+        kind = str(payload.get("kind", "episode"))
+        memory_key = str(payload.get("memory_key", ""))
+        if DRIVER == "postgres":
+            await self.execute(
+                "INSERT INTO misty_user_memory "
+                "(user_id, memory_kind, memory_key, memory_json, updated_at) "
+                f"VALUES ({_placeholders(5)}) "
+                "ON CONFLICT (user_id, memory_kind, memory_key) "
+                "DO UPDATE SET memory_json = EXCLUDED.memory_json, "
+                "updated_at = EXCLUDED.updated_at",
+                (user_id, kind, memory_key, memory_json, timestamp),
+            )
+        else:
+            await self.execute(
+                f"{UPSERT_SQLITE} INTO misty_user_memory "
+                "(user_id, memory_kind, memory_key, memory_json, updated_at) "
+                f"VALUES ({_placeholders(5)})",
+                (user_id, kind, memory_key, memory_json, timestamp),
+            )
+            await self._connection.commit()
+
+    async def load_user_memory(self, user_id: str) -> List[Dict[str, Any]]:
+        """Load all persisted memory rows for one user (cold-start rebuild
+        of the in-memory user memory layer)."""
+        rows = await self.fetchall(
+            "SELECT memory_kind, memory_key, memory_json FROM misty_user_memory "
+            "WHERE user_id = $1 ORDER BY updated_at DESC LIMIT 500"
+            if DRIVER == "postgres"
+            else "SELECT memory_kind, memory_key, memory_json FROM misty_user_memory "
+            "WHERE user_id = ? ORDER BY updated_at DESC LIMIT 500",
+            (user_id,),
+        )
+        return [
+            {
+                "kind": row[0],
+                "memory_key": row[1],
+                "memory_json": json.loads(row[2]) if row[2] else {},
+            }
+            for row in rows
+        ]
