@@ -16,6 +16,7 @@ import unittest
 from unittest import mock
 
 from brain.core.brain import Brain
+from brain.knowledge.web_learning import WebSearchLearner
 from brain.learning.post_learning_loop import (
     PostLearningAssessor,
     _CaseFilter,
@@ -108,6 +109,18 @@ class TestPostLearningAssessor(unittest.TestCase):
         self.assertIn(trend["strictly_increasing"], (True, False, None))
 
 
+class _AgreeingSearch:
+    """Callable replacement for WebSearchLearner.search satisfying the
+    multi-source agreement rule: every (topic, source) pair returns the
+    same snippets so at least two sources always agree."""
+
+    def __init__(self, snippets: list[dict[str, str]]) -> None:
+        self.snippets = snippets
+
+    async def __call__(self, topic: str, **kwargs):
+        return self.snippets
+
+
 class TestIngestBatchHook(unittest.TestCase):
     """The assessor must be called automatically by ingest_batch."""
 
@@ -123,11 +136,12 @@ class TestIngestBatchHook(unittest.TestCase):
             {"snippet": "A lighthouse is a tower that warns ships.", "url": "en.wikipedia.org"},
             {"snippet": "A lighthouse is a tower that warns ships.", "url": "bn.wikipedia.org"},
         ]
-        patcher = _mock_search(snippets)
-        try:
+        with mock.patch.object(
+            WebSearchLearner,
+            "search",
+            _AgreeingSearch(snippets),
+        ):
             report = asyncio.run(self.brain.web_learner.ingest_batch(["lighthouse"]))
-        finally:
-            patcher.stop()
         self.assertIn("post_learning_assessment", report)
         assessment = report["post_learning_assessment"]
         self.assertIsNotNone(assessment)
@@ -138,20 +152,19 @@ class TestIngestBatchHook(unittest.TestCase):
     def test_hook_fails_silently_never_breaks_learning(self) -> None:
         """An assessor that raises must not stop facts from being learned
         and the report key must simply be None."""
-        with mock.patch.object(
-            PostLearningAssessor,
-            "assess_after_learning",
-            side_effect=RuntimeError("boom"),
+        snippets = [
+            {"snippet": "A beacon is a light that guides travellers.", "url": "en.wikipedia.org"},
+            {"snippet": "A beacon is a light that guides travellers.", "url": "bn.wikipedia.org"},
+        ]
+        with (
+            mock.patch.object(WebSearchLearner, "search", _AgreeingSearch(snippets)),
+            mock.patch.object(
+                PostLearningAssessor,
+                "assess_after_learning",
+                side_effect=RuntimeError("boom"),
+            ),
         ):
-            snippets = [
-                {"snippet": "A beacon is a light that guides travellers.", "url": "en.wikipedia.org"},
-                {"snippet": "A beacon is a light that guides travellers.", "url": "bn.wikipedia.org"},
-            ]
-            patcher = _mock_search(snippets)
-            try:
-                report = asyncio.run(self.brain.web_learner.ingest_batch(["beacon"]))
-            finally:
-                patcher.stop()
+            report = asyncio.run(self.brain.web_learner.ingest_batch(["beacon"]))
         self.assertIn("post_learning_assessment", report)
         self.assertIsNone(report["post_learning_assessment"])
         # Learning itself still happened.
@@ -198,7 +211,7 @@ class TestApiRouteIncludesAssessment(unittest.TestCase):
             {"snippet": "A lighthouse is a tower that warns ships.", "url": "en.wikipedia.org"},
             {"snippet": "A lighthouse is a tower that warns ships.", "url": "bn.wikipedia.org"},
         ]
-        with _mock_search(snippets):
+        with mock.patch.object(WebSearchLearner, "search", _AgreeingSearch(snippets)):
             response = self.client.post(
                 "/api/training/web_learn",
                 json={"topics": ["lighthouse"]},
