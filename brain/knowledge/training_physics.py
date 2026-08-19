@@ -160,6 +160,22 @@ PHYSICS_SYNONYMS: Dict[str, str] = {
     "মুক্তপতনের সংজ্ঞা": "মুক্তপতন",
     "gravity of earth": "Free Fall",
     "g value": "Free Fall",
+    # Bengali-script transliterations of English physics terms. Users write
+    # "কিনেটিক এনার্জি" far more often than the canonical "গতিশক্তি", and
+    # without these aliases the definition lookup found nothing at all.
+    "কিনেটিক এনার্জি": "গতিশক্তি",
+    "কাইনেটিক এনার্জি": "গতিশক্তি",
+    "কিনেটিক শক্তি": "গতিশক্তি",
+    "কাইনেটিক শক্তি": "গতিশক্তি",
+    "পটেনশিয়াল এনার্জি": "বিভবশক্তি",
+    "পোটেনশিয়াল এনার্জি": "বিভবশক্তি",
+    "পটেনশিয়াল শক্তি": "বিভবশক্তি",
+    "ভেলোসিটি": "বেগ",
+    "অ্যাকসিলারেশন": "ত্বরণ",
+    "ফোর্স": "বল",
+    "ফ্রিকোয়েন্সি": "কম্পাঙ্ক",
+    "রেজিস্ট্যান্স": "রোধ",
+    "পাওয়ার": "ক্ষমতা",
 }
 
 PHYSICS_RELATIONS: List[Dict[str, Any]] = [

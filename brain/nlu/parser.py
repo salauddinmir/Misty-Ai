@@ -13,7 +13,7 @@ Handles the MVP test cases:
 import re
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any, Dict, List
+from typing import Any, ClassVar, Dict, List
 
 from brain.math_engine import MATH_ENGINE
 from brain.physics_engine import PHYSICS_ENGINE
@@ -36,6 +36,7 @@ class IntentType(str, Enum):
     CAPABILITY_QUERY = "capability_query"
     RECOGNITION_QUERY = "recognition_query"
     CONVERSATION = "conversation"
+    LIST_QUERY = "list_query"
     UNKNOWN = "unknown"
 
 
@@ -144,7 +145,10 @@ class NLUParser:
         ]
         self._bn_capability_pattern = re.compile(r"(?:তুমি|আপনি|মিস্টি).*(?:শিখেছ|জানো|পারো).*[?\uFF1F]?$", re.UNICODE)
         self._bn_recognition_pattern = re.compile(
-            r"(?:তুমি|আপনি|মিস্টি)\s+(?:কি|কী)\s+আমাকে\s+চিনতে\s+পারো\s*[?\uFF1F]?$",
+            r"(?:তুমি|আপনি|মিস্টি)\s+(?:কি|কী)\s+আমাকে\s+চিনতে\s+পারো\s*[?\uFF1F]?$"
+            # "আমার নাম বলো" / "আমার নাম কি" ask the brain to recall the
+            # user's stored name instead of declaring a new one.
+            r"|(?<![\u0980-\u09FF])আমার\s+নাম\s*(?:কি|কী|বলো|বল|বলুন|বলতে\s+পারো|মনে\s+আছে)",
             re.UNICODE,
         )
         # Bengali casual/social turns that are neither greetings nor questions
@@ -154,6 +158,10 @@ class NLUParser:
         self._bn_casual_patterns = [
             re.compile(r"(কি খবর|কেমন আছো|কেমন আছ|কি খবরে|ভালো ব্যাপার|বেশ হয়েছে)", re.UNICODE),
             re.compile(r"(তুমি কি ভাবছো|কি ভাবছো|কি করছো|কি করছ)", re.UNICODE),
+            # Passive/formal status questions: "কি করা হচ্ছে", "কী করা হচ্ছে",
+            # "এখন কি করছেন" — the active-voice forms above miss these, so
+            # they used to fall through to the generic statement echo.
+            re.compile(r"(কি|কী)\s*কর(?:া\s*হ(?:চ্ছে|য়|লো)|ছেন|ছিলে|ছিলেন)", re.UNICODE),
             # Clarification / casual follow-up signals: "বুঝলাম না",
             # "কি ব্যাপার?", "কেন?" — treated as conversational
             # continuations rather than UNKNOWN intents so the brain
@@ -189,8 +197,38 @@ class NLUParser:
         # pattern, so "X হলো Y-এর Z" is not double-matched.
         # "X হলো Y" — object may span multiple words; clause stop words
         # (এবং, মানে, কিন্তু...) are trimmed after matching.
+        # A dash, colon, or equals sign may separate the copula from the
+        # object in natural writing ("কিনেটিক হলো - এনার্জির নাম"); without
+        # this the fact was silently dropped and nothing was learned.
         self._bn_is_a_pattern = re.compile(
-            r"([A-Za-z\u0980-\u09FF]+)\s+হলো\s+([A-Za-z\u0980-\u09FF]+(?:\s+[A-Za-z\u0980-\u09FF]+)*)",
+            r"([A-Za-z\u0980-\u09FF]+)\s+হলো\s*[-\u2013\u2014:=]?\s*([A-Za-z\u0980-\u09FF]+(?:\s+[A-Za-z\u0980-\u09FF]+)*)",
+            re.UNICODE,
+        )
+        # Teaching command with no payload yet: "মনে রাখো", "মনে রাখো:".
+        # Answering with a generic acknowledgement implied something was
+        # stored, so this asks what should be remembered instead.
+        self._bn_bare_teach_re = re.compile(
+            r"^\s*(?:আমি\s+জানি\s+যে|মনে\s+রাখো|মনে\s+রাখুন|মনে\s+রাখ|শেখো\s+যে|শেখো|শেখাও)\s*[:\-\u2013\u2014\u0964?]*\s*$",
+            re.UNICODE,
+        )
+        # "তোমার নাম কি" / "তোমার নাম বলো" ask for Misty's own name.
+        self._bn_self_name_re = re.compile(
+            r"(?<![\u0980-\u09FF])(?:তোমার|আপনার)\s+নাম\s*(?:কি|কী|বলো|বল|বলুন|জানাও)?\s*[?।\u0964\uff1f]?\s*$",
+            re.UNICODE,
+        )
+        # "আমার নাম বলো" / "তোমার নাম বলো" ask about a specific identity, so
+        # they must reach the recognition/identity handlers, not list lookup.
+        self._bn_personal_name_re = re.compile(
+            r"(?<![\u0980-\u09FF])(আমার|আমাদের|তোমার|তোমাদের|আপনার|আপনাদের|তার|তাদের|নিজের)\s+নাম",
+            re.UNICODE,
+        )
+        # Bengali list requests: a quantity, a topic, then "নাম বলো".
+        # "৫ টি নদীর নাম বলো", "বাংলা কবিতার নাম বলো".
+        self._bn_list_request_re = re.compile(
+            r"^\s*(?P<head>[^\d\u09e6-\u09ef]*?)\s*"
+            r"(?:(?P<count>[\d\u09e6-\u09ef]+)\s*(?:টি|টা|খানা)?)?\s*"
+            r"(?P<tail>[^\d\u09e6-\u09ef]*?)\s*নাম\s*(?:গুলো|গুলি)?\s*"
+            r"(?:বলো|বল|বলুন|দাও|দেন|জানাও|লিখো|লিখুন|উল্লেখ\s*করো)\s*[?।\u0964\uff1f]?\s*$",
             re.UNICODE,
         )
 
@@ -532,6 +570,71 @@ class NLUParser:
             keep.append(word)
         return " ".join(keep)
 
+    _BN_DIGIT_TABLE = str.maketrans("\u09e6\u09e7\u09e8\u09e9\u09ea\u09eb\u09ec\u09ed\u09ee\u09ef", "0123456789")
+
+    _BN_SPELLED_COUNTS: ClassVar[Dict[str, int]] = {
+        "এক": 1,
+        "দুই": 2,
+        "দু": 2,
+        "তিন": 3,
+        "চার": 4,
+        "পাঁচ": 5,
+        "ছয়": 6,
+        "সাত": 7,
+        "আট": 8,
+        "নয়": 9,
+        "দশ": 10,
+    }
+
+    @classmethod
+    def _split_bn_spelled_count(cls, topic: str) -> tuple[int | None, str]:
+        """Separate a spelled Bengali quantity from the topic ("তিনটি ফুল")."""
+        for word, value in cls._BN_SPELLED_COUNTS.items():
+            for classifier in ("টি", "টা", "খানা"):
+                prefix = f"{word}{classifier}"
+                if topic.startswith(prefix):
+                    return value, topic[len(prefix) :].strip()
+                spaced = f"{word} {classifier}"
+                if topic.startswith(spaced):
+                    return value, topic[len(spaced) :].strip()
+        return None, topic
+
+    @staticmethod
+    def _strip_bn_possessive(phrase: str) -> str:
+        """Drop a trailing Bengali genitive suffix from each topic word.
+
+        "আশ্চর্যের" and "নদীর" name the same concepts as "আশ্চর্য" and "নদী",
+        which is how curriculum subjects are stored.
+        """
+        words = []
+        for word in phrase.split():
+            for suffix in ("ের", "ের", "র", "য়ের"):
+                if len(word) > len(suffix) + 1 and word.endswith(suffix):
+                    word = word[: -len(suffix)]
+                    break
+            words.append(word)
+        return " ".join(words)
+
+    def _physics_intent(self, text: str) -> ParseResult | None:
+        """Classify PHYSICS only when a real solver handles the input.
+
+        The engine returns an ``unsupported`` help result whenever a physics
+        marker appears without a matching solver. Treating that as PHYSICS
+        hijacked ordinary requests (for example a Bengali "নাম বলো" list
+        request), so an unsolved help result no longer wins intent selection.
+        """
+        if not re.search(r"\d|=", text):
+            return None
+        result = PHYSICS_ENGINE.solve(text)
+        if result is None or getattr(result, "exact", "") in {"unsupported", "missing_values"}:
+            return None
+        return ParseResult(
+            intent=IntentType.PHYSICS,
+            entities={"physics_text": text},
+            raw_text=text,
+            confidence=0.98,
+        )
+
     def _try_bengali(self, text: str) -> ParseResult:
         """Try Bengali pattern matching."""
         # Check corrections first (a correction overrides anything else)
@@ -543,6 +646,16 @@ class NLUParser:
                     confidence=0.8,
                 )
 
+        # A teaching command with no content is a request for clarification,
+        # never a stored fact.
+        if self._bn_bare_teach_re.match(text):
+            return ParseResult(
+                intent=IntentType.CONVERSATION,
+                entities={"clarification_needed": "teach_payload_missing"},
+                raw_text=text,
+                confidence=0.9,
+            )
+
         # Check explicit teach patterns
         for pattern in self._bn_teach_patterns:
             match = pattern.search(text)
@@ -553,6 +666,41 @@ class NLUParser:
                     entities={"taught": taught},
                     raw_text=text,
                     confidence=0.8,
+                )
+
+        if self._bn_self_name_re.search(text):
+            return ParseResult(
+                intent=IntentType.QUERY_WHAT,
+                entities={"self_identity": True},
+                query={"type": "what", "relation": "is_a", "target": "Misty"},
+                raw_text=text,
+                confidence=0.9,
+            )
+
+        # Named-list requests ("... নাম বলো") are answered from stored
+        # knowledge; they must be detected before the physics/math gates
+        # because a Bengali quantity digit otherwise looks numeric.
+        list_match = self._bn_list_request_re.match(text)
+        if list_match and not self._bn_personal_name_re.search(text):
+            raw_count = list_match.group("count") or ""
+            normalized_count = raw_count.translate(self._BN_DIGIT_TABLE)
+            topic = " ".join(part for part in (list_match.group("head"), list_match.group("tail")) if part).strip()
+            topic = re.sub(r"\s+", " ", topic).strip(" -\u2013\u2014:\u0964")
+            spelled_count, topic = self._split_bn_spelled_count(topic)
+            topic = self._strip_bn_possessive(topic)
+            if not normalized_count.isdigit() and spelled_count:
+                normalized_count = str(spelled_count)
+            if topic:
+                return ParseResult(
+                    intent=IntentType.LIST_QUERY,
+                    entities={"list_topic": topic},
+                    query={
+                        "type": "list",
+                        "target": topic,
+                        "count": int(normalized_count) if normalized_count.isdigit() else None,
+                    },
+                    raw_text=text,
+                    confidence=0.9,
                 )
 
         # Bengali who-created queries: X-created-by-whom forms.
@@ -583,13 +731,9 @@ class NLUParser:
         # Deterministic Physics takes priority over generic questions, but
         # only when the input actually contains numeric values or an
         # equation ("এর কাজ কি?" is a vocabulary question, not physics).
-        if PHYSICS_ENGINE.solve(text) is not None and re.search(r"\d|=", text):
-            return ParseResult(
-                intent=IntentType.PHYSICS,
-                entities={"physics_text": text},
-                raw_text=text,
-                confidence=0.98,
-            )
+        physics_result = self._physics_intent(text)
+        if physics_result is not None:
+            return physics_result
 
         # Deterministic mathematics takes priority over generic questions,
         # but only when the input contains a number or an operator
@@ -906,13 +1050,9 @@ class NLUParser:
         # Deterministic Physics takes priority over generic questions, but
         # only when the input actually contains numeric values or an
         # equation ("এর কাজ কি?" is a vocabulary question, not physics).
-        if PHYSICS_ENGINE.solve(text) is not None and re.search(r"\d|=", text):
-            return ParseResult(
-                intent=IntentType.PHYSICS,
-                entities={"physics_text": text},
-                raw_text=text,
-                confidence=0.98,
-            )
+        physics_result = self._physics_intent(text)
+        if physics_result is not None:
+            return physics_result
 
         # Deterministic mathematics takes priority over generic questions,
         # but only when the input contains a number or an operator
