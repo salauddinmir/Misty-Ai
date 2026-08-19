@@ -1,6 +1,5 @@
 """Phase 45: consolidation sweep — rehearsal, quarantine cleanup, merge."""
 
-
 import pytest
 
 from brain.core.brain import Brain
