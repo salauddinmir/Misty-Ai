@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:uuid/uuid.dart';
 
 import 'core/config.dart';
+import 'data/auth_service.dart';
 import 'data/mistlook_repository.dart';
 import 'models/chat_models.dart';
 
@@ -80,13 +81,16 @@ class _SplashPageState extends State<SplashPage> {
   @override
   void initState() {
     super.initState();
-    Future<void>.delayed(const Duration(milliseconds: 950), () {
-      if (mounted) {
-        Navigator.of(context).pushReplacement(
-          MaterialPageRoute<void>(builder: (_) => const LoginPage()),
-        );
-      }
-    });
+    _restoreSession();
+  }
+
+  Future<void> _restoreSession() async {
+    await Future<void>.delayed(const Duration(milliseconds: 950));
+    final hasSession = await AuthService.hasRestorableSession();
+    if (!mounted) return;
+    Navigator.of(context).pushReplacement(
+      MaterialPageRoute<void>(builder: (_) => hasSession ? const AppShell() : const LoginPage()),
+    );
   }
 
   @override
@@ -148,10 +152,23 @@ class _LoginPageState extends State<LoginPage> {
   }
 
   Future<void> continueToApp() async {
+    if (!AppConfig.demoMode && (emailController.text.trim().isEmpty || passwordController.text.isEmpty)) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Enter your Mistlook email and password.')));
+      return;
+    }
     setState(() => busy = true);
-    await Future<void>.delayed(const Duration(milliseconds: 450));
-    if (mounted) {
-      Navigator.of(context).pushReplacement(MaterialPageRoute<void>(builder: (_) => const AppShell()));
+    try {
+      if (!AppConfig.demoMode) {
+        await AuthService.signInWithPassword(email: emailController.text.trim(), password: passwordController.text);
+      }
+      await Future<void>.delayed(const Duration(milliseconds: 450));
+      if (mounted) {
+        Navigator.of(context).pushReplacement(MaterialPageRoute<void>(builder: (_) => const AppShell()));
+      }
+    } catch (error) {
+      if (!mounted) return;
+      setState(() => busy = false);
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$error')));
     }
   }
 
