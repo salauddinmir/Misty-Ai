@@ -14,7 +14,7 @@ All tests are deterministic and run without any LLM.
 from __future__ import annotations
 
 import unittest
-from typing import Any, Dict, List
+from typing import Dict, List
 
 from brain.core.brain import Brain
 from brain.learning.self_assessment import (
@@ -78,14 +78,17 @@ class TestGapAssessorClassification(unittest.TestCase):
         cases = _cases_from_cases_module()
         self._classify_all()
         total = (
-            self.report.known_count + self.report.unknown_honest_count
-            + self.report.incorrect_count + self.report.missing_count
+            self.report.known_count
+            + self.report.unknown_honest_count
+            + self.report.incorrect_count
+            + self.report.missing_count
         )
         self.assertEqual(total, len(cases))
 
     def test_eight_of_ten_correctly_classified(self) -> None:
         # Master plan bar: 8 of 10 benchmark cases correctly graded.
         cases = _cases_from_cases_module()
+        self.assertGreaterEqual(len(cases), 10)
         self._classify_all()
         correct = self.report.known_count + self.report.unknown_honest_count
         # The benchmark suite is designed to be answerable; unknown_honest
@@ -104,8 +107,10 @@ class TestGapAssessorClassification(unittest.TestCase):
     def test_gap_list_only_incorrect_and_missing(self) -> None:
         self._classify_all()
         gaps = self.assessor.gap_dicts()
-        statuses = {e.status for e in self.report.entries if e.status in ("incorrect", "missing")}
+        # Only incorrect/missing entries may appear in the gap list.
+        gap_entry_ids = {e.case_id for e in self.report.entries if e.status in ("incorrect", "missing")}
         gap_ids = {g["case_id"] for g in gaps}
+        self.assertSetEqual(gap_ids, gap_entry_ids)
         for entry in self.report.entries:
             if entry.status in ("incorrect", "missing"):
                 self.assertIn(entry.case_id, gap_ids)
@@ -122,8 +127,16 @@ class TestGapReportStructure(unittest.TestCase):
         cases = _cases_from_cases_module()[:5]
         report = self.assessor.evaluate(cases)
         as_dict = report.to_dict()
-        for key in ("total_cases", "known", "unknown_honest", "incorrect",
-                    "missing", "self_assessment_score", "gaps", "honest_unknowns"):
+        for key in (
+            "total_cases",
+            "known",
+            "unknown_honest",
+            "incorrect",
+            "missing",
+            "self_assessment_score",
+            "gaps",
+            "honest_unknowns",
+        ):
             self.assertIn(key, as_dict, f"missing field {key}")
         self.assertAlmostEqual(
             as_dict["self_assessment_score"],
@@ -236,8 +249,7 @@ class TestBrainStateKnowledgeGaps(unittest.TestCase):
         # Every gap entry carries the inspectable fields the API
         # consumer needs.
         for gap in gaps:
-            for field in ("case_id", "topic", "query", "expected",
-                          "answer", "status", "confidence"):
+            for field in ("case_id", "topic", "query", "expected", "answer", "status", "confidence"):
                 self.assertIn(field, gap, f"missing {field}")
         statuses = {g["status"] for g in gaps}
         self.assertTrue(statuses <= {"incorrect", "missing"})

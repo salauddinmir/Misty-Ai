@@ -135,9 +135,7 @@ class GapReport:
             "missing": self.missing_count,
             "self_assessment_score": round(self.score, 4),
             "gaps": [entry.to_dict() for entry in self.entries if entry.status in ("incorrect", "missing")],
-            "honest_unknowns": [
-                entry.to_dict() for entry in self.entries if entry.status == "unknown_honest"
-            ],
+            "honest_unknowns": [entry.to_dict() for entry in self.entries if entry.status == "unknown_honest"],
         }
 
 
@@ -237,9 +235,7 @@ class GapAssessor:
                 {
                     **candidate,
                     "now_contradicts_existing": now_contradicts,
-                    "review_decision": (
-                        "allow" if not now_contradicts else "stay_quarantined"
-                    ),
+                    "review_decision": ("allow" if not now_contradicts else "stay_quarantined"),
                 }
             )
         return releasable

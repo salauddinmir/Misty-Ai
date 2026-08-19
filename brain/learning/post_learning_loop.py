@@ -58,15 +58,11 @@ class _CaseFilter:
     of learned topics (simple keyword containment on the case input)."""
 
     @staticmethod
-    def relevant_cases(topics: Sequence[str],
-                       cases: List[Dict[str, str]]) -> List[Dict[str, str]]:
+    def relevant_cases(topics: Sequence[str], cases: List[Dict[str, str]]) -> List[Dict[str, str]]:
         if not topics:
             return []
         needles = [topic.strip().lower() for topic in topics if topic.strip()]
-        return [
-            case for case in cases
-            if any(needle in case.get("input", "").lower() for needle in needles)
-        ]
+        return [case for case in cases if any(needle in case.get("input", "").lower() for needle in needles)]
 
 
 class AssessmentRun:
@@ -111,13 +107,15 @@ class AssessmentRun:
                 and self.before_answers[idx] != self.after_answers[idx]
             )
             if changed:
-                out.append({
-                    "case_index": idx,
-                    "input": case.get("input", ""),
-                    "expected": case.get("expected", ""),
-                    "answer_before": self.before_answers[idx],
-                    "answer_after": self.after_answers[idx],
-                })
+                out.append(
+                    {
+                        "case_index": idx,
+                        "input": case.get("input", ""),
+                        "expected": case.get("expected", ""),
+                        "answer_before": self.before_answers[idx],
+                        "answer_after": self.after_answers[idx],
+                    }
+                )
         return out
 
     def to_dict(self) -> Dict[str, Any]:
@@ -244,10 +242,9 @@ class PostLearningAssessor:
         return {
             "runs": len(scores),
             "scores": scores,
-            "strictly_increasing": all(
-                scores[i]["score"] > scores[i - 1]["score"]
-                for i in range(1, len(scores))
-            ) if len(scores) >= 2 else None,
+            "strictly_increasing": all(scores[i]["score"] > scores[i - 1]["score"] for i in range(1, len(scores)))
+            if len(scores) >= 2
+            else None,
         }
 
 

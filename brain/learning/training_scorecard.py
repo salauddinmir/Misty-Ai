@@ -132,13 +132,9 @@ class TrainingBatchVerifier:
         verified: List[PackageVerification] = []
         for department, source_name in self.DEPARTMENTS:
             declared_facts = [
-                f for f in facts.values()
-                if isinstance(getattr(f, "source", None), str) and source_name in f.source
+                f for f in facts.values() if isinstance(getattr(f, "source", None), str) and source_name in f.source
             ]
-            src_concepts = [
-                c for c in concepts.values()
-                if source_name in (getattr(c, "source", "") or "")
-            ]
+            src_concepts = [c for c in concepts.values() if source_name in (getattr(c, "source", "") or "")]
             # Count stored relations attributed to this source, when the
             # concept graph keeps an addressable relation list.
             stored_relations: int = 0
@@ -146,11 +142,7 @@ class TrainingBatchVerifier:
                 rel_store = getattr(brain.concept_graph, rel_attr, None)
                 if isinstance(rel_store, (list, dict)):
                     items = rel_store if isinstance(rel_store, list) else list(rel_store.values())
-                    stored_relations = sum(
-                        1
-                        for rel in items
-                        if source_name in (getattr(rel, "source", "") or "")
-                    )
+                    stored_relations = sum(1 for rel in items if source_name in (getattr(rel, "source", "") or ""))
                     if stored_relations:
                         break
             verified.append(

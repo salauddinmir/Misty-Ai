@@ -88,8 +88,7 @@ class TestPostLearningAssessor(unittest.TestCase):
         long as it demonstrates learning produced any known answers."""
         # Patch the gap assessor so its last_report is None (simulating a
         # fresh brain that has never self-tested).
-        with mock.patch.object(self.assessor.gap_assessor, "last_report",
-                               return_value=None):
+        with mock.patch.object(self.assessor.gap_assessor, "last_report", return_value=None):
             self.assessor.assess_after_learning(["কী"])
         last = self.assessor.last_run()
         self.assertIsNotNone(last)
@@ -121,16 +120,12 @@ class TestIngestBatchHook(unittest.TestCase):
 
     def test_hook_runs_after_ingest(self) -> None:
         snippets = [
-            {"snippet": "A lighthouse is a tower that warns ships.",
-             "url": "en.wikipedia.org"},
-            {"snippet": "A lighthouse is a tower that warns ships.",
-             "url": "bn.wikipedia.org"},
+            {"snippet": "A lighthouse is a tower that warns ships.", "url": "en.wikipedia.org"},
+            {"snippet": "A lighthouse is a tower that warns ships.", "url": "bn.wikipedia.org"},
         ]
         patcher = _mock_search(snippets)
         try:
-            report = asyncio.run(
-                self.brain.web_learner.ingest_batch(["lighthouse"])
-            )
+            report = asyncio.run(self.brain.web_learner.ingest_batch(["lighthouse"]))
         finally:
             patcher.stop()
         self.assertIn("post_learning_assessment", report)
@@ -144,20 +139,17 @@ class TestIngestBatchHook(unittest.TestCase):
         """An assessor that raises must not stop facts from being learned
         and the report key must simply be None."""
         with mock.patch.object(
-            PostLearningAssessor, "assess_after_learning",
+            PostLearningAssessor,
+            "assess_after_learning",
             side_effect=RuntimeError("boom"),
         ):
             snippets = [
-                {"snippet": "A beacon is a light that guides travellers.",
-                 "url": "en.wikipedia.org"},
-                {"snippet": "A beacon is a light that guides travellers.",
-                 "url": "bn.wikipedia.org"},
+                {"snippet": "A beacon is a light that guides travellers.", "url": "en.wikipedia.org"},
+                {"snippet": "A beacon is a light that guides travellers.", "url": "bn.wikipedia.org"},
             ]
             patcher = _mock_search(snippets)
             try:
-                report = asyncio.run(
-                    self.brain.web_learner.ingest_batch(["beacon"])
-                )
+                report = asyncio.run(self.brain.web_learner.ingest_batch(["beacon"]))
             finally:
                 patcher.stop()
         self.assertIn("post_learning_assessment", report)
@@ -177,6 +169,7 @@ class TestApiRouteIncludesAssessment(unittest.TestCase):
 
         os.environ["MISTY_TRAINING_API_KEY"] = "misty-secret-key-37"
         import apps.api.routes.training as _training
+
         self.training_module = importlib.reload(_training)
         self.training_module._rate_windows.clear()
         self.client = self._client()
@@ -186,6 +179,7 @@ class TestApiRouteIncludesAssessment(unittest.TestCase):
         import importlib
 
         import apps.api.routes.training as original
+
         importlib.reload(original)
 
     def _client(self):
@@ -196,17 +190,13 @@ class TestApiRouteIncludesAssessment(unittest.TestCase):
         app.include_router(self.training_module.router, prefix="")
         app.state.brain = Brain()
         # Attach the assessor like Brain does in Phase 36/37 wiring.
-        app.state.brain.web_learner.post_learning_assessor = (
-            PostLearningAssessor(app.state.brain)
-        )
+        app.state.brain.web_learner.post_learning_assessor = PostLearningAssessor(app.state.brain)
         return TestClient(app)
 
     def test_web_learn_report_includes_assessment(self) -> None:
         snippets = [
-            {"snippet": "A lighthouse is a tower that warns ships.",
-             "url": "en.wikipedia.org"},
-            {"snippet": "A lighthouse is a tower that warns ships.",
-             "url": "bn.wikipedia.org"},
+            {"snippet": "A lighthouse is a tower that warns ships.", "url": "en.wikipedia.org"},
+            {"snippet": "A lighthouse is a tower that warns ships.", "url": "bn.wikipedia.org"},
         ]
         with _mock_search(snippets):
             response = self.client.post(

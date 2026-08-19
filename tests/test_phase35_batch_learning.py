@@ -73,6 +73,7 @@ def _run(coro):
         loop = None
     if loop is not None and loop.is_running():
         import concurrent.futures
+
         with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
             future = pool.submit(asyncio.run, coro)
             return future.result()
@@ -99,10 +100,7 @@ class TestBatchIngestion(unittest.TestCase):
 
     def test_single_source_fact_is_skipped(self) -> None:
         report = _run(self.learner.ingest_batch(["lighthouse"]))
-        lighthouse_facts = [
-            f for f in report["skipped"]
-            if "lighthouse" in f["subject"].lower()
-        ]
+        lighthouse_facts = [f for f in report["skipped"] if "lighthouse" in f["subject"].lower()]
         # The DuckDuckGo-only fact has only one source -> skipped.
         self.assertGreater(len(lighthouse_facts), 0)
         # Nothing from lighthouse should enter memory (cleaned subject).
@@ -138,10 +136,12 @@ class TestBatchIngestion(unittest.TestCase):
             return _MOCK_SNIPPETS.get(topic, [])
 
         with mock.patch.object(WebSearchLearner, "search", side_effect=fake_search):
-            _run(self.learner.ingest_batch(
-                ["satellite", "lighthouse"],
-                topic_weights={"satellite": 2.0, "lighthouse": 0.4},
-            ))
+            _run(
+                self.learner.ingest_batch(
+                    ["satellite", "lighthouse"],
+                    topic_weights={"satellite": 2.0, "lighthouse": 0.4},
+                )
+            )
         weight_lookup = dict(calls)
         # Weight 2.0 -> more max_results than weight 0.4.
         self.assertGreater(weight_lookup["satellite"], weight_lookup["lighthouse"])

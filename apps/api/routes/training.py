@@ -120,9 +120,7 @@ async def web_learn(request: Request) -> JSONResponse:
     if brain is None:
         raise HTTPException(status_code=503, detail="brain not ready")
 
-    report = await brain.web_learner.ingest_batch(
-        topics, topic_weights=weights or None
-    )
+    report = await brain.web_learner.ingest_batch(topics, topic_weights=weights or None)
     return JSONResponse(
         status_code=200,
         content={

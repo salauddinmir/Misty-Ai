@@ -18,7 +18,6 @@ from brain.core.brain import Brain
 from brain.learning.self_assessment import GapAssessor
 from brain.learning.training_scorecard import (
     BenchmarkScorecard,
-    ScorecardResult,
     TrainingBatchVerifier,
     generate_training_report,
 )
@@ -47,10 +46,18 @@ class TestBatchVerification(unittest.TestCase):
     def test_seven_departments_covered(self) -> None:
         report = self.verifier.verify(self.brain)
         departments = {entry.department for entry in report}
-        self.assertEqual(departments, {
-            "identity", "commonsense", "conversation",
-            "mathematics", "physics", "literature", "culture",
-        })
+        self.assertEqual(
+            departments,
+            {
+                "identity",
+                "commonsense",
+                "conversation",
+                "mathematics",
+                "physics",
+                "literature",
+                "culture",
+            },
+        )
 
     def test_math_curriculum_present(self) -> None:
         report = self.verifier.verify(self.brain)
@@ -91,8 +98,7 @@ class TestBenchmarkScorecard(unittest.TestCase):
     def test_scorecard_dict_shape(self) -> None:
         result = BenchmarkScorecard(self.brain, _cases_from_cases_module()).run()
         as_dict = result.to_dict()
-        for key in ("generated_at", "tool", "overall_score", "total_cases",
-                    "total_passed", "category_scores"):
+        for key in ("generated_at", "tool", "overall_score", "total_cases", "total_passed", "category_scores"):
             self.assertIn(key, as_dict, f"missing {key}")
         for cat in as_dict["category_scores"]:
             self.assertIn("pass_rate", cat)

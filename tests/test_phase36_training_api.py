@@ -65,9 +65,7 @@ class TestWebLearnApiKey(unittest.TestCase):
     def test_missing_key_rejected(self) -> None:
         module = _reload_with_key(VALID_KEY)
         with _client(module) as client:
-            response = client.post(
-                "/api/training/web_learn", json={"topics": ["satellite"]}
-            )
+            response = client.post("/api/training/web_learn", json={"topics": ["satellite"]})
             self.assertEqual(response.status_code, 401)
             self.assertIn("missing", response.json()["detail"].lower())
 
@@ -117,13 +115,9 @@ class TestRateLimiting(unittest.TestCase):
                 # Default window: 10 per 60s. The 11th request must trip the
                 # limiter (client ip is 127.0.0.1 on TestClient).
                 for _ in range(10):
-                    response = client.post(
-                        "/api/training/web_learn", json=payload, headers=headers
-                    )
+                    response = client.post("/api/training/web_learn", json=payload, headers=headers)
                     self.assertEqual(response.status_code, 200)
-                response = client.post(
-                    "/api/training/web_learn", json=payload, headers=headers
-                )
+                response = client.post("/api/training/web_learn", json=payload, headers=headers)
                 self.assertEqual(response.status_code, 429)
 
     def test_different_clients_have_separate_windows(self) -> None:
@@ -181,9 +175,7 @@ class TestRequestValidation(unittest.TestCase):
                 self.assertEqual(response.status_code, 200)
                 args, kwargs = mocked.call_args
                 self.assertEqual(args[0], ["satellite", "lighthouse"])
-                self.assertEqual(
-                    kwargs["topic_weights"], {"satellite": 2.0, "lighthouse": 0.5}
-                )
+                self.assertEqual(kwargs["topic_weights"], {"satellite": 2.0, "lighthouse": 0.5})
 
     def test_invalid_json_rejected(self) -> None:
         module = _reload_with_key(VALID_KEY)
