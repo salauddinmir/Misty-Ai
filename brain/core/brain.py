@@ -1524,7 +1524,6 @@ class Brain:
                 if concept:
                     source_ids.append(concept.concept_id)
 
-
             # Entity sweep: every extracted entity (name, subject,
             # math/physics text heads, taught concepts...) that matches
             # a concept in the graph lights it up. Candidates that are
@@ -1655,7 +1654,6 @@ class Brain:
                         activation_map[cid] = min(1.0, float(overlap) / 5.0)
 
         return activation_map
-
 
     # -----------------------------------------------------------------
     # Phase 38: multi-path concept activation helpers. The old logic
