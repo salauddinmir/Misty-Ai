@@ -86,13 +86,13 @@ _EN_EXPANSION_OPENERS = [
 ]
 
 _BN_CLOSE_GREETINGS = [
-    "বিদায় নিয়ে যাওয়ার আগে আমার কিছু বলার আছে — আবার আসবেন!",
     "ঠিক আছে, আবার কথা হবে। নতুন কিছু শিখতে চাইলে বলবেন!",
+    "বিদায় নিয়ে যাওয়ার আগে আমার কিছু বলার আছে — আবার আসবেন!",
 ]
 
 _EN_CLOSE_GREETINGS = [
-    "Goodbye! Come back anytime you want to learn something new.",
     "Alright, talk to you again soon. New topics are always welcome!",
+    "Goodbye! Come back anytime you want to learn something new.",
 ]
 
 
@@ -144,9 +144,13 @@ class ConversationDriver:
         unexplored neighbors of the topic.
         """
         if self._is_closure(user_text) or self._is_closure(response):
+            # Pick the reply BEFORE incrementing: the first closure in a
+            # session (turns_since_question == question_interval == 1)
+            # should use the first genuine farewell (pool[1]).
+            question = self._closure_reply(user_text)
             self.turns_since_question += 1
             return FollowUpPlan(
-                question=self._closure_reply(user_text),
+                question=question,
                 kind="closure",
                 needs_followup=False,
             )

@@ -86,7 +86,6 @@ def extract_entity_candidates(text: str) -> List[str]:
         "আসলে",
         "আসলেই",
         "ভুল",
-        "ভালো"
         # Common English stopwords that must never be entities
         "I",
         "Me",
@@ -131,16 +130,35 @@ def extract_entity_candidates(text: str) -> List[str]:
         "Will",
         "Would",
         "Could",
+        # Explicit-teaching discourse verbs must never seed salience:
+        # "Remember that a drone is ..." should rank 'drone' above
+        # 'Remember' when the brain scrapes entities from the input.
+        "Remember",
+        "Keep",
+        "Learn",
+        "Note",
     }
     # Bengali multi-word name spans: 1-3 word sequences of Bengali chars
     bn_token_re = re.compile(r"[\u0980-\u09FF]+", re.UNICODE)
     bn_words = bn_token_re.findall(text)
     candidates = [word for word in bn_words if word not in _banned and len(word) >= 2]
-    # English proper nouns: capitalized words in the middle of the text
+    # English candidates: capitalized words in the middle of the text
+    # plus any remaining content words after the ban filter, so taught
+    # lowercase entities ("drone", "robot") still join the salience
+    # ranking instead of being invisible to pronoun resolution.
     en_token_re = re.compile(r"\b([A-Z][a-zA-Z0-9_-]+)\b")
     for match in en_token_re.finditer(text):
         word = match.group(1)
         if word not in _banned:
+            candidates.append(word)
+    # Lowercase English content words only count when preceded by an
+    # article ("a drone", "the robot") so common words like "who", "what",
+    # "does", "mean" never pollute salience and break pronoun resolution.
+    for match in re.finditer(r"\b(?:a|an|the)\s+([a-z][a-z0-9_-]{2,})\b", text, re.IGNORECASE):
+        word = match.group(1)
+        if word not in _banned and word not in {
+            c.lower() for c in candidates
+        }:
             candidates.append(word)
     # Deduplicate while preserving order
     seen: set = set()
@@ -199,6 +217,8 @@ class DialogueContext:
         elif role == "user":
             discovered = extract_entity_candidates(text)
         else:
+            # Brain outputs mention many common words that would pollute
+            # pronoun-resolution salience ranking, so they do not feed it.
             discovered = []
         self.history.append(TurnRecord(role=role, text=text, entities=discovered, intent=intent))
         if len(self.history) > self.max_history:
@@ -217,7 +237,11 @@ class DialogueContext:
                 seen.add(lower)
                 updated.append(name)
         self.salient_entities = updated[: self.max_salience]
-        if discovered:
+        # A discovered entity only seeds the topic when the context has no
+        # better anchor yet (the brain's interpret phase sets the topic
+        # from the parsed structure, which must not be overwritten by a
+        # generic scrape such as the discourse word "Remember").
+        if discovered and not self.topic:
             self.topic = discovered[0]
 
     # ------------------------------------------------------------------

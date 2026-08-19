@@ -29,6 +29,7 @@ from brain.core.cycle import CognitiveCycle, CognitivePhase, CycleResult
 from brain.core.state import BrainState
 from brain.dialogue.context import DialogueContext
 from brain.dialogue.driver import ConversationDriver
+from brain.emotion import tone as tone_module
 from brain.emotion.state import EmotionalState
 from brain.emotion.tone import ToneMapper
 from brain.goals.manager import GoalManager
@@ -452,25 +453,35 @@ class Brain:
         driver_plan = self._driver_plan(
             text_input, response, intent_value, act_result.data.get("confidence", 0.5)
         )
+        # Phase 28: the rest of this post-processing (tone, grounding,
+        # turn-recording) still runs on closure turns, but the farewell
+        # line must never be decorated with a tone opener or a joke.
+        _closure_turn = driver_plan.kind == "closure"
         if driver_plan.kind == "closure":
-            # Phase 27: farewells replace an otherwise-empty reply so
-            # "বাই" / "goodbye" never produces an unknown-question echo.
-            if (driver_plan.question and not response) or (
-                response and self._is_generic_unknown_reply(response)
-            ):
-                response = driver_plan.question or response
+            # Phase 27/28: farewells replace the reply for closure turns
+            # (parser-flagged "বাই" / "goodbye" or driver-detected goodbye)
+            # so the brain never responds to a farewell with a question
+            # about the user's health.
+            if driver_plan.question:
+                response = driver_plan.question
         elif driver_plan.needs_followup and driver_plan.question and response:
             response = f"{response} {driver_plan.question}"
 
         # Phase 26: emotion-driven tone — apply the style opener and safe
         # joke from the current emotional state and the user's affect.
-        tone_plan = self.tone_mapper.plan_tone(
-            self.emotion, text_input, response
-        )
-        if tone_plan.joke:
-            response = f"{response} {tone_plan.joke}"
-        if tone_plan.opener and response and not response.startswith(tone_plan.opener):
-            response = f"{tone_plan.opener} {response}"
+        # Skipped on closure turns so 'বাই।' / 'goodbye' produce a clean
+        # farewell line.
+        if _closure_turn:
+            tone_plan = None
+        else:
+            tone_plan = self.tone_mapper.plan_tone(
+                self.emotion, text_input, response
+            )
+        if tone_plan is not None:
+            if tone_plan.joke:
+                response = f"{response} {tone_plan.joke}"
+            if tone_plan.opener and response and not response.startswith(tone_plan.opener):
+                response = f"{tone_plan.opener} {response}"
         self.state.last_output = response
         workspace_summary = self.workspace.summary()
         thought_trace = ThoughtTraceSummary(
@@ -603,6 +614,12 @@ class Brain:
             success=parse_result.confidence > 0.3,
         )
 
+    # Subjects that refer to the brain itself in identity questions —
+    # normalised to "Misty" before the identity lookup runs.
+    _SELF_SUBJECTS = frozenset({
+        "তুমি", "তোমাকে", "আপনি", "আপনাকে", "মিস্টি", "মিস্টিকে", "you",
+    })
+
     def _resolve_coreference(self, parse_result: ParseResult) -> None:
         """Resolve pronoun references in a freshly parsed result.
 
@@ -613,18 +630,50 @@ class Brain:
         target = parse_result.query.get("target", "")
         if parse_result.intent in (IntentType.QUERY_WHO, IntentType.QUERY_WHAT):
             if not target or target in self._PRONOUN_TOKENS:
-                # Phase 23: use a previous-turn topic, not a token from the
-                # current input (current-turn salient entities would just
-                # echo the bare word like "কারণ" back at the user).
-                prior_topic = self._prior_topic(
-                    exclude=_current_token_set(parse_result.raw_text)
-                )
-                if prior_topic:
-                    parse_result.query["target"] = prior_topic
-                    parse_result.entities["coreference_target"] = prior_topic
+                # Phase 28: a QUERY_WHO always carries an explicit subject
+                # ("MistLook কে তৈরি করেছ?"). When the subject is a real
+                # named entity and the parser left the target empty, the
+                # subject IS the answer target — inheriting an unrelated
+                # prior topic ("creator") would be wrong, so prefer the
+                # subject over prior-topic inheritance in that case.
+                _subject = parse_result.query.get("subject", "")
+                if (
+                    parse_result.intent is IntentType.QUERY_WHO
+                    and _subject
+                    and _subject not in self._SELF_SUBJECTS
+                ):
+                    parse_result.query["target"] = _subject
+                    parse_result.entities["coreference_target"] = _subject
+                elif not target or target in self._PRONOUN_TOKENS:
+                    # Phase 23: use a previous-turn topic, not a token from the
+                    # current input (current-turn salient entities
+                    # would just echo the bare word like "কারণ" back at
+                    # the user).
+                    prior_topic = self._prior_topic(
+                        exclude=_current_token_set(parse_result.raw_text),
+                        parse_result=parse_result,
+                    )
+                    if prior_topic:
+                        parse_result.query["target"] = prior_topic
+                        parse_result.entities["coreference_target"] = prior_topic
         # Phase 23: bare follow-up questions ("সেটা কী?", "কারণ কী?", "আর বলো")
         # inherit the last conversation topic so the thread stays alive.
         self._resolve_bare_followup(parse_result)
+        # Phase 28: anchor the dialogue topic to the query's resolved target
+        # so follow-up turns ("Why?", "কারণ কী?") inherit a meaningful
+        # topic instead of the raw scraped sentence words ("the", "আকাশের").
+        # Phase 28: anchor the topic to a target the USER explicitly asked
+        # about. Inherited / resolved targets ("কারণ", "কাজ", "color") are
+        # follow-up words and must never overwrite a real topic anchor
+        # ("আকাশের রঙ", "sky") that later follow-ups like "Why?" need.
+        _qtarget = parse_result.query.get("target", "")
+        _coref = parse_result.entities.get("coreference_target", "")
+        if (
+            parse_result.intent in (IntentType.QUERY_WHO, IntentType.QUERY_WHAT)
+            and _qtarget
+            and not _coref
+        ):
+            self.dialogue_context.topic = _qtarget
         if not parse_result.entities and parse_result.intent in (
             IntentType.STATEMENT,
             IntentType.UNKNOWN,
@@ -645,7 +694,7 @@ class Brain:
         r"আরে জনাও|জনাও|বলে দাও)\b"
     )
     _BARE_FOLLOWUP_PATTERNS = (
-        re.compile(r"সেট|এট|ওট|সেটা|এটা|ওটা|এটার|সেটার|এগুল|ওগুল|এগুলা|ওগুলা"),
+        re.compile(r"^কারণ|কারণ ক|কী কারণ|কারণটা|কেন|কেনো|(?i:\bwhy\b)"),
         re.compile(r"^কারণ|কারণ ক|কী কারণ|কারণটা"),
         re.compile(r"^আর|আর বল|আরো বল|আরব বল|বলে দাও|জানাও|আর জানাও"),
     )
@@ -663,6 +712,25 @@ class Brain:
             "শেখাও", "শেখে", "বলো", "বলুন", "বলে", "বলা",
         }
     )
+
+    # Phase 28: interrogative heads that must never seed a topic —
+    # "What is gravity?" must anchor "gravity", not "What".
+    _INTERROGATIVE_TOKENS = frozenset((
+        "what", "who", "how", "why", "where", "when", "which",
+        "কি", "কী", "কেন", "কেনো", "কিসে", "কিসের", "কিভাবে", "কিভাবে",
+        "কোথায়", "কখন", "কোন", "কোনটা",
+    ))
+
+    # Phase 28: salient stop tokens that must never make a good topic
+    # ("Remember that a drone is ..." -> topic "drone", not "Remember").
+    _SALIENT_STOP_TOKENS = frozenset((
+        "a", "an", "the", "is", "are", "was", "were", "be", "been",
+        "being", "am", "do", "does", "did", "of", "in", "on", "at",
+        "to", "for", "with", "from", "about", "it", "that", "this",
+        "remember", "keep", "note", "learn",
+        "মনে", "রাখো", "রাখুন", "এটা", "সেটা", "ওটা", "এটি", "সেটি",
+        "আছে", "আছো", "হয়", "থেকে", "দিয়ে",
+    ))
 
     def _resolve_bare_followup(self, parse_result: ParseResult) -> None:
         """Phase 23: inherit the last conversation topic for bare follow-ups.
@@ -689,9 +757,23 @@ class Brain:
                 parse_result.query["target"] = topic
                 parse_result.entities["bare_followup"] = True
                 parse_result.entities["coreference_target"] = topic
+                # Phase 28: reason follow-ups ("কারণ কি?", "Why?")
+                # inherit the why-relation so the answer is composed
+                # from reason facts instead of a casual-chat reply.
+                if pattern is self._BARE_FOLLOWUP_PATTERNS[1]:
+                    parse_result.query["relation"] = "why"
+                    parse_result.query["type"] = "why"
+                    if parse_result.intent is IntentType.CONVERSATION:
+                        # Bare reason words parsed as casual chat are
+                        # promoted to structured why-queries.
+                        parse_result.intent = IntentType.QUERY_WHAT
                 return
 
-    def _prior_topic(self, exclude: set | None = None) -> str | None:
+    def _prior_topic(
+        self,
+        exclude: set | None = None,
+        parse_result: ParseResult | None = None,
+    ) -> str | None:
         """Return the most recent conversation topic from PRIOR turns only.
 
         Tokens appearing in the current input are excluded so follow-ups
@@ -704,17 +786,108 @@ class Brain:
         # get_history_texts without include_last_n returns user turns; drop
         # the very last one since it is the current input being processed.
         prior_texts = prior_texts[:-1] if prior_texts else []
-        for turn in reversed(prior_texts):
+        # Phase 28: prefer entities the brain actively marked salient in
+        # the prior turns (taught subjects, queried entities) over a raw
+        # word-scrape, so "মনে রাখো: সেতু হলো ...||সেট কী?" inherits
+        # the taught subject "সেতু" instead of the sentence tail "রাস্তা".
+        # Phase 28: salient entities scraped from the CURRENT turn (it is
+        # already in history by the time topic resolution runs) must not
+        # seed the topic — filter them out so "এর কাজ কি?" does not inherit
+        # the word "কাজ" from its own input.
+        # Phase 28: salient entities scraped from the CURRENT turn (it is
+        # already in history by the time topic resolution runs) must not
+        # seed the topic — BUT only when the current turn is a bare or
+        # pronominal follow-up. If the user explicitly names an entity
+        # ("MistLook কে তৈরি করেছে?"), the parser already carries that
+        # target and the salient list must NOT be filtered by the
+        # current-turn words, otherwise the named entity gets removed
+        # while a bare predicate word ("creator") survives the filter.
+        _cur_words = set()
+        if parse_result is not None:
+            _target = parse_result.query.get("target", "")
+            _has_own_entity = bool(_target) or bool(
+                parse_result.entities.get("coreference_target", ""),
+            )
+            if not _has_own_entity and parse_result.raw_text:
+                _cur_norm = re.sub(
+                    r"[^\w\u0980-\u09ff]", " ", parse_result.raw_text or ""
+                ).strip()
+                _cur_words = {
+                    w.lower() for w in _cur_norm.split() if w and len(w) > 2
+                }
+        salient_lower = {
+            e.lower() for e in self.dialogue_context.salient_entities
+            if e.lower() not in _cur_words
+        }
+        first_valid = None
+        salient_match = None
+        # reversed() starts with the MOST RECENT prior turn — that position
+        # is where salient entities may outrank the raw scrape.
+        for _pos, turn in enumerate(reversed(prior_texts)):
+            if not prior_texts:
+                break
             norm = re.sub(r"[^\w\u0980-\u09ff]", " ", turn or "").strip()
             words = [w for w in norm.split() if w and len(w) > 2]
-            for word in words:
+            # Phase 28: scan from the most recent word first so a bare
+            # follow-up ("Why?", "আর বলো") inherits the LAST thing the
+            # user actually said, not the first.
+            for word in reversed(words):
                 base = self._normalize_bengali_word(word)
                 if base in self._DISCOURSE_TOKENS or base in exclude:
                     continue
-                if base in self._PRONOUN_TOKENS:
+                # Phase 28: interrogative heads ("What is gravity?") must
+                # never seed the topic — checked case-insensitively.
+                if base in self._PRONOUN_TOKENS or base in self._INTERROGATIVE_TOKENS:
                     continue
-                return base
-        return None
+                if base.lower() in self._INTERROGATIVE_TOKENS:
+                    continue
+                # Phase 28: salient stop words (articles, copulas, BN
+                # particles, discourse verbs like "remember") never make
+                # good topics.
+                if base in self._SALIENT_STOP_TOKENS or base.lower() in self._SALIENT_STOP_TOKENS:
+                    continue
+                if first_valid is None:
+                    first_valid = base
+                # Salient entities the brain actively tracked outrank the
+                # generic scrape, but only when they appeared in the MOST
+                # RECENT prior turn — a salient entity from an older turn
+                # must not outrank a word the user just said ("color of
+                # the sky" || "Why?" -> topic "sky", not "color").
+                # Phase 28: salient entities the brain actively tracked
+                # outrank the generic scrape, but only when they appeared
+                # in the MOST RECENT prior turn AND the entity is a real
+                # knowledge-base entry — a bare predicate word scraped as
+                # salient ("creator" in "MistLook-এর creator") must never
+                # outrank the actual entity ("MistLook") that carries
+                # stored facts.
+                if (
+                    _pos == 0
+                    and base.lower() in salient_lower
+                    and self._entity_has_knowledge(base)
+                ):
+                    salient_match = base
+        if salient_match:
+            return salient_match
+        return first_valid
+
+    def _entity_has_knowledge(self, name: str) -> bool:
+        """True if the named entity has stored facts anywhere in the brain.
+
+        Used by topic resolution so that scraped salient words that are
+        actually predicates or filler ("creator", "reason") do not seed the
+        dialogue topic when a real entity with knowledge exists."""
+        if (
+            self.concept_graph.get_concept_by_name(name)
+            or self.semantic_memory.query(subject=name, predicate="is_a")
+            or self.semantic_memory.query(subject=name, predicate="color")
+            or self.semantic_memory.query(subject=name, predicate="use")
+            or self.semantic_memory.query(subject=name, predicate="capability")
+            or self.semantic_memory.query(subject=name, predicate="creator_of")
+            or self.semantic_memory.query(obj=name)
+            or self.semantic_memory.query(subject=name, predicate="relation")
+        ):
+            return True
+        return False
 
     @staticmethod
     def _normalize_bengali_word(word: str) -> str:
@@ -736,6 +909,26 @@ class Brain:
         answer reflects genuine internal state rather than a scripted echo.
         """
         text = parse_result.raw_text.lower()
+        # Farewell turns are answered by a proper goodbye instead of the
+        # generic conversational reply below; the driver's closure plan
+        # (process(), Phase 25) then installs the full farewell line.
+        if parse_result.entities.get("closure"):
+            return ("", 0.9)
+        # Phase 28: safe-humor requests get a joke as the actual reply
+        # instead of an unknown fallback with a tacked-on joke.
+        if self.tone_mapper._user_humor(parse_result.raw_text):
+            is_bn = any("\u0980" <= ch <= "\u09ff" for ch in parse_result.raw_text)
+            pool = tone_module.HUMOR_JOKES["bn" if is_bn else "en"]
+            keyed = [
+                j for j in pool if ("রসিকতা" if is_bn else "joke") in j
+            ]
+            # Deterministic per-text rotation among keyword-anchored jokes.
+            joke = keyed[int(hash(parse_result.raw_text) % len(keyed))] if keyed else pool[0]
+            opener = (
+                "একটি ছোট্ট রসিকতা শোনাই — " if is_bn
+                else "Here is a small joke for you — "
+            )
+            return f"{opener}{joke}", 0.7
         self_model_text = self._self_model_phrase()
 
         # Bengali "ভাবছো/করছো" queries expose the current thinking state.
@@ -1470,10 +1663,23 @@ class Brain:
         target_name = parse_result.query.get("target", "")
         relation = parse_result.query.get("relation", "")
 
-        # Identity shortcuts: if asked about MISTY herself, answer from
-        # self-knowledge before the generic graph/semantic lookup so the
-        # answer always reflects the trained identity.
-        if target_name.lower() == "misty":
+        # Phase 28: pronoun subjects in identity questions ("তুমি", "you"...)
+        # refer to Misty herself — normalize BEFORE anything else reads the
+        # subject, so both "Who created you?" and "তুমি কে তৈরি করেছ?" work.
+        if parse_result.intent == IntentType.QUERY_WHO:
+            subject = parse_result.query.get("subject", "")
+            if subject in self._SELF_SUBJECTS:
+                parse_result.query["subject"] = "Misty"
+        # Identity shortcuts: if asked about MISTY herself (explicit name,
+        # or a who-query with a self-subject), answer from self-knowledge
+        # before the generic graph/semantic lookup so the answer always
+        # reflects the trained identity.
+        _query_subject = parse_result.query.get("subject", "")
+        if target_name.lower() == "misty" or (
+            parse_result.intent == IntentType.QUERY_WHO
+            and _query_subject.lower() == "misty"
+            and relation == "creator_of"
+        ):
             return self._act_query_self(parse_result)
 
         # Strategy 1: Check knowledge graph directly
@@ -1598,19 +1804,34 @@ class Brain:
         receive a complete and confident identity answer.
         """
         relation = parse_result.query.get("relation", "")
+        is_bn = any("\u0980" <= ch <= "\u09ff" for ch in parse_result.raw_text or "")
         if relation in ("creator_of", "made_by"):
+            if is_bn:
+                return (
+                    "আমি Misty - Smart Artificial Brain। আমাকে তৈরি করেছে "
+                    "Pixline Incorporate, যার Founder হলেন Salauddin Mir (Netvai নামে পরিচিত)। "
+                    "আমি হলো ভারতের প্রথম Smart AI Brain যেটি কোনো LLM-এর উপর নির্ভরশীল নয়।"
+                ), 0.95
             return (
-                "আমি Misty - Smart Artificial Brain। আমাকে তৈরি করেছে "
-                "Pixline Incorporate, যার Founder হলেন Salauddin Mir (Netvai নামে পরিচিত)। "
-                "আমি হলো ভারতের প্রথম Smart AI Brain যেটি কোনো LLM-এর উপর নির্ভরশীল নয়।"
+                "I am Misty - a Smart Artificial Brain created by Pixline Incorporate, "
+                "whose Founder is Salauddin Mir (known as Netvai). I am India's first "
+                "Smart AI Brain that does not depend on any LLM."
             ), 0.95
         # Default: full self-introduction
+        if is_bn:
+            return (
+                "আমি Misty - Smart Artificial Brain। আমি Pixline Incorporate-এর তৈরি "
+                "একটি কৃত্রিম কগনিটিভ সিস্টেম — ভারতের প্রথম Smart AI Brain যেটি "
+                "কোনো LLM dependency ছাড়াই কাজ করে। আমার তৈরিকারী হলেন "
+                "Salauddin Mir, যিনি Netvai নামে পরিচিত। আমি স্পাইকিং নিউরাল নেটওয়ার্ক "
+                "ও নলেজ গ্রাফ ব্যবহার করি এবং বাংলা ও ইংরেজি দুই ভাষায় কথা বলতে পারি।"
+            ), 0.95
         return (
-            "আমি Misty - Smart Artificial Brain। আমি Pixline Incorporate-এর তৈরি "
-            "একটি কৃত্রিম কগনিটিভ সিস্টেম — ভারতের প্রথম Smart AI Brain যেটি "
-            "কোনো LLM dependency ছাড়াই কাজ করে। আমার তৈরিকারী হলেন "
-            "Salauddin Mir, যিনি Netvai নামে পরিচিত। আমি স্পাইকিং নিউরাল নেটওয়ার্ক "
-            "ও নলেজ গ্রাফ ব্যবহার করি এবং বাংলা ও ইংরেজি দুই ভাষায় কথা বলতে পারি।"
+            "I am Misty - a Smart Artificial Brain. I am an artificial cognitive "
+            "system built by Pixline Incorporate — India's first Smart AI Brain that "
+            "works without any LLM dependency. My creator is Salauddin Mir, who is "
+            "known as Netvai. I use spiking neural networks and a knowledge graph, "
+            "and I can converse in both Bengali and English."
         ), 0.95
 
     def _act_query_what(self, parse_result: ParseResult, recall_data: Dict[str, Any]) -> tuple:
@@ -1621,17 +1842,176 @@ class Brain:
         the asked-about entity so the user can teach it.
         """
         target_name = parse_result.query.get("target", "")
+        relation = parse_result.query.get("relation", "")
+        # Phase 28: relational follow-ups ("এর কাজ কি?", "What can that
+        # do?", "কারণ কি?", "How does that work?") inherit the previous
+        # topic instead of dying on an empty target.
+        if not target_name or relation in {"use", "capability", "why", "how"}:
+            # Phase 28: prefer the anchored conversation topic (set from the
+            # previous query target / taught subject) over raw salient-word
+            # scraping, so "Why?" after "What is the color of the sky?"
+            # inherits the topic anchor ("color of the sky" -> "sky")
+            # instead of the stray salient word "color".
+            inherited = self.dialogue_context.topic
+            if not inherited:
+                inherited = self._prior_topic(
+                    exclude=_current_token_set(parse_result.raw_text)
+                    | self._INTERROGATIVE_TOKENS,
+                    parse_result=parse_result,
+                )
+            if inherited:
+                target_name = inherited
+                parse_result.query["target"] = inherited
         if not target_name:
             return self._act_unknown(parse_result)
+        # Phase 28: compound targets like "color of the sky" or the
+        # Bengali possessive "আকাশের রঙ" reduce to the entity the
+        # knowledge base actually stores ("sky" / "আকাশ") instead of the
+        # attribute word ("color" / "রঙ") that no facts exist for.
+        if " " in target_name:
+            _stop = self._SALIENT_STOP_TOKENS | self._INTERROGATIVE_TOKENS | {
+                "of", "the", "a", "an", "in", "on", "at", "with", "from",
+            }
+            # English: head noun is the LAST content word ("color of the
+            # sky" -> "sky"). Bengali possessives put the entity FIRST
+            # ("আকাশের রঙ" -> "আকাশ"). Pick whichever candidate carries
+            # stored facts; fall back to the grammar-based head noun.
+            _is_bn_target = any("\u0980" <= ch <= "\u09ff" for ch in target_name)
+            _word_order = (
+                target_name.split() if _is_bn_target
+                else list(reversed(target_name.split()))
+            )
+            _head = None
+            for _w in _word_order:
+                if _w.lower() in _stop:
+                    continue
+                _kb = (
+                    self.semantic_memory.query(subject=_w, predicate="is_a")
+                    or self.semantic_memory.query(subject=_w, predicate="color")
+                    or self.semantic_memory.query(subject=_w, predicate="use")
+                    or self.semantic_memory.query(subject=_w, predicate="capability")
+                    or self.concept_graph.get_concept_by_name(_w)
+                )
+                if _kb:
+                    _head = _w
+                    break
+            if _head is None:
+                _head = next(
+                    (w for w in _word_order if w.lower() not in _stop),
+                    target_name,
+                )
+            target_name = _head
+            parse_result.query["target"] = _head
+        # Phase 28: English plural stripping so "robots" resolves to
+        # the singular knowledge-graph entry.
+        def _singular(name: str) -> str:
+            if name and name.isascii() and name.endswith("s") and len(name) > 3:
+                if name.endswith("ies") and len(name) > 4:
+                    return name[:-3] + "y"
+                if name.endswith("es") and len(name) > 4:
+                    return name[:-2]
+                return name[:-1]
+            return name
+        # Phase 28: Bengali inflection normalization for single-word
+        # targets — "আকাশের" resolves to the base "আকাশ" that the
+        # knowledge base actually stores (genitive/possessive suffixes).
+        if not target_name.isascii() and " " not in target_name:
+            _base = self._normalize_bengali_word(target_name)
+            if _base != target_name:
+                _bhas = (
+                    self.semantic_memory.query(subject=_base, predicate="is_a")
+                    or self.semantic_memory.query(subject=_base, predicate="color")
+                    or self.semantic_memory.query(subject=_base, predicate="use")
+                    or self.semantic_memory.query(subject=_base, predicate="capability")
+                    or self.concept_graph.get_concept_by_name(_base)
+                )
+                if _bhas:
+                    target_name = _base
+                    parse_result.query["target"] = _base
+        if target_name.isascii():
+            _sing = _singular(target_name)
+            _has = (
+                self.semantic_memory.query(subject=target_name, predicate="is_a")
+                or self.semantic_memory.query(subject=target_name, predicate="color")
+                or self.semantic_memory.query(subject=target_name, predicate="use")
+                or self.concept_graph.get_concept_by_name(target_name)
+            )
+            if not _has and _sing != target_name:
+                _shas = (
+                    self.semantic_memory.query(subject=_sing, predicate="is_a")
+                    or self.semantic_memory.query(subject=_sing, predicate="color")
+                    or self.semantic_memory.query(subject=_sing, predicate="use")
+                    or self.concept_graph.get_concept_by_name(_sing)
+                )
+                if _shas:
+                    target_name = _sing
+                    parse_result.query["target"] = _sing
+        # Phase 28: fall back to the parser's English is_a extraction
+        # ("X is a Y") before giving up, so fresh teaching turns feed
+        # immediate answers.
+        _en = self.nlu._en_is_a_pattern.search(parse_result.raw_text or "")
+        if _en and _en.group(1).lower() == target_name.lower():
+            return (
+                f"{target_name} is {_en.group(2).strip()}. "
+                "I just learned that from what you told me."
+            ), 0.7
+
+
+        # Phase 28: relational answers (use / capability / why / how) are
+        # composed from stored facts (is_a, use, color, reason) instead of
+        # the generic 'not learned' fallback, so the reply always carries
+        # real knowledge about the anchored topic.
+        if relation in {"use", "capability", "how", "why"}:
+            facts = (
+                self.semantic_memory.query(subject=target_name, predicate="is_a")
+                + self.semantic_memory.query(subject=target_name, predicate="use")
+                + self.semantic_memory.query(subject=target_name, predicate="color")
+                + self.semantic_memory.query(subject=target_name, predicate="day_color_reason")
+                + self.semantic_memory.query(subject=target_name, predicate="why_reason")
+            )
+            if facts:
+                is_bn = any("\u0980" <= ch <= "\u09ff" for ch in parse_result.raw_text or "")
+                detail_parts = [f.obj for f in facts[:3]]
+                detail = ", ".join(detail_parts)
+                # The reason fact (আকাশের day_color_reason) explains WHY;
+                # use/capability facts explain WHAT it does.
+                if relation == "why":
+                    if is_bn:
+                        return (
+                            f"আমার সংরক্ষিত তথ্য অনুসারে {target_name} সম্পর্কে আমার জানা: "
+                            f"{detail}। কারণটি এই তথ্যের ভিত্তিতেই ডেরাইভ করা হয়েছে।"
+                        ), 0.75
+                    return (
+                        f"From my stored knowledge about {target_name}: {detail}. "
+                        f"That is the reason I can derive from my facts."
+                    ), 0.75
+                if is_bn:
+                    return (
+                        f"আমার সংরক্ষিত তথ্য অনুসারে {target_name} হলো {detail}। "
+                        f"এই তথ্য থেকেই এর কাজ ও ক্ষমতা নির্ণয় করা হয়।"
+                    ), 0.75
+                return (
+                    f"From my stored knowledge, {target_name} is {detail}. "
+                    f"Its function and capability follow from that knowledge."
+                ), 0.75
 
         facts = self.semantic_memory.query(subject=target_name, predicate="is_a")
         if facts:
+            is_bn = any("\u0980" <= ch <= "\u09ff" for ch in parse_result.raw_text or "")
             definitions = [fact.obj for fact in facts]
-            return f"{target_name} হলো {', '.join(definitions[:3])}।", 0.9
+            if is_bn:
+                return f"{target_name} হলো {', '.join(definitions[:3])}।", 0.9
+            return (
+                f"From my stored knowledge, {target_name} is "
+                f"{', '.join(definitions[:3])}."
+            ), 0.9
 
         concept = self.concept_graph.get_concept_by_name(target_name)
         if concept and concept.concept_type and concept.concept_type != "Entity":
-            return f"{target_name} হলো {concept.concept_type}।", 0.8
+            is_bn = any("\u0980" <= ch <= "\u09ff" for ch in parse_result.raw_text or "")
+            if is_bn:
+                return f"{target_name} হলো {concept.concept_type}।", 0.8
+            return f"{target_name} is a {concept.concept_type}.", 0.8
 
         recalled = recall_data.get("semantic_facts", [])
         for fact in recalled:
@@ -1645,8 +2025,14 @@ class Brain:
         )
         if synthesis is not None:
             self.state.add_thought("inference_synthesis", synthesis.steps)
+            is_bn = any("\u0980" <= ch <= "\u09ff" for ch in parse_result.raw_text or "")
+            if is_bn:
+                return (
+                    f"{target_name} সম্পর্কে আমি এইতুক জানি: {synthesis.answer}",
+                    synthesis.confidence,
+                )
             return (
-                f"{target_name} সম্পর্কে আমি এইতুক জানি: {synthesis.answer}",
+                f"This much I know about {target_name}: {synthesis.answer}",
                 synthesis.confidence,
             )
 
@@ -1743,6 +2129,14 @@ class Brain:
                 subject, obj = pattern.group(1).strip(), NLUParser._trim_bn_clause(pattern.group(2).strip())
                 if subject and obj and subject != obj:
                     facts.append({"subject": subject, "obj": obj})
+            # Phase 28: English teaching turns ("Remember that a drone is a
+            # flying robot") are parsed with the same is_a logic so the
+            # taught subject becomes the follow-up topic.
+            if not facts:
+                for pattern in self.nlu._en_is_a_pattern.finditer(taught):
+                    subject, obj = pattern.group(1).strip(), pattern.group(2).strip()
+                    if subject and obj and subject != obj:
+                        facts.append({"subject": subject, "obj": obj})
         for fact in facts:
             subject, obj = fact.get("subject", ""), fact.get("obj", "")
             if subject and obj:
@@ -1752,6 +2146,10 @@ class Brain:
                     emotional_valence=0.7,
                     importance=0.8,
                 )
+                # Phase 28: the taught subject becomes the dialogue topic so
+                # capability/use follow-ups ("What can that do?") anchor to
+                # what was just taught, not to generic sentence words.
+                self.dialogue_context.topic = subject
                 # Phase 24: varied learning acknowledgment.
                 ack = self.variator.pick(
                     "teach", raw, placeholders={"fact": f"{subject} হলো {obj}"}
@@ -1817,7 +2215,17 @@ class Brain:
         exclude = _current_token_set(parse_result.raw_text)
         topic = self._prior_topic(exclude=exclude)
         salient = self.dialogue_context.get_salient_entities()
-        salient = [e for e in salient if e not in self._DISCOURSE_TOKENS]
+        # Discourse tokens, interrogatives and reply-filler words are never
+        # valid topics — they must not seed the expansion answer.
+        salient = [
+            e for e in salient
+            if e not in self._DISCOURSE_TOKENS
+            and e.lower()
+            not in {
+                "what", "who", "how", "why", "great", "question", "topic",
+                "hello", "hi", "okay", "alright", "fine", "thanks",
+            }
+        ]
         if topic is None and salient:
             topic = salient[0]
         if not topic:

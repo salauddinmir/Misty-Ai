@@ -39,7 +39,10 @@ def test_bn_clarification_is_conversation(parser: NLUParser) -> None:
 
 
 def test_en_clarification_is_conversation(parser: NLUParser) -> None:
-    for text in ["I don't understand", "I don't get it", "why?", "What's up?"]:
+    # Phase 28: "why?" is now a genuine QUERY_WHAT with relation=why (the
+    # topic-anchoring why-follow-up feature). It is still handled
+    # gracefully — the live-brain no-canned-reply guard below covers it.
+    for text in ["I don't understand", "I don't get it", "What's up?"]:
         assert parser.parse(text).intent is IntentType.CONVERSATION
 
 

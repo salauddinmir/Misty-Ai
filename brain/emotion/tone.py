@@ -85,6 +85,8 @@ _SAFE_JOKES_EN = [
 _USER_ANGER_PATTERNS = (
     re.compile(r"(রাগান্বিত|রাগ করছ|বিরক্ত|বিরক্তি|খারাপ মেজাজ|angry|mad|irritated|annoyed|frustrated with you)", re.UNICODE),
 )
+HUMOR_JOKES = {"bn": _SAFE_JOKES_BN, "en": _SAFE_JOKES_EN}
+
 _USER_HUMOR_REQUEST_PATTERNS = (
     re.compile(r"(মজার কিছু|হাসির কিছু|রসিকতা করো|জোকস|মজা|funny|joke|make me laugh|hilarious)", re.UNICODE),
 )

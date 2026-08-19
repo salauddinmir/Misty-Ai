@@ -118,8 +118,6 @@ class MathEngine:
             "compute",
             "evaluate",
             "solve",
-            "what is",
-            "equals",
             "কত",
             "হিসাব",
             "সমাধান",
@@ -156,7 +154,9 @@ class MathEngine:
                         "sequence", "ধারা", "combination", "permutation", "সমাবেশ", "বিন্যাস",
             "circle", "বৃত্ত", "triangle", "ত্রিভুজ", "rectangle", "আয়তক্ষেত্র", "আয়তক্ষেত্র",
         )
-        return any(marker in lowered for marker in markers) or bool(re.search(r"\d\s*[+\-*/^%=]", lowered))
+        return any(marker in lowered for marker in markers) or bool(
+            re.search(r"\d", lowered) and re.search(r"[+\-*/^%=]", lowered)
+        )
 
     @staticmethod
     def _normalize(text: str) -> str:

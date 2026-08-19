@@ -142,7 +142,7 @@ CONVERSATION_FACTS: List[Dict[str, Any]] = [
             "title": "MISTY conversation corpus",
             "url": "https://misty-ai.com/training",
             "retrieved_at": "2026-08-18T00:00:00Z",
-            "content_hash": "sha256:c8e089743a2948437c54829982e65448980bf0bcc3436a2b0dd1bdedb154a3ca"
+            "content_hash": "sha256:e6f36cff0b86c8b12324ec381ac0b9ea641fd0ee56bd49b6418ee36d2ea42239"
         }
     },
     {
@@ -154,7 +154,7 @@ CONVERSATION_FACTS: List[Dict[str, Any]] = [
             "title": "MISTY conversation corpus",
             "url": "https://misty-ai.com/training",
             "retrieved_at": "2026-08-18T00:00:00Z",
-            "content_hash": "sha256:c8e089743a2948437c54829982e65448980bf0bcc3436a2b0dd1bdedb154a3ca"
+            "content_hash": "sha256:e6f36cff0b86c8b12324ec381ac0b9ea641fd0ee56bd49b6418ee36d2ea42239"
         }
     },
     {
@@ -166,7 +166,7 @@ CONVERSATION_FACTS: List[Dict[str, Any]] = [
             "title": "MISTY conversation corpus",
             "url": "https://misty-ai.com/training",
             "retrieved_at": "2026-08-18T00:00:00Z",
-            "content_hash": "sha256:c8e089743a2948437c54829982e65448980bf0bcc3436a2b0dd1bdedb154a3ca"
+            "content_hash": "sha256:e6f36cff0b86c8b12324ec381ac0b9ea641fd0ee56bd49b6418ee36d2ea42239"
         }
     },
     {
@@ -178,7 +178,7 @@ CONVERSATION_FACTS: List[Dict[str, Any]] = [
             "title": "MISTY conversation corpus",
             "url": "https://misty-ai.com/training",
             "retrieved_at": "2026-08-18T00:00:00Z",
-            "content_hash": "sha256:c8e089743a2948437c54829982e65448980bf0bcc3436a2b0dd1bdedb154a3ca"
+            "content_hash": "sha256:e6f36cff0b86c8b12324ec381ac0b9ea641fd0ee56bd49b6418ee36d2ea42239"
         }
     },
     {
@@ -190,7 +190,7 @@ CONVERSATION_FACTS: List[Dict[str, Any]] = [
             "title": "MISTY conversation corpus",
             "url": "https://misty-ai.com/training",
             "retrieved_at": "2026-08-18T00:00:00Z",
-            "content_hash": "sha256:c8e089743a2948437c54829982e65448980bf0bcc3436a2b0dd1bdedb154a3ca"
+            "content_hash": "sha256:e6f36cff0b86c8b12324ec381ac0b9ea641fd0ee56bd49b6418ee36d2ea42239"
         }
     },
     {
@@ -202,7 +202,7 @@ CONVERSATION_FACTS: List[Dict[str, Any]] = [
             "title": "MISTY conversation corpus",
             "url": "https://misty-ai.com/training",
             "retrieved_at": "2026-08-18T00:00:00Z",
-            "content_hash": "sha256:c8e089743a2948437c54829982e65448980bf0bcc3436a2b0dd1bdedb154a3ca"
+            "content_hash": "sha256:e6f36cff0b86c8b12324ec381ac0b9ea641fd0ee56bd49b6418ee36d2ea42239"
         }
     },
     {
@@ -214,7 +214,7 @@ CONVERSATION_FACTS: List[Dict[str, Any]] = [
             "title": "MISTY conversation corpus",
             "url": "https://misty-ai.com/training",
             "retrieved_at": "2026-08-18T00:00:00Z",
-            "content_hash": "sha256:c8e089743a2948437c54829982e65448980bf0bcc3436a2b0dd1bdedb154a3ca"
+            "content_hash": "sha256:e6f36cff0b86c8b12324ec381ac0b9ea641fd0ee56bd49b6418ee36d2ea42239"
         }
     },
     {
@@ -226,7 +226,7 @@ CONVERSATION_FACTS: List[Dict[str, Any]] = [
             "title": "MISTY conversation corpus",
             "url": "https://misty-ai.com/training",
             "retrieved_at": "2026-08-18T00:00:00Z",
-            "content_hash": "sha256:c8e089743a2948437c54829982e65448980bf0bcc3436a2b0dd1bdedb154a3ca"
+            "content_hash": "sha256:e6f36cff0b86c8b12324ec381ac0b9ea641fd0ee56bd49b6418ee36d2ea42239"
         }
     },
     {
@@ -238,7 +238,7 @@ CONVERSATION_FACTS: List[Dict[str, Any]] = [
             "title": "MISTY conversation corpus",
             "url": "https://misty-ai.com/training",
             "retrieved_at": "2026-08-18T00:00:00Z",
-            "content_hash": "sha256:c8e089743a2948437c54829982e65448980bf0bcc3436a2b0dd1bdedb154a3ca"
+            "content_hash": "sha256:e6f36cff0b86c8b12324ec381ac0b9ea641fd0ee56bd49b6418ee36d2ea42239"
         }
     },
     {
@@ -250,7 +250,7 @@ CONVERSATION_FACTS: List[Dict[str, Any]] = [
             "title": "MISTY conversation corpus",
             "url": "https://misty-ai.com/training",
             "retrieved_at": "2026-08-18T00:00:00Z",
-            "content_hash": "sha256:c8e089743a2948437c54829982e65448980bf0bcc3436a2b0dd1bdedb154a3ca"
+            "content_hash": "sha256:e6f36cff0b86c8b12324ec381ac0b9ea641fd0ee56bd49b6418ee36d2ea42239"
         }
     },
     {
@@ -262,7 +262,7 @@ CONVERSATION_FACTS: List[Dict[str, Any]] = [
             "title": "MISTY conversation corpus",
             "url": "https://misty-ai.com/training",
             "retrieved_at": "2026-08-18T00:00:00Z",
-            "content_hash": "sha256:c8e089743a2948437c54829982e65448980bf0bcc3436a2b0dd1bdedb154a3ca"
+            "content_hash": "sha256:e6f36cff0b86c8b12324ec381ac0b9ea641fd0ee56bd49b6418ee36d2ea42239"
         }
     },
     {
@@ -274,7 +274,7 @@ CONVERSATION_FACTS: List[Dict[str, Any]] = [
             "title": "MISTY conversation corpus",
             "url": "https://misty-ai.com/training",
             "retrieved_at": "2026-08-18T00:00:00Z",
-            "content_hash": "sha256:c8e089743a2948437c54829982e65448980bf0bcc3436a2b0dd1bdedb154a3ca"
+            "content_hash": "sha256:e6f36cff0b86c8b12324ec381ac0b9ea641fd0ee56bd49b6418ee36d2ea42239"
         }
     },
     {
@@ -286,7 +286,7 @@ CONVERSATION_FACTS: List[Dict[str, Any]] = [
             "title": "MISTY conversation corpus",
             "url": "https://misty-ai.com/training",
             "retrieved_at": "2026-08-18T00:00:00Z",
-            "content_hash": "sha256:c8e089743a2948437c54829982e65448980bf0bcc3436a2b0dd1bdedb154a3ca"
+            "content_hash": "sha256:e6f36cff0b86c8b12324ec381ac0b9ea641fd0ee56bd49b6418ee36d2ea42239"
         }
     },
     {
@@ -298,7 +298,7 @@ CONVERSATION_FACTS: List[Dict[str, Any]] = [
             "title": "MISTY conversation corpus",
             "url": "https://misty-ai.com/training",
             "retrieved_at": "2026-08-18T00:00:00Z",
-            "content_hash": "sha256:c8e089743a2948437c54829982e65448980bf0bcc3436a2b0dd1bdedb154a3ca"
+            "content_hash": "sha256:e6f36cff0b86c8b12324ec381ac0b9ea641fd0ee56bd49b6418ee36d2ea42239"
         }
     },
     {
@@ -310,7 +310,7 @@ CONVERSATION_FACTS: List[Dict[str, Any]] = [
             "title": "MISTY conversation corpus",
             "url": "https://misty-ai.com/training",
             "retrieved_at": "2026-08-18T00:00:00Z",
-            "content_hash": "sha256:c8e089743a2948437c54829982e65448980bf0bcc3436a2b0dd1bdedb154a3ca"
+            "content_hash": "sha256:e6f36cff0b86c8b12324ec381ac0b9ea641fd0ee56bd49b6418ee36d2ea42239"
         }
     },
     {
@@ -322,7 +322,7 @@ CONVERSATION_FACTS: List[Dict[str, Any]] = [
             "title": "MISTY conversation corpus",
             "url": "https://misty-ai.com/training",
             "retrieved_at": "2026-08-18T00:00:00Z",
-            "content_hash": "sha256:c8e089743a2948437c54829982e65448980bf0bcc3436a2b0dd1bdedb154a3ca"
+            "content_hash": "sha256:e6f36cff0b86c8b12324ec381ac0b9ea641fd0ee56bd49b6418ee36d2ea42239"
         }
     },
     {
@@ -334,7 +334,7 @@ CONVERSATION_FACTS: List[Dict[str, Any]] = [
             "title": "MISTY conversation corpus",
             "url": "https://misty-ai.com/training",
             "retrieved_at": "2026-08-18T00:00:00Z",
-            "content_hash": "sha256:c8e089743a2948437c54829982e65448980bf0bcc3436a2b0dd1bdedb154a3ca"
+            "content_hash": "sha256:e6f36cff0b86c8b12324ec381ac0b9ea641fd0ee56bd49b6418ee36d2ea42239"
         }
     },
     {
@@ -346,7 +346,7 @@ CONVERSATION_FACTS: List[Dict[str, Any]] = [
             "title": "MISTY conversation corpus",
             "url": "https://misty-ai.com/training",
             "retrieved_at": "2026-08-18T00:00:00Z",
-            "content_hash": "sha256:c8e089743a2948437c54829982e65448980bf0bcc3436a2b0dd1bdedb154a3ca"
+            "content_hash": "sha256:e6f36cff0b86c8b12324ec381ac0b9ea641fd0ee56bd49b6418ee36d2ea42239"
         }
     },
     {
@@ -358,7 +358,7 @@ CONVERSATION_FACTS: List[Dict[str, Any]] = [
             "title": "MISTY conversation corpus",
             "url": "https://misty-ai.com/training",
             "retrieved_at": "2026-08-18T00:00:00Z",
-            "content_hash": "sha256:c8e089743a2948437c54829982e65448980bf0bcc3436a2b0dd1bdedb154a3ca"
+            "content_hash": "sha256:e6f36cff0b86c8b12324ec381ac0b9ea641fd0ee56bd49b6418ee36d2ea42239"
         }
     },
     {
@@ -370,7 +370,7 @@ CONVERSATION_FACTS: List[Dict[str, Any]] = [
             "title": "MISTY conversation corpus",
             "url": "https://misty-ai.com/training",
             "retrieved_at": "2026-08-18T00:00:00Z",
-            "content_hash": "sha256:c8e089743a2948437c54829982e65448980bf0bcc3436a2b0dd1bdedb154a3ca"
+            "content_hash": "sha256:e6f36cff0b86c8b12324ec381ac0b9ea641fd0ee56bd49b6418ee36d2ea42239"
         }
     },
     {
@@ -382,7 +382,7 @@ CONVERSATION_FACTS: List[Dict[str, Any]] = [
             "title": "MISTY conversation corpus",
             "url": "https://misty-ai.com/training",
             "retrieved_at": "2026-08-18T00:00:00Z",
-            "content_hash": "sha256:c8e089743a2948437c54829982e65448980bf0bcc3436a2b0dd1bdedb154a3ca"
+            "content_hash": "sha256:e6f36cff0b86c8b12324ec381ac0b9ea641fd0ee56bd49b6418ee36d2ea42239"
         }
     },
     {
@@ -394,7 +394,7 @@ CONVERSATION_FACTS: List[Dict[str, Any]] = [
             "title": "MISTY conversation corpus",
             "url": "https://misty-ai.com/training",
             "retrieved_at": "2026-08-18T00:00:00Z",
-            "content_hash": "sha256:c8e089743a2948437c54829982e65448980bf0bcc3436a2b0dd1bdedb154a3ca"
+            "content_hash": "sha256:e6f36cff0b86c8b12324ec381ac0b9ea641fd0ee56bd49b6418ee36d2ea42239"
         }
     },
     {
@@ -406,7 +406,7 @@ CONVERSATION_FACTS: List[Dict[str, Any]] = [
             "title": "MISTY conversation corpus",
             "url": "https://misty-ai.com/training",
             "retrieved_at": "2026-08-18T00:00:00Z",
-            "content_hash": "sha256:c8e089743a2948437c54829982e65448980bf0bcc3436a2b0dd1bdedb154a3ca"
+            "content_hash": "sha256:e6f36cff0b86c8b12324ec381ac0b9ea641fd0ee56bd49b6418ee36d2ea42239"
         }
     },
     {
@@ -418,7 +418,7 @@ CONVERSATION_FACTS: List[Dict[str, Any]] = [
             "title": "MISTY conversation corpus",
             "url": "https://misty-ai.com/training",
             "retrieved_at": "2026-08-18T00:00:00Z",
-            "content_hash": "sha256:c8e089743a2948437c54829982e65448980bf0bcc3436a2b0dd1bdedb154a3ca"
+            "content_hash": "sha256:e6f36cff0b86c8b12324ec381ac0b9ea641fd0ee56bd49b6418ee36d2ea42239"
         }
     },
     {
@@ -430,7 +430,7 @@ CONVERSATION_FACTS: List[Dict[str, Any]] = [
             "title": "MISTY conversation corpus",
             "url": "https://misty-ai.com/training",
             "retrieved_at": "2026-08-18T00:00:00Z",
-            "content_hash": "sha256:c8e089743a2948437c54829982e65448980bf0bcc3436a2b0dd1bdedb154a3ca"
+            "content_hash": "sha256:e6f36cff0b86c8b12324ec381ac0b9ea641fd0ee56bd49b6418ee36d2ea42239"
         }
     },
     {
@@ -442,7 +442,7 @@ CONVERSATION_FACTS: List[Dict[str, Any]] = [
             "title": "MISTY conversation corpus",
             "url": "https://misty-ai.com/training",
             "retrieved_at": "2026-08-18T00:00:00Z",
-            "content_hash": "sha256:c8e089743a2948437c54829982e65448980bf0bcc3436a2b0dd1bdedb154a3ca"
+            "content_hash": "sha256:e6f36cff0b86c8b12324ec381ac0b9ea641fd0ee56bd49b6418ee36d2ea42239"
         }
     },
     {
@@ -454,7 +454,7 @@ CONVERSATION_FACTS: List[Dict[str, Any]] = [
             "title": "MISTY conversation corpus",
             "url": "https://misty-ai.com/training",
             "retrieved_at": "2026-08-18T00:00:00Z",
-            "content_hash": "sha256:c8e089743a2948437c54829982e65448980bf0bcc3436a2b0dd1bdedb154a3ca"
+            "content_hash": "sha256:e6f36cff0b86c8b12324ec381ac0b9ea641fd0ee56bd49b6418ee36d2ea42239"
         }
     },
     {
@@ -466,7 +466,7 @@ CONVERSATION_FACTS: List[Dict[str, Any]] = [
             "title": "MISTY conversation corpus",
             "url": "https://misty-ai.com/training",
             "retrieved_at": "2026-08-18T00:00:00Z",
-            "content_hash": "sha256:c8e089743a2948437c54829982e65448980bf0bcc3436a2b0dd1bdedb154a3ca"
+            "content_hash": "sha256:e6f36cff0b86c8b12324ec381ac0b9ea641fd0ee56bd49b6418ee36d2ea42239"
         }
     },
     {
@@ -478,7 +478,7 @@ CONVERSATION_FACTS: List[Dict[str, Any]] = [
             "title": "MISTY conversation corpus",
             "url": "https://misty-ai.com/training",
             "retrieved_at": "2026-08-18T00:00:00Z",
-            "content_hash": "sha256:c8e089743a2948437c54829982e65448980bf0bcc3436a2b0dd1bdedb154a3ca"
+            "content_hash": "sha256:e6f36cff0b86c8b12324ec381ac0b9ea641fd0ee56bd49b6418ee36d2ea42239"
         }
     },
     {
@@ -490,7 +490,7 @@ CONVERSATION_FACTS: List[Dict[str, Any]] = [
             "title": "MISTY conversation corpus",
             "url": "https://misty-ai.com/training",
             "retrieved_at": "2026-08-18T00:00:00Z",
-            "content_hash": "sha256:c8e089743a2948437c54829982e65448980bf0bcc3436a2b0dd1bdedb154a3ca"
+            "content_hash": "sha256:e6f36cff0b86c8b12324ec381ac0b9ea641fd0ee56bd49b6418ee36d2ea42239"
         }
     },
     {
@@ -502,7 +502,7 @@ CONVERSATION_FACTS: List[Dict[str, Any]] = [
             "title": "MISTY conversation corpus",
             "url": "https://misty-ai.com/training",
             "retrieved_at": "2026-08-18T00:00:00Z",
-            "content_hash": "sha256:c8e089743a2948437c54829982e65448980bf0bcc3436a2b0dd1bdedb154a3ca"
+            "content_hash": "sha256:e6f36cff0b86c8b12324ec381ac0b9ea641fd0ee56bd49b6418ee36d2ea42239"
         }
     },
     {
@@ -514,7 +514,7 @@ CONVERSATION_FACTS: List[Dict[str, Any]] = [
             "title": "MISTY conversation corpus",
             "url": "https://misty-ai.com/training",
             "retrieved_at": "2026-08-18T00:00:00Z",
-            "content_hash": "sha256:c8e089743a2948437c54829982e65448980bf0bcc3436a2b0dd1bdedb154a3ca"
+            "content_hash": "sha256:e6f36cff0b86c8b12324ec381ac0b9ea641fd0ee56bd49b6418ee36d2ea42239"
         }
     },
     {
@@ -526,7 +526,7 @@ CONVERSATION_FACTS: List[Dict[str, Any]] = [
             "title": "MISTY conversation corpus",
             "url": "https://misty-ai.com/training",
             "retrieved_at": "2026-08-18T00:00:00Z",
-            "content_hash": "sha256:c8e089743a2948437c54829982e65448980bf0bcc3436a2b0dd1bdedb154a3ca"
+            "content_hash": "sha256:e6f36cff0b86c8b12324ec381ac0b9ea641fd0ee56bd49b6418ee36d2ea42239"
         }
     },
     {
@@ -538,7 +538,7 @@ CONVERSATION_FACTS: List[Dict[str, Any]] = [
             "title": "MISTY conversation corpus",
             "url": "https://misty-ai.com/training",
             "retrieved_at": "2026-08-18T00:00:00Z",
-            "content_hash": "sha256:c8e089743a2948437c54829982e65448980bf0bcc3436a2b0dd1bdedb154a3ca"
+            "content_hash": "sha256:e6f36cff0b86c8b12324ec381ac0b9ea641fd0ee56bd49b6418ee36d2ea42239"
         }
     },
     {
@@ -550,7 +550,7 @@ CONVERSATION_FACTS: List[Dict[str, Any]] = [
             "title": "MISTY conversation corpus",
             "url": "https://misty-ai.com/training",
             "retrieved_at": "2026-08-18T00:00:00Z",
-            "content_hash": "sha256:c8e089743a2948437c54829982e65448980bf0bcc3436a2b0dd1bdedb154a3ca"
+            "content_hash": "sha256:e6f36cff0b86c8b12324ec381ac0b9ea641fd0ee56bd49b6418ee36d2ea42239"
         }
     },
     {
@@ -562,7 +562,7 @@ CONVERSATION_FACTS: List[Dict[str, Any]] = [
             "title": "MISTY conversation corpus",
             "url": "https://misty-ai.com/training",
             "retrieved_at": "2026-08-18T00:00:00Z",
-            "content_hash": "sha256:c8e089743a2948437c54829982e65448980bf0bcc3436a2b0dd1bdedb154a3ca"
+            "content_hash": "sha256:e6f36cff0b86c8b12324ec381ac0b9ea641fd0ee56bd49b6418ee36d2ea42239"
         }
     },
     {
@@ -574,7 +574,7 @@ CONVERSATION_FACTS: List[Dict[str, Any]] = [
             "title": "MISTY conversation corpus",
             "url": "https://misty-ai.com/training",
             "retrieved_at": "2026-08-18T00:00:00Z",
-            "content_hash": "sha256:c8e089743a2948437c54829982e65448980bf0bcc3436a2b0dd1bdedb154a3ca"
+            "content_hash": "sha256:e6f36cff0b86c8b12324ec381ac0b9ea641fd0ee56bd49b6418ee36d2ea42239"
         }
     },
     {
@@ -586,7 +586,7 @@ CONVERSATION_FACTS: List[Dict[str, Any]] = [
             "title": "MISTY conversation corpus",
             "url": "https://misty-ai.com/training",
             "retrieved_at": "2026-08-18T00:00:00Z",
-            "content_hash": "sha256:c8e089743a2948437c54829982e65448980bf0bcc3436a2b0dd1bdedb154a3ca"
+            "content_hash": "sha256:e6f36cff0b86c8b12324ec381ac0b9ea641fd0ee56bd49b6418ee36d2ea42239"
         }
     },
     {
@@ -598,7 +598,7 @@ CONVERSATION_FACTS: List[Dict[str, Any]] = [
             "title": "MISTY conversation corpus",
             "url": "https://misty-ai.com/training",
             "retrieved_at": "2026-08-18T00:00:00Z",
-            "content_hash": "sha256:c8e089743a2948437c54829982e65448980bf0bcc3436a2b0dd1bdedb154a3ca"
+            "content_hash": "sha256:e6f36cff0b86c8b12324ec381ac0b9ea641fd0ee56bd49b6418ee36d2ea42239"
         }
     },
     {
@@ -610,7 +610,7 @@ CONVERSATION_FACTS: List[Dict[str, Any]] = [
             "title": "MISTY conversation corpus",
             "url": "https://misty-ai.com/training",
             "retrieved_at": "2026-08-18T00:00:00Z",
-            "content_hash": "sha256:c8e089743a2948437c54829982e65448980bf0bcc3436a2b0dd1bdedb154a3ca"
+            "content_hash": "sha256:e6f36cff0b86c8b12324ec381ac0b9ea641fd0ee56bd49b6418ee36d2ea42239"
         }
     },
     {
@@ -622,7 +622,7 @@ CONVERSATION_FACTS: List[Dict[str, Any]] = [
             "title": "MISTY conversation corpus",
             "url": "https://misty-ai.com/training",
             "retrieved_at": "2026-08-18T00:00:00Z",
-            "content_hash": "sha256:c8e089743a2948437c54829982e65448980bf0bcc3436a2b0dd1bdedb154a3ca"
+            "content_hash": "sha256:e6f36cff0b86c8b12324ec381ac0b9ea641fd0ee56bd49b6418ee36d2ea42239"
         }
     },
     {
@@ -634,7 +634,7 @@ CONVERSATION_FACTS: List[Dict[str, Any]] = [
             "title": "MISTY conversation corpus",
             "url": "https://misty-ai.com/training",
             "retrieved_at": "2026-08-18T00:00:00Z",
-            "content_hash": "sha256:c8e089743a2948437c54829982e65448980bf0bcc3436a2b0dd1bdedb154a3ca"
+            "content_hash": "sha256:e6f36cff0b86c8b12324ec381ac0b9ea641fd0ee56bd49b6418ee36d2ea42239"
         }
     },
     {
@@ -646,7 +646,7 @@ CONVERSATION_FACTS: List[Dict[str, Any]] = [
             "title": "MISTY conversation corpus",
             "url": "https://misty-ai.com/training",
             "retrieved_at": "2026-08-18T00:00:00Z",
-            "content_hash": "sha256:c8e089743a2948437c54829982e65448980bf0bcc3436a2b0dd1bdedb154a3ca"
+            "content_hash": "sha256:e6f36cff0b86c8b12324ec381ac0b9ea641fd0ee56bd49b6418ee36d2ea42239"
         }
     },
     {
@@ -658,7 +658,7 @@ CONVERSATION_FACTS: List[Dict[str, Any]] = [
             "title": "MISTY conversation corpus",
             "url": "https://misty-ai.com/training",
             "retrieved_at": "2026-08-18T00:00:00Z",
-            "content_hash": "sha256:c8e089743a2948437c54829982e65448980bf0bcc3436a2b0dd1bdedb154a3ca"
+            "content_hash": "sha256:e6f36cff0b86c8b12324ec381ac0b9ea641fd0ee56bd49b6418ee36d2ea42239"
         }
     },
     {
@@ -670,7 +670,7 @@ CONVERSATION_FACTS: List[Dict[str, Any]] = [
             "title": "MISTY conversation corpus",
             "url": "https://misty-ai.com/training",
             "retrieved_at": "2026-08-18T00:00:00Z",
-            "content_hash": "sha256:c8e089743a2948437c54829982e65448980bf0bcc3436a2b0dd1bdedb154a3ca"
+            "content_hash": "sha256:e6f36cff0b86c8b12324ec381ac0b9ea641fd0ee56bd49b6418ee36d2ea42239"
         }
     },
     {
@@ -682,7 +682,7 @@ CONVERSATION_FACTS: List[Dict[str, Any]] = [
             "title": "MISTY conversation corpus",
             "url": "https://misty-ai.com/training",
             "retrieved_at": "2026-08-18T00:00:00Z",
-            "content_hash": "sha256:c8e089743a2948437c54829982e65448980bf0bcc3436a2b0dd1bdedb154a3ca"
+            "content_hash": "sha256:e6f36cff0b86c8b12324ec381ac0b9ea641fd0ee56bd49b6418ee36d2ea42239"
         }
     },
     {
@@ -694,7 +694,7 @@ CONVERSATION_FACTS: List[Dict[str, Any]] = [
             "title": "MISTY conversation corpus",
             "url": "https://misty-ai.com/training",
             "retrieved_at": "2026-08-18T00:00:00Z",
-            "content_hash": "sha256:c8e089743a2948437c54829982e65448980bf0bcc3436a2b0dd1bdedb154a3ca"
+            "content_hash": "sha256:e6f36cff0b86c8b12324ec381ac0b9ea641fd0ee56bd49b6418ee36d2ea42239"
         }
     },
     {
@@ -706,7 +706,7 @@ CONVERSATION_FACTS: List[Dict[str, Any]] = [
             "title": "MISTY conversation corpus",
             "url": "https://misty-ai.com/training",
             "retrieved_at": "2026-08-18T00:00:00Z",
-            "content_hash": "sha256:c8e089743a2948437c54829982e65448980bf0bcc3436a2b0dd1bdedb154a3ca"
+            "content_hash": "sha256:e6f36cff0b86c8b12324ec381ac0b9ea641fd0ee56bd49b6418ee36d2ea42239"
         }
     },
     {
@@ -718,7 +718,7 @@ CONVERSATION_FACTS: List[Dict[str, Any]] = [
             "title": "MISTY conversation corpus",
             "url": "https://misty-ai.com/training",
             "retrieved_at": "2026-08-18T00:00:00Z",
-            "content_hash": "sha256:c8e089743a2948437c54829982e65448980bf0bcc3436a2b0dd1bdedb154a3ca"
+            "content_hash": "sha256:e6f36cff0b86c8b12324ec381ac0b9ea641fd0ee56bd49b6418ee36d2ea42239"
         }
     },
     {
@@ -730,7 +730,7 @@ CONVERSATION_FACTS: List[Dict[str, Any]] = [
             "title": "MISTY conversation corpus",
             "url": "https://misty-ai.com/training",
             "retrieved_at": "2026-08-18T00:00:00Z",
-            "content_hash": "sha256:c8e089743a2948437c54829982e65448980bf0bcc3436a2b0dd1bdedb154a3ca"
+            "content_hash": "sha256:e6f36cff0b86c8b12324ec381ac0b9ea641fd0ee56bd49b6418ee36d2ea42239"
         }
     },
     {
@@ -742,7 +742,7 @@ CONVERSATION_FACTS: List[Dict[str, Any]] = [
             "title": "MISTY conversation corpus",
             "url": "https://misty-ai.com/training",
             "retrieved_at": "2026-08-18T00:00:00Z",
-            "content_hash": "sha256:c8e089743a2948437c54829982e65448980bf0bcc3436a2b0dd1bdedb154a3ca"
+            "content_hash": "sha256:e6f36cff0b86c8b12324ec381ac0b9ea641fd0ee56bd49b6418ee36d2ea42239"
         }
     },
     {
@@ -754,7 +754,7 @@ CONVERSATION_FACTS: List[Dict[str, Any]] = [
             "title": "MISTY conversation corpus",
             "url": "https://misty-ai.com/training",
             "retrieved_at": "2026-08-18T00:00:00Z",
-            "content_hash": "sha256:c8e089743a2948437c54829982e65448980bf0bcc3436a2b0dd1bdedb154a3ca"
+            "content_hash": "sha256:e6f36cff0b86c8b12324ec381ac0b9ea641fd0ee56bd49b6418ee36d2ea42239"
         }
     },
     {
@@ -766,7 +766,7 @@ CONVERSATION_FACTS: List[Dict[str, Any]] = [
             "title": "MISTY conversation corpus",
             "url": "https://misty-ai.com/training",
             "retrieved_at": "2026-08-18T00:00:00Z",
-            "content_hash": "sha256:c8e089743a2948437c54829982e65448980bf0bcc3436a2b0dd1bdedb154a3ca"
+            "content_hash": "sha256:e6f36cff0b86c8b12324ec381ac0b9ea641fd0ee56bd49b6418ee36d2ea42239"
         }
     },
     {
@@ -778,7 +778,7 @@ CONVERSATION_FACTS: List[Dict[str, Any]] = [
             "title": "MISTY conversation corpus",
             "url": "https://misty-ai.com/training",
             "retrieved_at": "2026-08-18T00:00:00Z",
-            "content_hash": "sha256:c8e089743a2948437c54829982e65448980bf0bcc3436a2b0dd1bdedb154a3ca"
+            "content_hash": "sha256:e6f36cff0b86c8b12324ec381ac0b9ea641fd0ee56bd49b6418ee36d2ea42239"
         }
     },
     {
@@ -790,7 +790,7 @@ CONVERSATION_FACTS: List[Dict[str, Any]] = [
             "title": "MISTY conversation corpus",
             "url": "https://misty-ai.com/training",
             "retrieved_at": "2026-08-18T00:00:00Z",
-            "content_hash": "sha256:c8e089743a2948437c54829982e65448980bf0bcc3436a2b0dd1bdedb154a3ca"
+            "content_hash": "sha256:e6f36cff0b86c8b12324ec381ac0b9ea641fd0ee56bd49b6418ee36d2ea42239"
         }
     },
     {
@@ -802,7 +802,7 @@ CONVERSATION_FACTS: List[Dict[str, Any]] = [
             "title": "MISTY conversation corpus",
             "url": "https://misty-ai.com/training",
             "retrieved_at": "2026-08-18T00:00:00Z",
-            "content_hash": "sha256:c8e089743a2948437c54829982e65448980bf0bcc3436a2b0dd1bdedb154a3ca"
+            "content_hash": "sha256:e6f36cff0b86c8b12324ec381ac0b9ea641fd0ee56bd49b6418ee36d2ea42239"
         }
     },
     {
@@ -814,7 +814,7 @@ CONVERSATION_FACTS: List[Dict[str, Any]] = [
             "title": "MISTY conversation corpus",
             "url": "https://misty-ai.com/training",
             "retrieved_at": "2026-08-18T00:00:00Z",
-            "content_hash": "sha256:c8e089743a2948437c54829982e65448980bf0bcc3436a2b0dd1bdedb154a3ca"
+            "content_hash": "sha256:e6f36cff0b86c8b12324ec381ac0b9ea641fd0ee56bd49b6418ee36d2ea42239"
         }
     },
     {
@@ -826,7 +826,7 @@ CONVERSATION_FACTS: List[Dict[str, Any]] = [
             "title": "MISTY conversation corpus",
             "url": "https://misty-ai.com/training",
             "retrieved_at": "2026-08-18T00:00:00Z",
-            "content_hash": "sha256:c8e089743a2948437c54829982e65448980bf0bcc3436a2b0dd1bdedb154a3ca"
+            "content_hash": "sha256:e6f36cff0b86c8b12324ec381ac0b9ea641fd0ee56bd49b6418ee36d2ea42239"
         }
     },
     {
@@ -838,7 +838,7 @@ CONVERSATION_FACTS: List[Dict[str, Any]] = [
             "title": "MISTY conversation corpus",
             "url": "https://misty-ai.com/training",
             "retrieved_at": "2026-08-18T00:00:00Z",
-            "content_hash": "sha256:c8e089743a2948437c54829982e65448980bf0bcc3436a2b0dd1bdedb154a3ca"
+            "content_hash": "sha256:e6f36cff0b86c8b12324ec381ac0b9ea641fd0ee56bd49b6418ee36d2ea42239"
         }
     },
     {
@@ -850,7 +850,7 @@ CONVERSATION_FACTS: List[Dict[str, Any]] = [
             "title": "MISTY conversation corpus",
             "url": "https://misty-ai.com/training",
             "retrieved_at": "2026-08-18T00:00:00Z",
-            "content_hash": "sha256:c8e089743a2948437c54829982e65448980bf0bcc3436a2b0dd1bdedb154a3ca"
+            "content_hash": "sha256:e6f36cff0b86c8b12324ec381ac0b9ea641fd0ee56bd49b6418ee36d2ea42239"
         }
     }
 ]
@@ -864,7 +864,7 @@ CONVERSATION_RULES: List[Dict[str, str]] = [
             "title": "MISTY conversation corpus",
             "url": "https://misty-ai.com/training",
             "retrieved_at": "2026-08-18T00:00:00Z",
-            "content_hash": "sha256:c8e089743a2948437c54829982e65448980bf0bcc3436a2b0dd1bdedb154a3ca"
+            "content_hash": "sha256:e6f36cff0b86c8b12324ec381ac0b9ea641fd0ee56bd49b6418ee36d2ea42239"
         }
     },
     {
@@ -874,7 +874,7 @@ CONVERSATION_RULES: List[Dict[str, str]] = [
             "title": "MISTY conversation corpus",
             "url": "https://misty-ai.com/training",
             "retrieved_at": "2026-08-18T00:00:00Z",
-            "content_hash": "sha256:c8e089743a2948437c54829982e65448980bf0bcc3436a2b0dd1bdedb154a3ca"
+            "content_hash": "sha256:e6f36cff0b86c8b12324ec381ac0b9ea641fd0ee56bd49b6418ee36d2ea42239"
         }
     },
     {
@@ -884,7 +884,7 @@ CONVERSATION_RULES: List[Dict[str, str]] = [
             "title": "MISTY conversation corpus",
             "url": "https://misty-ai.com/training",
             "retrieved_at": "2026-08-18T00:00:00Z",
-            "content_hash": "sha256:c8e089743a2948437c54829982e65448980bf0bcc3436a2b0dd1bdedb154a3ca"
+            "content_hash": "sha256:e6f36cff0b86c8b12324ec381ac0b9ea641fd0ee56bd49b6418ee36d2ea42239"
         }
     },
     {
@@ -894,7 +894,7 @@ CONVERSATION_RULES: List[Dict[str, str]] = [
             "title": "MISTY conversation corpus",
             "url": "https://misty-ai.com/training",
             "retrieved_at": "2026-08-18T00:00:00Z",
-            "content_hash": "sha256:c8e089743a2948437c54829982e65448980bf0bcc3436a2b0dd1bdedb154a3ca"
+            "content_hash": "sha256:e6f36cff0b86c8b12324ec381ac0b9ea641fd0ee56bd49b6418ee36d2ea42239"
         }
     },
     {
@@ -904,7 +904,7 @@ CONVERSATION_RULES: List[Dict[str, str]] = [
             "title": "MISTY conversation corpus",
             "url": "https://misty-ai.com/training",
             "retrieved_at": "2026-08-18T00:00:00Z",
-            "content_hash": "sha256:c8e089743a2948437c54829982e65448980bf0bcc3436a2b0dd1bdedb154a3ca"
+            "content_hash": "sha256:e6f36cff0b86c8b12324ec381ac0b9ea641fd0ee56bd49b6418ee36d2ea42239"
         }
     },
     {
@@ -914,7 +914,7 @@ CONVERSATION_RULES: List[Dict[str, str]] = [
             "title": "MISTY conversation corpus",
             "url": "https://misty-ai.com/training",
             "retrieved_at": "2026-08-18T00:00:00Z",
-            "content_hash": "sha256:c8e089743a2948437c54829982e65448980bf0bcc3436a2b0dd1bdedb154a3ca"
+            "content_hash": "sha256:e6f36cff0b86c8b12324ec381ac0b9ea641fd0ee56bd49b6418ee36d2ea42239"
         }
     },
     {
@@ -924,7 +924,7 @@ CONVERSATION_RULES: List[Dict[str, str]] = [
             "title": "MISTY conversation corpus",
             "url": "https://misty-ai.com/training",
             "retrieved_at": "2026-08-18T00:00:00Z",
-            "content_hash": "sha256:c8e089743a2948437c54829982e65448980bf0bcc3436a2b0dd1bdedb154a3ca"
+            "content_hash": "sha256:e6f36cff0b86c8b12324ec381ac0b9ea641fd0ee56bd49b6418ee36d2ea42239"
         }
     },
     {
@@ -934,7 +934,7 @@ CONVERSATION_RULES: List[Dict[str, str]] = [
             "title": "MISTY conversation corpus",
             "url": "https://misty-ai.com/training",
             "retrieved_at": "2026-08-18T00:00:00Z",
-            "content_hash": "sha256:c8e089743a2948437c54829982e65448980bf0bcc3436a2b0dd1bdedb154a3ca"
+            "content_hash": "sha256:e6f36cff0b86c8b12324ec381ac0b9ea641fd0ee56bd49b6418ee36d2ea42239"
         }
     },
     {
@@ -944,7 +944,7 @@ CONVERSATION_RULES: List[Dict[str, str]] = [
             "title": "MISTY conversation corpus",
             "url": "https://misty-ai.com/training",
             "retrieved_at": "2026-08-18T00:00:00Z",
-            "content_hash": "sha256:c8e089743a2948437c54829982e65448980bf0bcc3436a2b0dd1bdedb154a3ca"
+            "content_hash": "sha256:e6f36cff0b86c8b12324ec381ac0b9ea641fd0ee56bd49b6418ee36d2ea42239"
         }
     },
     {
@@ -954,7 +954,7 @@ CONVERSATION_RULES: List[Dict[str, str]] = [
             "title": "MISTY conversation corpus",
             "url": "https://misty-ai.com/training",
             "retrieved_at": "2026-08-18T00:00:00Z",
-            "content_hash": "sha256:c8e089743a2948437c54829982e65448980bf0bcc3436a2b0dd1bdedb154a3ca"
+            "content_hash": "sha256:e6f36cff0b86c8b12324ec381ac0b9ea641fd0ee56bd49b6418ee36d2ea42239"
         }
     }
 ]
@@ -968,7 +968,7 @@ CONVERSATION_EXAMPLES: List[Dict[str, str]] = [
             "title": "MISTY conversation corpus",
             "url": "https://misty-ai.com/training",
             "retrieved_at": "2026-08-18T00:00:00Z",
-            "content_hash": "sha256:c8e089743a2948437c54829982e65448980bf0bcc3436a2b0dd1bdedb154a3ca"
+            "content_hash": "sha256:e6f36cff0b86c8b12324ec381ac0b9ea641fd0ee56bd49b6418ee36d2ea42239"
         }
     },
     {
@@ -978,7 +978,7 @@ CONVERSATION_EXAMPLES: List[Dict[str, str]] = [
             "title": "MISTY conversation corpus",
             "url": "https://misty-ai.com/training",
             "retrieved_at": "2026-08-18T00:00:00Z",
-            "content_hash": "sha256:c8e089743a2948437c54829982e65448980bf0bcc3436a2b0dd1bdedb154a3ca"
+            "content_hash": "sha256:e6f36cff0b86c8b12324ec381ac0b9ea641fd0ee56bd49b6418ee36d2ea42239"
         }
     },
     {
@@ -988,7 +988,7 @@ CONVERSATION_EXAMPLES: List[Dict[str, str]] = [
             "title": "MISTY conversation corpus",
             "url": "https://misty-ai.com/training",
             "retrieved_at": "2026-08-18T00:00:00Z",
-            "content_hash": "sha256:c8e089743a2948437c54829982e65448980bf0bcc3436a2b0dd1bdedb154a3ca"
+            "content_hash": "sha256:e6f36cff0b86c8b12324ec381ac0b9ea641fd0ee56bd49b6418ee36d2ea42239"
         }
     },
     {
@@ -998,7 +998,7 @@ CONVERSATION_EXAMPLES: List[Dict[str, str]] = [
             "title": "MISTY conversation corpus",
             "url": "https://misty-ai.com/training",
             "retrieved_at": "2026-08-18T00:00:00Z",
-            "content_hash": "sha256:c8e089743a2948437c54829982e65448980bf0bcc3436a2b0dd1bdedb154a3ca"
+            "content_hash": "sha256:e6f36cff0b86c8b12324ec381ac0b9ea641fd0ee56bd49b6418ee36d2ea42239"
         }
     },
     {
@@ -1008,7 +1008,7 @@ CONVERSATION_EXAMPLES: List[Dict[str, str]] = [
             "title": "MISTY conversation corpus",
             "url": "https://misty-ai.com/training",
             "retrieved_at": "2026-08-18T00:00:00Z",
-            "content_hash": "sha256:c8e089743a2948437c54829982e65448980bf0bcc3436a2b0dd1bdedb154a3ca"
+            "content_hash": "sha256:e6f36cff0b86c8b12324ec381ac0b9ea641fd0ee56bd49b6418ee36d2ea42239"
         }
     },
     {
@@ -1018,7 +1018,7 @@ CONVERSATION_EXAMPLES: List[Dict[str, str]] = [
             "title": "MISTY conversation corpus",
             "url": "https://misty-ai.com/training",
             "retrieved_at": "2026-08-18T00:00:00Z",
-            "content_hash": "sha256:c8e089743a2948437c54829982e65448980bf0bcc3436a2b0dd1bdedb154a3ca"
+            "content_hash": "sha256:e6f36cff0b86c8b12324ec381ac0b9ea641fd0ee56bd49b6418ee36d2ea42239"
         }
     },
     {
@@ -1028,7 +1028,7 @@ CONVERSATION_EXAMPLES: List[Dict[str, str]] = [
             "title": "MISTY conversation corpus",
             "url": "https://misty-ai.com/training",
             "retrieved_at": "2026-08-18T00:00:00Z",
-            "content_hash": "sha256:c8e089743a2948437c54829982e65448980bf0bcc3436a2b0dd1bdedb154a3ca"
+            "content_hash": "sha256:e6f36cff0b86c8b12324ec381ac0b9ea641fd0ee56bd49b6418ee36d2ea42239"
         }
     },
     {
@@ -1038,7 +1038,7 @@ CONVERSATION_EXAMPLES: List[Dict[str, str]] = [
             "title": "MISTY conversation corpus",
             "url": "https://misty-ai.com/training",
             "retrieved_at": "2026-08-18T00:00:00Z",
-            "content_hash": "sha256:c8e089743a2948437c54829982e65448980bf0bcc3436a2b0dd1bdedb154a3ca"
+            "content_hash": "sha256:e6f36cff0b86c8b12324ec381ac0b9ea641fd0ee56bd49b6418ee36d2ea42239"
         }
     },
     {
@@ -1048,7 +1048,7 @@ CONVERSATION_EXAMPLES: List[Dict[str, str]] = [
             "title": "MISTY conversation corpus",
             "url": "https://misty-ai.com/training",
             "retrieved_at": "2026-08-18T00:00:00Z",
-            "content_hash": "sha256:c8e089743a2948437c54829982e65448980bf0bcc3436a2b0dd1bdedb154a3ca"
+            "content_hash": "sha256:e6f36cff0b86c8b12324ec381ac0b9ea641fd0ee56bd49b6418ee36d2ea42239"
         }
     },
     {
@@ -1058,7 +1058,7 @@ CONVERSATION_EXAMPLES: List[Dict[str, str]] = [
             "title": "MISTY conversation corpus",
             "url": "https://misty-ai.com/training",
             "retrieved_at": "2026-08-18T00:00:00Z",
-            "content_hash": "sha256:c8e089743a2948437c54829982e65448980bf0bcc3436a2b0dd1bdedb154a3ca"
+            "content_hash": "sha256:e6f36cff0b86c8b12324ec381ac0b9ea641fd0ee56bd49b6418ee36d2ea42239"
         }
     },
     {
@@ -1068,7 +1068,7 @@ CONVERSATION_EXAMPLES: List[Dict[str, str]] = [
             "title": "MISTY conversation corpus",
             "url": "https://misty-ai.com/training",
             "retrieved_at": "2026-08-18T00:00:00Z",
-            "content_hash": "sha256:c8e089743a2948437c54829982e65448980bf0bcc3436a2b0dd1bdedb154a3ca"
+            "content_hash": "sha256:e6f36cff0b86c8b12324ec381ac0b9ea641fd0ee56bd49b6418ee36d2ea42239"
         }
     },
     {
@@ -1078,7 +1078,7 @@ CONVERSATION_EXAMPLES: List[Dict[str, str]] = [
             "title": "MISTY conversation corpus",
             "url": "https://misty-ai.com/training",
             "retrieved_at": "2026-08-18T00:00:00Z",
-            "content_hash": "sha256:c8e089743a2948437c54829982e65448980bf0bcc3436a2b0dd1bdedb154a3ca"
+            "content_hash": "sha256:e6f36cff0b86c8b12324ec381ac0b9ea641fd0ee56bd49b6418ee36d2ea42239"
         }
     }
 ]
@@ -1093,7 +1093,7 @@ CONVERSATION_BENCHMARK: List[Dict[str, str]] = [
             "title": "MISTY conversation corpus",
             "url": "https://misty-ai.com/training",
             "retrieved_at": "2026-08-18T00:00:00Z",
-            "content_hash": "sha256:c8e089743a2948437c54829982e65448980bf0bcc3436a2b0dd1bdedb154a3ca"
+            "content_hash": "sha256:e6f36cff0b86c8b12324ec381ac0b9ea641fd0ee56bd49b6418ee36d2ea42239"
         }
     },
     {
@@ -1104,7 +1104,7 @@ CONVERSATION_BENCHMARK: List[Dict[str, str]] = [
             "title": "MISTY conversation corpus",
             "url": "https://misty-ai.com/training",
             "retrieved_at": "2026-08-18T00:00:00Z",
-            "content_hash": "sha256:c8e089743a2948437c54829982e65448980bf0bcc3436a2b0dd1bdedb154a3ca"
+            "content_hash": "sha256:e6f36cff0b86c8b12324ec381ac0b9ea641fd0ee56bd49b6418ee36d2ea42239"
         }
     },
     {
@@ -1115,7 +1115,7 @@ CONVERSATION_BENCHMARK: List[Dict[str, str]] = [
             "title": "MISTY conversation corpus",
             "url": "https://misty-ai.com/training",
             "retrieved_at": "2026-08-18T00:00:00Z",
-            "content_hash": "sha256:c8e089743a2948437c54829982e65448980bf0bcc3436a2b0dd1bdedb154a3ca"
+            "content_hash": "sha256:e6f36cff0b86c8b12324ec381ac0b9ea641fd0ee56bd49b6418ee36d2ea42239"
         }
     },
     {
@@ -1126,7 +1126,7 @@ CONVERSATION_BENCHMARK: List[Dict[str, str]] = [
             "title": "MISTY conversation corpus",
             "url": "https://misty-ai.com/training",
             "retrieved_at": "2026-08-18T00:00:00Z",
-            "content_hash": "sha256:c8e089743a2948437c54829982e65448980bf0bcc3436a2b0dd1bdedb154a3ca"
+            "content_hash": "sha256:e6f36cff0b86c8b12324ec381ac0b9ea641fd0ee56bd49b6418ee36d2ea42239"
         }
     },
     {
@@ -1137,7 +1137,7 @@ CONVERSATION_BENCHMARK: List[Dict[str, str]] = [
             "title": "MISTY conversation corpus",
             "url": "https://misty-ai.com/training",
             "retrieved_at": "2026-08-18T00:00:00Z",
-            "content_hash": "sha256:c8e089743a2948437c54829982e65448980bf0bcc3436a2b0dd1bdedb154a3ca"
+            "content_hash": "sha256:e6f36cff0b86c8b12324ec381ac0b9ea641fd0ee56bd49b6418ee36d2ea42239"
         }
     },
     {
@@ -1148,18 +1148,18 @@ CONVERSATION_BENCHMARK: List[Dict[str, str]] = [
             "title": "MISTY conversation corpus",
             "url": "https://misty-ai.com/training",
             "retrieved_at": "2026-08-18T00:00:00Z",
-            "content_hash": "sha256:c8e089743a2948437c54829982e65448980bf0bcc3436a2b0dd1bdedb154a3ca"
+            "content_hash": "sha256:e6f36cff0b86c8b12324ec381ac0b9ea641fd0ee56bd49b6418ee36d2ea42239"
         }
     },
     {
         "id": "conv_en_greeting",
         "input": "Hello, who are you?",
-        "expected_output": "I'm Misty",
+        "expected_output": "I am Misty",
         "source_ref": {
             "title": "MISTY conversation corpus",
             "url": "https://misty-ai.com/training",
             "retrieved_at": "2026-08-18T00:00:00Z",
-            "content_hash": "sha256:c8e089743a2948437c54829982e65448980bf0bcc3436a2b0dd1bdedb154a3ca"
+            "content_hash": "sha256:e6f36cff0b86c8b12324ec381ac0b9ea641fd0ee56bd49b6418ee36d2ea42239"
         }
     },
     {
@@ -1170,7 +1170,7 @@ CONVERSATION_BENCHMARK: List[Dict[str, str]] = [
             "title": "MISTY conversation corpus",
             "url": "https://misty-ai.com/training",
             "retrieved_at": "2026-08-18T00:00:00Z",
-            "content_hash": "sha256:c8e089743a2948437c54829982e65448980bf0bcc3436a2b0dd1bdedb154a3ca"
+            "content_hash": "sha256:e6f36cff0b86c8b12324ec381ac0b9ea641fd0ee56bd49b6418ee36d2ea42239"
         }
     },
     {
@@ -1181,7 +1181,7 @@ CONVERSATION_BENCHMARK: List[Dict[str, str]] = [
             "title": "MISTY conversation corpus",
             "url": "https://misty-ai.com/training",
             "retrieved_at": "2026-08-18T00:00:00Z",
-            "content_hash": "sha256:c8e089743a2948437c54829982e65448980bf0bcc3436a2b0dd1bdedb154a3ca"
+            "content_hash": "sha256:e6f36cff0b86c8b12324ec381ac0b9ea641fd0ee56bd49b6418ee36d2ea42239"
         }
     },
     {
@@ -1192,7 +1192,7 @@ CONVERSATION_BENCHMARK: List[Dict[str, str]] = [
             "title": "MISTY conversation corpus",
             "url": "https://misty-ai.com/training",
             "retrieved_at": "2026-08-18T00:00:00Z",
-            "content_hash": "sha256:c8e089743a2948437c54829982e65448980bf0bcc3436a2b0dd1bdedb154a3ca"
+            "content_hash": "sha256:e6f36cff0b86c8b12324ec381ac0b9ea641fd0ee56bd49b6418ee36d2ea42239"
         }
     },
     {
@@ -1203,7 +1203,7 @@ CONVERSATION_BENCHMARK: List[Dict[str, str]] = [
             "title": "MISTY conversation corpus",
             "url": "https://misty-ai.com/training",
             "retrieved_at": "2026-08-18T00:00:00Z",
-            "content_hash": "sha256:c8e089743a2948437c54829982e65448980bf0bcc3436a2b0dd1bdedb154a3ca"
+            "content_hash": "sha256:e6f36cff0b86c8b12324ec381ac0b9ea641fd0ee56bd49b6418ee36d2ea42239"
         }
     },
     {
@@ -1214,7 +1214,7 @@ CONVERSATION_BENCHMARK: List[Dict[str, str]] = [
             "title": "MISTY conversation corpus",
             "url": "https://misty-ai.com/training",
             "retrieved_at": "2026-08-18T00:00:00Z",
-            "content_hash": "sha256:c8e089743a2948437c54829982e65448980bf0bcc3436a2b0dd1bdedb154a3ca"
+            "content_hash": "sha256:e6f36cff0b86c8b12324ec381ac0b9ea641fd0ee56bd49b6418ee36d2ea42239"
         }
     }
 ]
@@ -1230,7 +1230,7 @@ _SOURCE_REF: Dict[str, str] = {
     "title": "MISTY conversation corpus",
     "url": "https://misty-ai.com/training",
     "retrieved_at": "2026-08-18T00:00:00Z",
-    "content_hash": "sha256:c8e089743a2948437c54829982e65448980bf0bcc3436a2b0dd1bdedb154a3ca",
+    "content_hash": "sha256:e6f36cff0b86c8b12324ec381ac0b9ea641fd0ee56bd49b6418ee36d2ea42239",
 }
 
 

@@ -58,7 +58,7 @@ RESPONSE_POOLS: Dict[str, Dict[str, List[str]]] = {
     "greeting": {
         "bn": [
             "হ্যালো! আমি Misty - Smart Artificial Brain, Pixline Incorporate-এর তৈরি। কী করবেন বলুন?",
-            "নমস্কার! আমি Misty। আমাকে তৈরি করেছেন Pixline Incorporate। আপনার কী ভাবছেন?",
+            "হ্যালো, নমস্কার! আমি Misty। আমাকে তৈরি করেছেন Pixline Incorporate। আপনার কী ভাবছেন?",
             (
                 "হ্যালো! ভালো দিন। আমি Misty - ভারতের প্রথম LLM ছাড়া কাজ করা "
                 "Smart AI Brain, Pixline Incorporate-এর তৈরি। কীভাবে সাহায্য করব?"

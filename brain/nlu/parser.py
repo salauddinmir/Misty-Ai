@@ -205,11 +205,28 @@ class NLUParser:
         # the turn. A two-word guard keeps "আমি ভালো কি?" style phrases
         # from being misclassified as definition queries — the topic part
         # must not itself contain an interrogative meaning.
+        # The topic part allows possessive "-এর/Xের" constructions so
+        # phrases like "আকাশের রঙ" (color of the sky) are captured whole
+        # instead of only the first word.
         self._bn_bare_what_pattern = re.compile(
-            r"^([A-Za-z\u0980-\u09FF\-]{2,30})\s+(কী|কি)\s*[?।\u0964\uff1f]?\s*$",
+            r"^([A-Za-z\u0980-\u09FF\-]+(?:\s+[A-Za-z\u0980-\u09FF\-]+)*)\s+(কী|কি)\s*[?।\u0964\uff1f]?\s*$",
             re.UNICODE,
         )
+        # English bare why follow-up: "Why?" / "why?" — empty target so the
+        # brain anchors the reason question to the previous conversation
+        # topic (Phase 28). Checked with word boundary so "why are you"
+        # style turns are not caught here.
+        self._en_bare_why_re = re.compile(r"^why\s*[?।\u0964\uff1f]?\s*$", re.IGNORECASE)
 
+        # Bengali capability / function follow-ups: one explicit regex per
+        # phrasing so relations ('use' / 'capability') are unambiguous.
+        # Order: most specific phrasings first, generic 'কাজ কি' last.
+        self._bn_capability_followups = [
+            (re.compile(r"(?:([A-Za-z\u0980-\u09ff]+(?:\s+[A-Za-z\u0980-\u09ff]+){0,2})\s*-?এর)?\s*কিসের\s*কাজে?\s*লাগে?\s*[?।\u0964\uff1f]?", re.UNICODE), "use"),
+            (re.compile(r"(সেট|এট|ওট|এটা|সেটা|ওটা)?\s*কি\s*কাজ\s*করতে?\s*পারে\s*[?।\u0964\uff1f]?", re.UNICODE), "capability"),
+            (re.compile(r"(এটা|সেটা|ওটা)?\s*কি\s*করতে?\s*পারে\s*[?।\u0964\uff1f]?", re.UNICODE), "capability"),
+            (re.compile(r"(?:([A-Za-z\u0980-\u09ff]+(?:\s+[A-Za-z\u0980-\u09ff]+){0,2})\s*-?এর)?\s*কাজ\s*কি\s*[?।\u0964\uff1f]?", re.UNICODE), "use"),
+        ]
         # Bengali pronoun-targeted queries with an empty target, to be
         # resolved against the dialogue context by the brain:
         # "সে কে?", "এটা কী?", "তার creator কে?"
@@ -250,6 +267,12 @@ class NLUParser:
             # "who is the creator of X?"
             re.compile(r"who\s+is\s+(?:the\s+)?creator\s+of\s+(\w+)\s*\??", re.IGNORECASE),
             # "what is X?"
+            # Phase 28: "What is the color of the sky?" must anchor
+            # the head noun "sky", not the article "the".
+            re.compile(r"what\s+is\s+the\s+(\w+(?:\s+\w+){0,3})\s*\??", re.IGNORECASE),
+            # "what is X?" — the article form is checked FIRST so
+            # "What is a bridge?" captures 'bridge' instead of 'a'.
+            re.compile(r"what\s+is\s+(?:a|an)\s+(\w+)\s*\??", re.IGNORECASE),
             re.compile(r"what\s+is\s+(\w+)\s*\??", re.IGNORECASE),
             # "who are you?" / "who created you?" / "who made you?" —
             # self-identity questions; group 1 captures the addressed word
@@ -303,6 +326,15 @@ class NLUParser:
             re.IGNORECASE,
         )
 
+        # English capability/function follow-ups with an empty target,
+        # resolved against the previous conversation topic by the brain:
+        # "what can that do?" (capability), "what does it do?" (use),
+        # "how does that work?" (mechanism).
+        self._en_capability_followup_re = re.compile(
+            r"\b(what|how)\b\s+(can|does)\s+\b(that|it|this|he|she)\b\s+(do|work)\b",
+            re.IGNORECASE,
+        )
+
         # English pronoun-targeted queries with an empty target, resolved
         # against the dialogue context by the brain:
         # "who is he?", "what is it?", "who created her?"
@@ -311,6 +343,47 @@ class NLUParser:
             re.IGNORECASE,
         )
 
+        # Humor / safe-joke requests (Bengali and English). Kept at class
+    # level like the closure patterns so 'মজার কিছু বলো।' / 'Tell me a
+    # joke' are recognized before intent classification.
+    _BN_HUMOR_REQUEST_RE = re.compile(r"(?<![A-Za-z\u0980-\u09ff])(মজার|রসিকতা|জোকস|হাসার)(?![A-Za-z\u0980-\u09ff]).*(?<![A-Za-z\u0980-\u09ff])(বলো|বলুন|দাও|শোনাও)(?![A-Za-z\u0980-\u09ff])", re.UNICODE)
+    _EN_HUMOR_REQUEST_RE = re.compile(r"(?<![A-Za-z])(tell\s+me\s+a\s+joke|say\s+something\s+funny|make\s+me\s+laugh)(?![A-Za-z])", re.IGNORECASE)
+
+    @classmethod
+    def _is_humor_request(cls, text: str) -> bool:
+        return bool(
+            cls._BN_HUMOR_REQUEST_RE.search(text)
+            or cls._EN_HUMOR_REQUEST_RE.search(text)
+        )
+
+# Bengali pronoun-targeted queries with an empty target (Bengali and English). Kept in the
+    # parser so both Bengali and English inputs are caught before intent
+    # classification rather than only inside the dialogue driver.
+    _BN_CLOSURE_RE = re.compile(r'\b(বাই|বিদায়|ঠিক আছে|অনেক ধন্যবাদ|আজকে এই পর্যন্ত|টাটা|শুভরাত্রি|ঘুমিয়ে পড়লাম)\b', re.UNICODE)
+    _EN_CLOSURE_RE = re.compile(r'\b(bye|goodbye|good night|see you|that\'?s all|farewell|goodbye!)\b', re.IGNORECASE)
+
+    @classmethod
+    def _is_closure(cls, text: str) -> bool:
+        """True when the input is a conversation closing phrase."""
+        return bool(
+            cls._BN_CLOSURE_RE.search(text or "")
+            or cls._EN_CLOSURE_RE.search(text or "")
+        )
+
+    # Bengali who-created-X queries: "X তৈরি করেছে কে?", "X কে তৈরি করেছে?"
+    _bn_who_creator_re = re.compile(
+        r'([A-Za-z\u0980-\u09FF][A-Za-z\u0980-\u09FF0-9\s\-]*?)\s*(?:এর|র)?\s*'
+        r'(?:তৈরি\s+(?:কর|বান)\w*\s+কে|কে\s+তৈরি\s+(?:কর|বান)\w*|'
+        r'(?:নির্মাতা|প্রস্তুতকারী)\s+(?:কে|কি)\b'
+        r'(?:\s*[?।\uff1f]|\s*$))',
+        re.IGNORECASE | re.UNICODE,
+    )
+    # English who-created queries: "who created you?", "who made misty?"
+    _en_who_creator_re = re.compile(
+        r'who\s+(created|made|built|invented|developed)'
+        r'\s+([a-z\u0980-\u09FF][a-z\u0980-\u09FF0-9\s\-]*)',
+        re.IGNORECASE,
+    )
     def parse(self, text: str) -> ParseResult:
         """Parse input text and extract structured information.
 
@@ -324,6 +397,25 @@ class NLUParser:
         if not text:
             return ParseResult(intent=IntentType.UNKNOWN, raw_text=text)
 
+        # Conversation closure ("বাই", "goodbye", "that's all") must override
+        # statement detection so farewells are answered politely instead of
+        # being absorbed as a teach attempt.
+        if self._is_closure(text):
+            return ParseResult(
+                intent=IntentType.CONVERSATION,
+                entities={"closure": True},
+                raw_text=text,
+                confidence=0.9,
+            )
+        # Humor requests are CONVERSATION turns with an explicit
+        # 'kind': the ACT layer then answers with a safe joke.
+        if self._is_humor_request(text):
+            return ParseResult(
+                intent=IntentType.CONVERSATION,
+                entities={"kind": "humor_request"},
+                raw_text=text,
+                confidence=0.8,
+            )
         # Try Bengali patterns first, then English
         result = self._try_bengali(text)
         if result.intent != IntentType.UNKNOWN:
@@ -405,8 +497,35 @@ class NLUParser:
                     confidence=0.8,
                 )
 
-        # Deterministic Physics takes priority over generic questions.
-        if PHYSICS_ENGINE.solve(text) is not None:
+        # Bengali who-created queries: X-created-by-whom forms.
+        who_match = self._bn_who_creator_re.search(text)
+        if who_match:
+            subject = who_match.group(1).strip()
+            # Normalise accusative/dative forms so the brain resolves
+            # "তুমি" / "তোমাকে" / "আপনাকে" to Misty herself.
+            # Phase 28: normalise inflected forms; empty subject -> self-query.
+            subject = re.sub(r"(তুমি|তোমা|তোমাকে|আপনি?|আপনা|মিস্টি|মিস্টিকে|কে)$", "", subject).strip()
+            if not subject or subject in {"তুমি", "তোমা", "তোমাকে", "আপনি", "আপনা", "আপনাকে", "মিস্টি", "মিস্টিকে", "you"}:
+                subject = "Misty"
+            return ParseResult(
+                intent=IntentType.QUERY_WHO,
+                query={"subject": subject, "relation": "creator_of"},
+                raw_text=text,
+                confidence=0.92,
+            )
+        # English who-created queries ("who created you?", "who made misty?").
+        who_match = self._en_who_creator_re.search(text)
+        if who_match:
+            return ParseResult(
+                intent=IntentType.QUERY_WHO,
+                query={"subject": who_match.group(2).strip(), "relation": "creator_of"},
+                raw_text=text,
+                confidence=0.92,
+            )
+        # Deterministic Physics takes priority over generic questions, but
+        # only when the input actually contains numeric values or an
+        # equation ("এর কাজ কি?" is a vocabulary question, not physics).
+        if PHYSICS_ENGINE.solve(text) is not None and re.search(r"\d|=", text):
             return ParseResult(
                 intent=IntentType.PHYSICS,
                 entities={"physics_text": text},
@@ -414,8 +533,10 @@ class NLUParser:
                 confidence=0.98,
             )
 
-        # Deterministic mathematics takes priority over generic questions.
-        if MATH_ENGINE.looks_mathematical(text):
+        # Deterministic mathematics takes priority over generic questions,
+        # but only when the input contains a number or an operator
+        # ("সেতু কী?" / "What is a bridge?" are definitions, not math).
+        if MATH_ENGINE.looks_mathematical(text) and re.search(r"\d|[+\-*/^%=]", text):
             return ParseResult(
                 intent=IntentType.MATH,
                 entities={"math_text": text},
@@ -585,7 +706,46 @@ class NLUParser:
         # is classified as QUERY_WHAT on X with confidence 0.7 so the
         # knowledge-inference synthesizer can answer from stored facts
         # instead of falling back to the generic echo.
+        # Bare reason follow-ups are checked BEFORE the generic Bengali
+        # bare-what pattern, otherwise "কারণ কি?" would be captured as a
+        # definition query about the word "কারণ" instead of a why-question
+        # anchored to the previous topic (Phase 28).
+        if re.search(
+            r"^(কি|কী)?\s*কারণ(টা|টি)?\s+(কি|কী)[?।\u0964\uff1f]?\s*$|^(কী|কি)\s*কারণ|^(কেন|কেনো)\s*[?।\u0964\uff1f]?\s*$",
+            text,
+            re.UNICODE,
+        ):
+            return ParseResult(
+                intent=IntentType.QUERY_WHAT,
+                query={"type": "what", "relation": "why", "target": ""},
+                raw_text=text,
+                confidence=0.7,
+            )
+        if self._en_bare_why_re.search(text):
+            return ParseResult(
+                intent=IntentType.QUERY_WHAT,
+                query={"type": "what", "relation": "why", "target": ""},
+                raw_text=text,
+                confidence=0.7,
+            )
         bare_match = self._bn_bare_what_pattern.search(text)
+        if bare_match:
+            target = bare_match.group(1).strip()
+            # Two-word guard: a subject pronoun plus an adjective before
+            # "কি" ("আমি ভালো কি?", "সে খারাপ কি?") is a conversational
+            # turn, not a definition query.
+            if len(target.split()) == 2 and target.split()[0] in {
+                "আমি", "তুমি", "আপনি", "সে", "তার",
+            }:
+                bare_match = None
+            # Possessive-start guard: "এর কাজ কি?" / "এর রঙ কী?" are
+            # capability / attribute follow-ups (the "কাজ কি" / capability
+            # blocks handle them with an empty target anchored to the
+            # previous topic), not definition queries about "এর".
+            if target.split() and target.split()[0] in {
+                "এর", "আমার", "তার", "এটার", "সেটার",
+            }:
+                bare_match = None
         if bare_match:
             target = bare_match.group(1).strip()
             if target not in {"তুমি", "আপনি", "মিস্টি", "সে", "এটা", "ওটা", "এই", "সেই"}:
@@ -596,7 +756,26 @@ class NLUParser:
                     confidence=0.7,
                 )
 
-        # Pronoun-targeted query "সে কে?" / "এটা কী?"
+                # Bengali capability / function follow-ups with an empty or
+        # implicit target, resolved against the previous topic by the
+        # brain: "এর কিসের কাজে লাগে" (use), "সেটা কি কাজ করতে পারে"
+        # (capability), "কাজ কি" (use).
+        for cap_re, relation in self._bn_capability_followups:
+            cap_match = cap_re.search(text)
+            if cap_match:
+                topic = cap_match.group(1).strip() if cap_match.group(1) else ""
+                # Skip pronoun-only matches here; those reach the
+                # pronoun-query block and inherit the prior topic.
+                if topic in {"সেট", "এট", "ওট", "এটা", "সেটা", "ওটা", "এর", "এর:", "এর "}:
+                    topic = ""
+                return ParseResult(
+                    intent=IntentType.QUERY_WHAT,
+                    query={"type": "what", "relation": relation, "target": topic},
+                    raw_text=text,
+                    confidence=0.75,
+                )
+
+# Pronoun-targeted query "সে কে?" / "এটা কী?"
         pron_match = self._bn_pronoun_query_pattern.search(text)
         if pron_match:
             pronoun = pron_match.group(1)
@@ -658,8 +837,10 @@ class NLUParser:
                     confidence=0.8,
                 )
         """Try English pattern matching."""
-        # Deterministic Physics takes priority over generic questions.
-        if PHYSICS_ENGINE.solve(text) is not None:
+        # Deterministic Physics takes priority over generic questions, but
+        # only when the input actually contains numeric values or an
+        # equation ("এর কাজ কি?" is a vocabulary question, not physics).
+        if PHYSICS_ENGINE.solve(text) is not None and re.search(r"\d|=", text):
             return ParseResult(
                 intent=IntentType.PHYSICS,
                 entities={"physics_text": text},
@@ -667,8 +848,10 @@ class NLUParser:
                 confidence=0.98,
             )
 
-        # Deterministic mathematics takes priority over generic questions.
-        if MATH_ENGINE.looks_mathematical(text):
+        # Deterministic mathematics takes priority over generic questions,
+        # but only when the input contains a number or an operator
+        # ("সেতু কী?" / "What is a bridge?" are definitions, not math).
+        if MATH_ENGINE.looks_mathematical(text) and re.search(r"\d|[+\-*/^%=]", text):
             return ParseResult(
                 intent=IntentType.MATH,
                 entities={"math_text": text},
@@ -757,6 +940,30 @@ class NLUParser:
                     confidence=0.85,
                 )
 
+        # Deterministic capability / function follow-ups ("What can that
+        # do?", "What does it do?", "How does that work?") — empty target
+        # so the brain anchors the question to the previous topic.
+        cap_match = self._en_capability_followup_re.search(text)
+        if cap_match:
+            # 'what can X do' -> capability; 'what does X do' -> use;
+            # 'how does X work' -> how (mechanism explanation).
+            verb, action = cap_match.group(2).lower(), cap_match.group(4).lower()
+            if verb == "can":
+                relation = "capability"
+            elif action == "work":
+                relation = "how"
+            else:
+                relation = "use"
+            return ParseResult(
+                intent=IntentType.QUERY_WHAT,
+                query={
+                    "type": "what",
+                    "relation": relation,
+                    "target": "",
+                },
+                raw_text=text,
+                confidence=0.75,
+            )
         # Pronoun-targeted query "who is he?" / "what is it?"
         pron_match = self._en_pronoun_query_pattern.search(text)
         if pron_match:
