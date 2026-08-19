@@ -179,32 +179,40 @@ class ConversationDriver:
         elif state == "curious" or not response:
             # The user explicitly asked for more / the brain has no answer:
             # keep the thread with a clarifying offer.
-            offer = (
-                "আমি কি আপনাকে আরো কিছু শেখাতে পারি, নাকি আগের কথাটাই এগিয়ে নিয়ে যাব?"
-                if _is_bengali(user_text)
-                else "Is there something else you'd like me to teach or continue with?"
-            )
-            plan.question = offer
-            plan.kind = "clarification"
-            plan.needs_followup = True
+            if not response:
+                offer = (
+                    "আমি কি আপনাকে আরো কিছু শেখাতে পারি, নাকি আগের কথাটাই এগিয়ে নিয়ে যাব?"
+                    if _is_bengali(user_text)
+                    else "Is there something else you'd like me to teach or continue with?"
+                )
+                plan.question = offer
+                plan.kind = "clarification"
+                plan.needs_followup = True
+            # Phase 38: a curious user who got a real answer does not need
+            # another canned offer — the conversation already flows.
         else:
             # Phase 25: topic management — thin answers get a continuation
             # nudge; well-known topics get an interest expansion.
-            shallow = (confidence < 0.6 or topic_facts == 0) and bool(topic)
-            deep_enough = topic_facts > 0 or has_related
+            # Phase 38: ground follow-ups in real knowledge. A low
+            # confidence answer with no facts about the topic means the
+            # brain has nothing useful to extend, so asking "আরো জানতে
+            # চান?" only adds noise. Only extend when the brain actually
+            # retrieved facts (topic_facts > 0) or there are related
+            # concepts worth exploring.
+            has_grounding = topic_facts > 0 or has_related
             can_ask = self.turns_since_question >= self.question_interval
-            if shallow and can_ask and bool(topic):
+            if has_grounding and can_ask and has_related and response:
+                pool = _BN_EXPANSION_OPENERS if _is_bengali(user_text) else _EN_EXPANSION_OPENERS
+                # Deterministic rotation across the pool (per-turn index).
+                plan.question = pool[self.turns_since_question % len(pool)]
+                plan.kind = "expansion"
+                plan.needs_followup = True
+            elif has_grounding and can_ask and topic_facts > 0 and bool(topic):
                 plan.question = (
                     f"{topic} নিয়ে আপনি কি আরো জানতে চান, নাকি অন্য কিছু নিয়ে কথা বলব?"
                     if _is_bengali(user_text)
                     else f"Would you like to know more about {topic}, or talk about something else?"
                 )
-                plan.kind = "expansion"
-                plan.needs_followup = True
-            elif deep_enough and can_ask and has_related and response:
-                pool = _BN_EXPANSION_OPENERS if _is_bengali(user_text) else _EN_EXPANSION_OPENERS
-                # Deterministic rotation across the pool (per-turn index).
-                plan.question = pool[self.turns_since_question % len(pool)]
                 plan.kind = "expansion"
                 plan.needs_followup = True
             else:

@@ -69,7 +69,7 @@ def test_high_interest_gets_enthusiastic_tone(mapper):
     )
     assert plan.style == "enthusiastic"
     assert plan.length_hint == "detailed"
-    assert plan.opener in ("চমৎকার প্রশ্ন!", "খুব ভালো প্রশ্ন করেছেন!", "এটা আমারও পছন্দের আলোচনা।"), plan.opener
+    assert plan.opener in ("এটা নিয়ে ভেবে দেখি।", "এটা আমারও পছন্দের বিষয়।", "এখান থেকেই শুরু করি।"), plan.opener
 
 
 def test_low_attention_gets_short_tone(mapper):
@@ -154,7 +154,7 @@ def test_brain_high_interest_enthusiastic(brain):
     brain.emotion.interest = 0.95
     brain.emotion.curiosity = 0.95
     response = brain.process("সেতু কী?")["response"]
-    assert "চমৎকার" in response or "ভালো প্রশ্ন" in response or "পছন্দের" in response, response
+    assert "ভেবে দেখি" in response or "পছন্দের" in response or "শুরু করি" in response, response
 
 
 def test_tone_preserves_content(brain):

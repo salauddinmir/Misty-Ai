@@ -27,14 +27,14 @@ from brain.emotion.state import EmotionalState
 # Emotion openers — chosen by the reader's current internal state.
 # ---------------------------------------------------------------------------
 _ENTHUSIASTIC_OPENERS_BN = [
-    "চমৎকার প্রশ্ন!",
-    "খুব ভালো প্রশ্ন করেছেন!",
-    "এটা আমারও পছন্দের আলোচনা।",
+    "এটা নিয়ে ভেবে দেখি।",
+    "এটা আমারও পছন্দের বিষয়।",
+    "এখান থেকেই শুরু করি।",
 ]
 _ENTHUSIASTIC_OPENERS_EN = [
-    "Great question!",
-    "That's a topic I enjoy discussing.",
-    "I like where this is going.",
+    "Let me think this through.",
+    "That's a topic I enjoy exploring.",
+    "Let's look into it.",
 ]
 
 _CALM_OPENERS_BN = [
@@ -144,14 +144,14 @@ class ToneMapper:
         low_attention = emotion.attention < _LOW_ATTENTION_THRESHOLD
 
         if high_interest:
-            pool = _ENTHUSIASTIC_OPENERS_BN if _is_bengali(response) else _ENTHUSIASTIC_OPENERS_EN
+            pool = _ENTHUSIASTIC_OPENERS_BN if _is_bengali(user_text) else _ENTHUSIASTIC_OPENERS_EN
             plan.opener = pool[int(emotion.satisfaction * len(pool)) % len(pool)]
             plan.style = "enthusiastic"
             plan.length_hint = "detailed"
         elif low_attention:
             plan.style = "short"
             plan.length_hint = "short"
-            pool = _SHORT_OPENERS_BN if _is_bengali(response) else _SHORT_OPENERS_EN
+            pool = _SHORT_OPENERS_BN if _is_bengali(user_text) else _SHORT_OPENERS_EN
             plan.opener = pool[0]
         elif emotion.urgency > _HIGH_INTEREST_THRESHOLD:
             # Urgent input: get straight to the point.

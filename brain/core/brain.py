@@ -72,6 +72,38 @@ from brain.sensors import SensorEvent, SensorHub
 from brain.synapses.plasticity import PlasticityManager
 from brain.world import WorldModel
 
+# Phase 38: pronouns excluded from concept activation — activating a
+# generic pronoun would falsely light up unrelated concepts.
+_ACT_PRONOUNS = frozenset(
+    {
+        "সে",
+        "সেট",
+        "সেটা",
+        "এট",
+        "এটা",
+        "ওট",
+        "ওটা",
+        "এই",
+        "সেই",
+        "এ",
+        "ও",
+        "তার",
+        "তারা",
+        "it",
+        "its",
+        "him",
+        "her",
+        "he",
+        "she",
+        "this",
+        "that",
+        "these",
+        "those",
+        "them",
+        "their",
+    }
+)
+
 
 def _current_token_set(text: str | None) -> set:
     """Normalize the tokens of a raw input string for topic exclusion."""
@@ -164,6 +196,8 @@ class Brain:
 
         # Emotion
         self.emotion = EmotionalState()
+        self._last_parse_confidence = 0.0
+        self._ASSOCIATE_INTENT_REGISTERED = set()
 
         # NLU
         self.nlu = NLUParser()
@@ -646,6 +680,8 @@ class Brain:
         """INTERPRET phase: Parse input using NLU."""
         self.state.current_phase = "interpret"
         parse_result = self.nlu.parse(text_input)
+        if parse_result is not None:
+            self._last_parse_confidence = parse_result.confidence
         if source == "sensor" and parse_result.intent == IntentType.PHYSICS:
             parse_result.intent = IntentType.STATEMENT
             parse_result.confidence = 0.8
@@ -1056,7 +1092,7 @@ class Brain:
 
         # Bengali "ভাবছো/করছো" queries expose the current thinking state.
         if re.search(r"ভাবছ|কি করছ", text):
-            response = f"আমি এখন স্ব-পর্যবেক্ষণ করছি। {self_model_text} আপনার কি করতে চান?"
+            response = f"আমি এখন স্ব-পর্যবেক্ষণ করছি — ভাবছি, গুছাছি, শিখছি। {self_model_text} আপনার কী জানতে চান, বলুন?"
             return response, 0.8
         if re.search(r"কি খবর|কেমন আছ", text):
             response = f"আমি ভালো আছি, ধন্যবাদ! {self_model_text} আপনার কি খবর?"
@@ -1169,14 +1205,19 @@ class Brain:
         return None
 
     def _self_model_phrase(self) -> str:
-        """Compact, user-readable snapshot of the current self-model state."""
+        """Compact, user-readable snapshot of the current self-model state.
+
+        Phase 38: the phrase is an honest but warm mirror of the internal
+        state — it never claims high uncertainty as an excuse, and it
+        always ends by connecting with the user.
+        """
         summary = self.self_model.summary()
         uncertainty = summary.get("uncertainty", 0.0) if isinstance(summary, dict) else 0.0
         if uncertainty > 0.7:
-            return "আমার নিজের অনিশ্চয়তা এখন উচ্চ — আমি নতুন কিছু শিখছি।"
+            return "আমার কাছে এখন অনেক নতুন জিনিস আসছে — এগুলো সাজিয়ে নিচ্ছি।"
         if uncertainty > 0.4:
-            return "আমি বর্তমান নিজের চিন্তার ধারাটি যাচাই করছি।"
-        return "আমি নতুন জ্ঞান শিখছি এব নিজের চিন্তাগুলো পর্যবেক্ষণ করছি।"
+            return "আমি আজকের শেখাগুলো গোছাচ্ছি।"
+        return "আমি নতুন জ্ঞান শিখছি এবং নিজের চিন্তাগুলো পর্যবেক্ষণ করছি।"
 
     def _curiosity_prompt(self, activation_map: Dict[str, float]) -> str | None:
         """Phase 4 curiosity: ask about an under-explored neighbor concept.
@@ -1467,29 +1508,83 @@ class Brain:
         activated: Dict[str, float] = {}
 
         if parse_result:
+            # Phase 38: a real brain never sits idle. Activation is no
+            # longer limited to a single 'target' entity — every entity
+            # the parser found, every concept recalled by the RECALL
+            # phase, the intent concept itself, and a word-overlap sweep
+            # over the knowledge graph all fire together. The union of
+            # these activations is what the activity monitor shows as
+            # "Neurons Active" and is what feeds Hebbian learning.
             entities = parse_result.entities
             target = entities.get("target") or entities.get("name") or parse_result.query.get("target")
+            source_ids: List[str] = []
 
             if target:
                 concept = self.concept_graph.get_concept_by_name(target)
                 if concept:
-                    if self.use_neural_sim and self._neural_sim_engine is not None:
-                        # Neural simulation path: encode concept and run simulation
-                        activated = self._neural_associate(concept.concept_id)
-                    else:
-                        # Graph-based path (Phase 0 default)
-                        activation_map = self.spreading_activation.activate(self.concept_graph, concept.concept_id)
-                        activated = activation_map
+                    source_ids.append(concept.concept_id)
 
-                    self.state.active_concepts = {k: round(v, 3) for k, v in activated.items()}
-                    # Phase 4: Hebbian learning — strengthen edges between
-                    # concepts that fired together this cycle. Assessment
-                    # clones perform retrieval only and must not learn from
-                    # benchmark prompts.
-                    if not self._assessment_mode:
-                        hebbian_updates = self.hebbian.update(self.concept_graph, list(activated.keys()))
-                        if hebbian_updates:
-                            self.working_memory.store("hebbian_updates", hebbian_updates)
+
+            # Entity sweep: every extracted entity (name, subject,
+            # math/physics text heads, taught concepts...) that matches
+            # a concept in the graph lights it up. Candidates that are
+            # query aliases (e.g. 'ফর্টস' when the graph holds 'বল') are
+            # resolved through semantic-memory predicate mapping so the
+            # canonical concept still fires.
+            for candidate in self._associate_entity_candidates(parse_result):
+                name = self._resolve_activation_name(candidate)
+                if name:
+                    concept = self.concept_graph.get_concept_by_name(name)
+                    if concept and concept.concept_id not in source_ids:
+                        source_ids.append(concept.concept_id)
+
+            # Recall sweep: the concepts that the RECALL phase just
+            # retrieved are part of this cycle's thought.
+            recalled_ids = self._associate_recall_candidates(parse_result)
+            for cid in recalled_ids:
+                if cid not in source_ids:
+                    source_ids.append(cid)
+
+            # Intent sweep: even inputs with no entities (greetings,
+            # open-ended questions) activate an intent concept.
+            intent_ids = self._associate_intent_candidates(parse_result)
+            for cid in intent_ids:
+                if cid not in source_ids:
+                    source_ids.append(cid)
+
+            # Word-overlap sweep: concepts whose names share words with
+            # the input (Bengali + English) catch training topics like
+            # "ফর্স" or "নিউটন" mentioned mid-sentence.
+            for concept in self._associate_word_overlap_candidates(parse_result):
+                if concept.concept_id not in source_ids:
+                    source_ids.append(concept.concept_id)
+
+            for source_id in source_ids:
+                if self.use_neural_sim and self._neural_sim_engine is not None:
+                    spread = self._neural_associate(source_id)
+                else:
+                    spread = self.spreading_activation.activate(
+                        self.concept_graph,
+                        source_id,
+                    )
+                for cid, level in spread.items():
+                    activated[cid] = max(activated.get(cid, 0.0), level)
+
+            if activated:
+                # Keep the activity map readable: keep the strongest
+                # activations so the monitor stays meaningful.
+                top_n = 12
+                ranked = sorted(activated.items(), key=lambda item: item[1], reverse=True)
+                activated = dict(ranked[:top_n])
+                self.state.active_concepts = {k: round(v, 3) for k, v in activated.items()}
+                # Phase 4: Hebbian learning — strengthen edges between
+                # concepts that fired together this cycle. Assessment
+                # clones perform retrieval only and must not learn from
+                # benchmark prompts.
+                if not self._assessment_mode:
+                    hebbian_updates = self.hebbian.update(self.concept_graph, list(activated.keys()))
+                    if hebbian_updates:
+                        self.working_memory.store("hebbian_updates", hebbian_updates)
         # Phase 4: Hebbian bookkeeping (also covers the neural path).
         if not self._assessment_mode:
             self.hebbian.register_activations(self.state.active_concepts.keys())
@@ -1560,6 +1655,131 @@ class Brain:
                         activation_map[cid] = min(1.0, float(overlap) / 5.0)
 
         return activation_map
+
+
+    # -----------------------------------------------------------------
+    # Phase 38: multi-path concept activation helpers. The old logic
+    # required a single 'target' entity to light up the graph, so every
+    # ordinary conversation turned left 'Neurons Active' at zero.
+    # -----------------------------------------------------------------
+    @staticmethod
+    def _associate_entity_candidates(parse_result: ParseResult) -> List[str]:
+        """String candidates from every parser entity worth activating."""
+        candidates: List[str] = []
+        for key in ("name", "subject", "taught", "target"):
+            value = parse_result.entities.get(key)
+            if isinstance(value, str) and value and value not in _ACT_PRONOUNS:
+                candidates.append(value)
+        return candidates
+
+    def _associate_recall_candidates(self, parse_result: ParseResult | None) -> List[str]:
+        """Concept IDs of the concepts the RECALL phase just retrieved."""
+        ids: List[str] = []
+        if parse_result is None:
+            return ids
+        target_name = parse_result.query.get("target") or parse_result.entities.get("target") or ""
+        if target_name and isinstance(target_name, str):
+            concept = self.concept_graph.get_concept_by_name(target_name)
+            if concept:
+                ids.append(concept.concept_id)
+        return ids
+
+    # Intent-to-concept mapping (immutable tuple of pairs to satisfy the
+    # linter's mutable-class-attribute rule).
+    _ASSOCIATE_INTENT_CONCEPTS: tuple = (
+        ("greeting", "greeting"),
+        ("math", "mathematics"),
+        ("physics", "physics"),
+        ("correction", "correction"),
+        ("name_declaration", "misty"),
+        ("statement", "teaching"),
+        ("teach", "teaching"),
+        ("capability_query", "misty"),
+        ("recognition_query", "misty"),
+        ("query_who", "misty"),
+        ("query_what", "teaching"),
+        ("continuation", "conversation"),
+        ("conversation", "conversation"),
+        ("unknown", "conversation"),
+    )
+
+    def _associate_intent_candidates(self, parse_result: ParseResult) -> List[str]:
+        """Concept IDs for intent-level activation when entities are empty."""
+        ids: List[str] = []
+        intent_name = parse_result.intent.value
+        concept_name = dict(self._ASSOCIATE_INTENT_CONCEPTS).get(intent_name, "conversation")
+        concept = self.concept_graph.get_concept_by_name(concept_name)
+        if concept is None and concept_name not in self._ASSOCIATE_INTENT_REGISTERED:
+            # Register the missing intent concept once and activate it.
+            self.concept_graph.create_concept(name=concept_name, concept_type="IntentConcept")
+            self._ASSOCIATE_INTENT_REGISTERED.add(concept_name)
+            concept = self.concept_graph.get_concept_by_name(concept_name)
+        if concept:
+            ids.append(concept.concept_id)
+        return ids
+
+    def _associate_word_overlap_candidates(self, parse_result: ParseResult, max_concepts: int = 5) -> List[Any]:
+        """Concepts whose names share words with the input text.
+
+        Catches training topics mentioned mid-sentence (e.g. 'ফর্‌স বা
+        টান' or 'Newton's law') that the parser never exposed as
+        structured entities.
+        """
+        text = parse_result.raw_text or ""
+        tokens = {
+            t for t in re.split(r"[^\w\u0980-\u09ff]+", text) if t and len(t) > 2 and t.lower() not in _ACT_PRONOUNS
+        }
+        if not tokens:
+            return []
+        scored: List[Any] = []
+        for concept in self.concept_graph._concepts.values():
+            name_tokens = {t for t in re.split(r"[^\w\u0980-\u09ff]+", concept.name) if t}
+            overlap = name_tokens & tokens
+            if overlap:
+                scored.append((len(overlap), max(len(n) for n in overlap), concept))
+        # Alias sweep: input tokens may match query-alias names that
+        # semantic memory resolved to canonical subjects during training
+        # registration (e.g. 'ফর্স'-like variants). Activate those
+        # canonical graph concepts too.
+        alias_seen: set = set()
+        for token in tokens:
+            for _alias_fact in self.semantic_memory.query(subject=token):
+                canonical = self._resolve_activation_name(token)
+                if canonical and canonical != token and canonical not in alias_seen:
+                    concept = self.concept_graph.get_concept_by_name(canonical)
+                    if concept:
+                        scored.append((1, len(canonical), concept))
+                        alias_seen.add(canonical)
+        scored.sort(key=lambda item: (item[0], item[1]), reverse=True)
+        return [item[2] for item in scored[:max_concepts]]
+
+    def _resolve_activation_name(self, candidate: str) -> str | None:
+        """Resolve a parser-extracted name to a graph concept name.
+
+        First tries an exact case-insensitive match. If that fails, the
+        name may be a query alias: every stored fact about the alias
+        shares a predicate with a fact about its canonical subject
+        (Phase 29/30 alias facts). The canonical subject that shares the
+        most predicates wins — and it is guaranteed to exist in the
+        concept graph because curricula register all canonical subjects.
+        """
+        if self.concept_graph.get_concept_by_name(candidate):
+            return candidate
+        alias_facts = self.semantic_memory.query(subject=candidate)
+        if not alias_facts:
+            return None
+        from collections import Counter
+
+        score: Counter[str] = Counter()
+        for fact in alias_facts:
+            for canonical_fact in self.semantic_memory.query(predicate=fact.predicate):
+                score[canonical_fact.subject] += 1
+        if not score:
+            return None
+        winner = score.most_common(1)[0][0]
+        if self.concept_graph.get_concept_by_name(winner):
+            return winner
+        return None
 
     def _phase_reason(
         self,
@@ -3213,6 +3433,16 @@ class Brain:
             "semantic_facts": self.semantic_memory.size,
             "emotional_state": self.emotion.to_dict(),
             "active_concepts": self.state.active_concepts,
+            # Phase 38: memory recall count — total facts the brain can
+            # draw on right now (semantic + episodic), exposed to the
+            # frontend brain monitor as "MEMORY RECALL".
+            "memory_recall": (self.semantic_memory.size + self.episodic_memory.size),
+            # Phase 38: confidence/uncertainty snapshots of the LAST
+            # processed turn. The emotion engine's rolling uncertainty
+            # decays every tick and would otherwise flatten to 0%, so the
+            # frontend shows the genuine per-turn snapshot instead.
+            "last_confidence": round(self._last_parse_confidence, 3),
+            "last_uncertainty": round(max(0.0, 1.0 - self._last_parse_confidence), 3),
             "performance": self.reflection.evaluate_recent_performance(),
             # Phase 5: structured world state and last prediction error.
             "world_entities": list(self.world.entities.keys()),

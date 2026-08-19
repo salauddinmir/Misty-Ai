@@ -396,7 +396,7 @@ class NLUParser:
     # classification rather than only inside the dialogue driver.
     _BN_CLOSURE_RE = re.compile(
         r"\b(বাই|বিদায়|ঠিক আছে|অনেক ধন্যবাদ|আজকে এই পর্যন্ত|টাটা"
-        r"|শুভরাত্রি|ঘুমিয়ে পড়লাম)\b",
+        r"|শুভরাত্রি|ঘুমিয়ে পড়লাম|ভালো থেকো|ভাল থেকো|ভাল থাকো|চলি|তাহলে চলি|দেখা হবে)\b",
         re.UNICODE,
     )
     _EN_CLOSURE_RE = re.compile(
