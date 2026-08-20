@@ -55,6 +55,7 @@ from brain.learning.fact_aging import FactAger
 from brain.learning.induction import EvidenceGatedInducer
 from brain.learning.learning_roadmap import LearningPlanner
 from brain.learning.post_learning_loop import PostLearningAssessor, attach_to_learner
+from brain.learning.reasoning import ReasoningEngine
 from brain.learning.reinforcement import ReinforcementLearner
 from brain.learning.reward import RewardSignal
 from brain.learning.self_assessment import GapAssessor
@@ -261,6 +262,12 @@ class Brain:
         # Phase 18: knowledge-inference synthesis — derive answers from
         # stored concepts and rules instead of echoing memorized phrases.
         self.inference_synthesizer = InferenceSynthesizer()
+
+        # Phase 48: connection-based reasoning layer — derives NEW facts
+        # (transitivity, category inheritance, symmetric predicates) from
+        # semantic memory and the knowledge graph, storing them with
+        # source "inferred" and a decayed confidence.
+        self.reasoning_engine = ReasoningEngine(self)
 
         # Phase 24: personality voice and response variation — reply
         # templates are drawn from a per-intent bilingual pool so two
@@ -572,6 +579,10 @@ class Brain:
 
         # Phase 9: LEARN
         run_phase(self._phase_learn, interpret_result.data.get("parse_result"), act_result)
+
+        # Phase 48: REASON — derive new facts from what the brain already
+        # knows before the memory-consolidation phase runs.
+        self.reasoning_engine.derive()
 
         # Phase 10: CONSOLIDATE
         run_phase(self._phase_consolidate)
@@ -3853,6 +3864,9 @@ class Brain:
             # Phase 45: consolidation audit — rehearsal, quarantine cleanup
             # and duplicate-merge decisions since boot.
             "consolidation": self.consolidation_engine.summary(),
+            # Phase 48: connection-based reasoning audit — derived facts
+            # (transitivity, inheritance, symmetric) produced per turn.
+            "reasoning": self.reasoning_engine.summary(),
             # Phase 43: the visitor id this cycle is bound to and the
             # personal facts/episodes that grounded the last reply.
             "current_user_id": self.current_user_id,
