@@ -98,3 +98,32 @@ CREATE TABLE IF NOT EXISTS misty_user_memory (
     PRIMARY KEY (user_id, memory_kind, memory_key)
 );
 CREATE INDEX IF NOT EXISTS idx_user_memory_user ON misty_user_memory(user_id);
+
+-- Phase 46: durable semantic fact store with timestamps.
+CREATE TABLE IF NOT EXISTS misty_facts (
+    fact_key TEXT NOT NULL,              -- subject:predicate:obj
+    subject TEXT NOT NULL DEFAULT '',
+    predicate TEXT NOT NULL DEFAULT '',
+    obj TEXT NOT NULL DEFAULT '',
+    confidence DOUBLE PRECISION NOT NULL DEFAULT 0.5,
+    source TEXT NOT NULL DEFAULT 'user_input',
+    created_at DOUBLE PRECISION NOT NULL,
+    accessed_at DOUBLE PRECISION NOT NULL,
+    updated_at DOUBLE PRECISION NOT NULL,
+    PRIMARY KEY (fact_key)
+);
+CREATE INDEX IF NOT EXISTS idx_facts_source ON misty_facts(source);
+CREATE INDEX IF NOT EXISTS idx_facts_confidence ON misty_facts(confidence);
+
+-- Phase 46: bounded audit log for aging and consolidation decisions.
+CREATE TABLE IF NOT EXISTS misty_audit_log (
+    id BIGSERIAL PRIMARY KEY,
+    audit_kind TEXT NOT NULL,            -- 'aging' | 'consolidation'
+    fact_key TEXT NOT NULL DEFAULT '',
+    action TEXT NOT NULL DEFAULT '',     -- decayed | pruned | protected | rehearsed | merged_winner | merged_loser | quarantine_removed
+    confidence DOUBLE PRECISION NOT NULL DEFAULT 0.0,
+    detail TEXT NOT NULL DEFAULT '',
+    created_at DOUBLE PRECISION NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_audit_kind ON misty_audit_log(audit_kind);
+CREATE INDEX IF NOT EXISTS idx_audit_created ON misty_audit_log(created_at);

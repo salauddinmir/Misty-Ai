@@ -20,7 +20,7 @@ import os
 import time as time_module
 import uuid
 from pathlib import Path
-from typing import Any, Dict, List, Mapping, Tuple
+from typing import Any, Dict, Iterable, List, Mapping, Tuple
 
 # ---------------------------------------------------------------------------
 # Driver selection: asyncpg is the production PostgreSQL driver; both
@@ -42,6 +42,8 @@ SCHEMA_SQLITE = os.path.join(REPO_ROOT, "database", "schema.sql")
 SCHEMA_POSTGRES = os.path.join(REPO_ROOT, "database", "schema_postgres.sql")
 UPSERT_SQLITE = "INSERT OR REPLACE"
 UPSERT_POSTGRES = "INSERT"
+# Phase 46: maximum audit log rows kept in misty_audit_log.
+_AUDIT_MAX_ROWS: int = 4000
 
 
 def _db_url() -> str:
@@ -648,6 +650,152 @@ class Database:
                 "kind": row[0],
                 "memory_key": row[1],
                 "memory_json": json.loads(row[2]) if row[2] else {},
+            }
+            for row in rows
+        ]
+
+    # ==================== Phase 46: facts + audit log ====================
+
+    async def save_facts(self, facts: Mapping[str, Any]) -> None:
+        """Upsert semantic facts with timestamps.
+
+        ``facts`` is ``{fact_key: {subject, predicate, obj, confidence,
+        source, created_at, accessed_at}}``. A per-row INSERT OR REPLACE /
+        ON CONFLICT is used so a single refresh keeps one canonical row per
+        fact (Phase 44 aging depends on stable timestamps).
+        """
+        timestamp = time_module.time()
+        for key, record in facts.items():
+            values = (
+                str(key),
+                str(record.get("subject", "")),
+                str(record.get("predicate", "")),
+                str(record.get("obj", "")),
+                float(record.get("confidence", 0.5)),
+                str(record.get("source", "user_input")),
+                float(record.get("created_at", timestamp)),
+                float(record.get("accessed_at", timestamp)),
+                timestamp,
+            )
+            if DRIVER == "postgres":
+                await self.execute(
+                    "INSERT INTO misty_facts "
+                    "(fact_key, subject, predicate, obj, confidence, source, "
+                    "created_at, accessed_at, updated_at) "
+                    f"VALUES ({_placeholders(9)}) "
+                    "ON CONFLICT (fact_key) "
+                    "DO UPDATE SET subject = EXCLUDED.subject, "
+                    "predicate = EXCLUDED.predicate, obj = EXCLUDED.obj, "
+                    "confidence = EXCLUDED.confidence, source = EXCLUDED.source, "
+                    "created_at = EXCLUDED.created_at, "
+                    "accessed_at = EXCLUDED.accessed_at, "
+                    "updated_at = EXCLUDED.updated_at",
+                    values,
+                )
+            else:
+                await self.execute(
+                    f"{UPSERT_SQLITE} INTO misty_facts "
+                    "(fact_key, subject, predicate, obj, confidence, source, "
+                    "created_at, accessed_at, updated_at) "
+                    f"VALUES ({_placeholders(9)})",
+                    values,
+                )
+        if DRIVER != "postgres":
+            await self._connection.commit()
+
+    async def load_facts(self, limit: int | None = 10000) -> List[Dict[str, Any]]:
+        """Load persisted semantic facts for cold-start rebuild."""
+        limit_clause = f"LIMIT {int(limit)}" if limit else ""
+        if DRIVER == "postgres":
+            rows = await self.fetchall(
+                f"SELECT fact_key, subject, predicate, obj, confidence, source, "
+                f"created_at, accessed_at FROM misty_facts {limit_clause}",
+            )
+        else:
+            rows = await self.fetchall(
+                f"SELECT fact_key, subject, predicate, obj, confidence, source, "
+                f"created_at, accessed_at FROM misty_facts {limit_clause}",
+            )
+        return [
+            {
+                "fact_key": row[0],
+                "subject": row[1],
+                "predicate": row[2],
+                "obj": row[3],
+                "confidence": float(row[4]),
+                "source": row[5],
+                "created_at": float(row[6]),
+                "accessed_at": float(row[7]),
+            }
+            for row in rows
+        ]
+
+    async def save_audit_rows(self, rows: Iterable[Mapping[str, Any]]) -> None:
+        """Append bounded audit rows (aging / consolidation decisions).
+
+        Each row carries ``audit_kind``, ``fact_key``, ``action``,
+        ``confidence`` and ``detail``. Rows are appended as history; a
+        periodic bounded prune keeps the table from growing without bound.
+        """
+        if not rows:
+            return
+        timestamp = time_module.time()
+        for record in rows:
+            values = (
+                str(record.get("audit_kind", "aging")),
+                str(record.get("fact_key", "")),
+                str(record.get("action", "")),
+                float(record.get("confidence", 0.0)),
+                str(record.get("detail", ""))[:2000],
+                timestamp,
+            )
+            if DRIVER == "postgres":
+                await self.execute(
+                    "INSERT INTO misty_audit_log "
+                    "(audit_kind, fact_key, action, confidence, detail, created_at) "
+                    f"VALUES ({_placeholders(6)})",
+                    values,
+                )
+            else:
+                await self.execute(
+                    "INSERT INTO misty_audit_log "
+                    "(audit_kind, fact_key, action, confidence, detail, created_at) "
+                    f"VALUES ({_placeholders(6)})",
+                    values,
+                )
+        if DRIVER != "postgres":
+            await self._connection.commit()
+        # Bounded history: keep at most _AUDIT_MAX_ROWS rows.
+        await self.execute(
+            "DELETE FROM misty_audit_log "
+            f"WHERE id NOT IN (SELECT id FROM misty_audit_log "
+            f"ORDER BY created_at DESC LIMIT {_AUDIT_MAX_ROWS})",
+        )
+
+    async def load_audit_rows(self, kind: str | None = None, limit: int = 200) -> List[Dict[str, Any]]:
+        """Load recent audit rows, optionally filtered by kind."""
+        where = f"WHERE audit_kind = {('' if DRIVER == 'postgres' else '?')}" if kind is not None else ""
+        if DRIVER == "postgres":
+            sql = (
+                f"SELECT audit_kind, fact_key, action, confidence, detail, created_at "
+                f"FROM misty_audit_log {where} ORDER BY created_at DESC LIMIT $1"
+            )
+            params: Tuple[Any, ...] = (limit,) if kind is None else (kind, limit)
+        else:
+            sql = (
+                f"SELECT audit_kind, fact_key, action, confidence, detail, created_at "
+                f"FROM misty_audit_log {where} ORDER BY created_at DESC LIMIT ?"
+            )
+            params = (limit,) if kind is None else (kind, limit)
+        rows = await self.fetchall(sql, params)
+        return [
+            {
+                "audit_kind": row[0],
+                "fact_key": row[1],
+                "action": row[2],
+                "confidence": float(row[3]),
+                "detail": row[4],
+                "created_at": float(row[5]),
             }
             for row in rows
         ]

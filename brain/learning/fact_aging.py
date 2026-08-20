@@ -115,7 +115,12 @@ class FactAger:
                 )
                 continue
 
-            days_old = (now - fact.created_at) / 86400.0
+            # Cold-start safety: facts restored from persistent storage may
+            # carry a created_at of 0 (unknown birth time). They must never
+            # be aged billions of days — treat them as freshly restored and
+            # let aging resume from the current clock going forward.
+            anchor = fact.created_at if fact.created_at and fact.created_at > 0 else now
+            days_old = (now - anchor) / 86400.0
             if days_old <= 0.0:
                 # Nothing to decay yet — but a fact that was born below the
                 # junk floor is garbage from the start and gets pruned.

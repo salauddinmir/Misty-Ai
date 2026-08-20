@@ -15,7 +15,7 @@ import logging
 import os
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
-from typing import Any
+from typing import Any, Dict, List
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -81,31 +81,58 @@ async def _restore_persistent_knowledge(brain: Brain, database: Database) -> dic
         }
         brain.concept_graph.load_relations(persisted_relations)
 
-        # Interim full scan: semantic facts currently share the episode log.
-        # A dedicated semantic-fact table should replace this unbounded path.
-        persisted_episodes = await database.load_episodes(limit=None)
-        for item in persisted_episodes:
-            try:
-                content = json.loads(item["content"])
-            except (TypeError, json.JSONDecodeError):
-                continue
-            if not isinstance(content, dict) or content.get("type") != "semantic_fact":
-                continue
-            subject = str(content.get("subject", ""))
-            predicate = str(content.get("predicate", ""))
-            obj = str(content.get("obj", ""))
+        # Phase 46: semantic facts now live in the dedicated misty_facts
+        # table with real timestamps, so aging (Phase 44) decisions survive
+        # cold starts. The legacy episode-log scan is kept as a fallback
+        # for deployments that pre-date Phase 46.
+        restored_facts = 0
+        persisted_facts = await database.load_facts()
+        for record in persisted_facts:
+            subject = str(record.get("subject", ""))
+            predicate = str(record.get("predicate", ""))
+            obj = str(record.get("obj", ""))
             if not subject or not predicate or not obj:
                 continue
             fact_key = f"{subject}:{predicate}:{obj}"
             indexes["fact_keys"].add(fact_key)
             if fact_key not in brain.semantic_memory.facts:
-                brain.semantic_memory.store_fact(
+                fact = brain.semantic_memory.store_fact(
                     subject=subject,
                     predicate=predicate,
                     obj=obj,
-                    confidence=float(item.get("importance", 0.5)),
-                    source=str(item.get("context", {}).get("source", "persistent_storage")),
+                    confidence=float(record.get("confidence", 0.5)),
+                    source=str(record.get("source", "persistent_storage")),
                 )
+                restored = brain.semantic_memory.facts.get(fact)
+                if restored is not None:
+                    restored.created_at = float(record.get("created_at", 0.0))
+                    restored.accessed_at = float(record.get("accessed_at", 0.0))
+                restored_facts += 1
+        if not persisted_facts:
+            persisted_episodes = await database.load_episodes(limit=None)
+            for item in persisted_episodes:
+                try:
+                    content = json.loads(item["content"])
+                except (TypeError, json.JSONDecodeError):
+                    continue
+                if not isinstance(content, dict) or content.get("type") != "semantic_fact":
+                    continue
+                subject = str(content.get("subject", ""))
+                predicate = str(content.get("predicate", ""))
+                obj = str(content.get("obj", ""))
+                if not subject or not predicate or not obj:
+                    continue
+                fact_key = f"{subject}:{predicate}:{obj}"
+                indexes["fact_keys"].add(fact_key)
+                if fact_key not in brain.semantic_memory.facts:
+                    brain.semantic_memory.store_fact(
+                        subject=subject,
+                        predicate=predicate,
+                        obj=obj,
+                        confidence=float(item.get("importance", 0.5)),
+                        source=str(item.get("context", {}).get("source", "persistent_storage")),
+                    )
+                    restored_facts += 1
 
         persisted_procedures = await database.load_procedures()
         for item in persisted_procedures:
@@ -121,10 +148,11 @@ async def _restore_persistent_knowledge(brain: Brain, database: Database) -> dic
             brain.procedural_memory.procedures[proc.procedure_id] = proc
 
         logger.info(
-            "Restored %s concepts, %s relations, %s semantic facts and %s procedures",
+            "Restored %s concepts, %s relations, %s semantic facts (%s from persistent store) and %s procedures",
             len(persisted_concepts),
             len(persisted_relations),
             len(indexes["fact_keys"]),
+            restored_facts,
             len(persisted_procedures),
         )
     except Exception:
@@ -183,6 +211,125 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         _safe_schedule(lambda: _consolidation_sink(event))
 
     brain.consolidator.persistence_sink = _consolidation_sink_sync
+
+    # ------------------- Phase 46: fact persistence -------------------
+
+    async def _persist_facts() -> None:
+        """Snapshot semantic facts plus new aging/consolidation audit rows."""
+        try:
+            facts = {
+                key: {
+                    "subject": fact.subject,
+                    "predicate": fact.predicate,
+                    "obj": fact.obj,
+                    "confidence": fact.confidence,
+                    "source": fact.source,
+                    "created_at": fact.created_at,
+                    "accessed_at": fact.accessed_at,
+                }
+                for key, fact in brain.semantic_memory.facts.items()
+            }
+            await database.save_facts(facts)
+            # Drain new audit rows since the last saved watermark.
+            ager = brain.fact_ager
+            engine = brain.consolidation_engine
+            new_aging_rows = _new_audit_rows(ager, "aging", saved_audit_ids.get("aging", 0))
+            new_consolidation_rows = _new_audit_rows(engine, "consolidation", saved_audit_ids.get("consolidation", 0))
+            if new_aging_rows or new_consolidation_rows:
+                await database.save_audit_rows(new_aging_rows + new_consolidation_rows)
+                saved_audit_ids["aging"] = len(ager.decisions)
+                saved_audit_ids["consolidation"] = len(engine.decisions)
+        except Exception:
+            logger.exception("Fact persistence failed; keeping in-memory state")
+
+    def _persist_facts_sync() -> None:
+        _safe_schedule(_persist_facts)
+
+    def _new_audit_rows(auditor: Any, kind: str, since: int) -> List[Dict[str, Any]]:
+        """Convert in-memory audit decisions (added since last save) to rows."""
+        rows: List[Dict[str, Any]] = []
+        try:
+            decisions = auditor.decisions[since:]
+        except (AttributeError, TypeError):
+            return rows
+        for decision in decisions:
+            try:
+                row: Dict[str, Any] = {
+                    "audit_kind": kind,
+                    "fact_key": str(getattr(decision, "fact_key", "")),
+                    "action": str(getattr(decision, "action", "")),
+                    "confidence": float(getattr(decision, "confidence_after", 0.0)),
+                    "detail": str(getattr(decision, "detail", ""))[:2000],
+                }
+                # AgingDecision names confidence_before/after; consolidation
+                # SweepDecision names confidence. Normalize either way.
+                if row["confidence"] == 0.0:
+                    row["confidence"] = float(getattr(decision, "confidence", 0.0))
+                rows.append(row)
+            except Exception:
+                continue
+        return rows
+
+    def _append_audit_row(auditor: Any, record: Dict[str, Any], kind: str) -> None:
+        """Replay one persisted audit row into the matching in-memory log."""
+        if record.get("audit_kind") != kind:
+            return
+        try:
+            if kind == "aging":
+                from brain.learning.fact_aging import AgingDecision
+
+                # Aging rows carry the confidence value in 'confidence'.
+                auditor._record(
+                    AgingDecision(
+                        fact_key=str(record.get("fact_key", "")),
+                        subject="",
+                        predicate="",
+                        obj="",
+                        confidence_before=float(record.get("confidence", 0.0)),
+                        confidence_after=float(record.get("confidence", 0.0)),
+                        action=str(record.get("action", "")),
+                    )
+                )
+            else:
+                from brain.learning.consolidation_sweep import SweepDecision
+
+                auditor._record(
+                    SweepDecision(
+                        fact_key=str(record.get("fact_key", "")),
+                        subject="",
+                        predicate="",
+                        obj="",
+                        action=str(record.get("action", "")),
+                        confidence=float(record.get("confidence", 0.0)),
+                        detail=str(record.get("detail", ""))[:2000],
+                    )
+                )
+        except Exception:
+            return
+
+    saved_audit_ids: Dict[str, int] = {"aging": 0, "consolidation": 0}
+
+    # Cold-start: replay the last persisted audit rows into the in-memory
+    # audit logs so state snapshots show history from before the restart.
+    try:
+        for record in await database.load_audit_rows(limit=100):
+            _append_audit_row(brain.fact_ager, record, "aging")
+            _append_audit_row(brain.consolidation_engine, record, "consolidation")
+        saved_audit_ids = {
+            "aging": max(0, len(brain.fact_ager.decisions)),
+            "consolidation": max(0, len(brain.consolidation_engine.decisions)),
+        }
+    except Exception:
+        logger.exception("Audit-log restore failed; starting with an empty log")
+
+    _original_tick = brain.autonomous_reflection_tick
+
+    def _persisting_tick(*args: Any, **kwargs: Any) -> Any:
+        result = _original_tick(*args, **kwargs)
+        _persist_facts_sync()
+        return result
+
+    brain.autonomous_reflection_tick = _persisting_tick  # type: ignore[method-assign]
 
     _original_store = brain.procedural_memory.store
 
@@ -246,6 +393,14 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     finally:
         Procedure.reinforce = _original_reinforce  # type: ignore[method-assign]
         brain.procedural_memory.store = _original_store  # type: ignore[method-assign]
+        brain.autonomous_reflection_tick = _original_tick  # type: ignore[method-assign]
+        # Final persistence drain so aging and consolidation history survive
+        # a graceful shutdown.
+        if app.state.database is database:
+            try:
+                await _persist_facts()
+            except Exception:
+                logger.exception("Final fact persistence drain failed")
         if autonomous_task is not None:
             autonomous_task.cancel()
             await asyncio.gather(autonomous_task, return_exceptions=True)
