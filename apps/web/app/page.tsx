@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef } from "react";
 import { BrainMonitor } from "@/components/brain-monitor/BrainMonitor";
+import { MemoryHealthPanel } from "@/components/brain-monitor/MemoryHealthPanel";
 import { CognitiveTrace } from "@/components/brain-monitor/CognitiveTrace";
 import { ActivityFeed } from "@/components/brain-monitor/ActivityFeed";
 import { ChatInterface } from "@/components/chat/ChatInterface";
@@ -102,6 +103,7 @@ export default function Home() {
         <div className="w-1/2 h-full flex flex-col overflow-hidden">
           <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-4">
             <BrainMonitor brainState={brainState} />
+            <MemoryHealthPanel brainState={brainState} />
             <CognitiveTrace message={latestAssistantMessage} />
           </div>
           <div className="h-1/3 border-t border-neural-border">

@@ -26,6 +26,10 @@ export interface BrainState {
   emotional_state: EmotionalState;
   active_concepts: Record<string, number>;
   performance: Performance;
+  // Phase 44: fact-aging audit (enabled, total_decisions, counts, config, recent).
+  fact_aging?: Record<string, unknown>;
+  // Phase 45: consolidation audit (enabled, total_decisions, counts, config, recent).
+  consolidation?: Record<string, unknown>;
 }
 
 export interface Concept {
