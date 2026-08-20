@@ -82,3 +82,9 @@ REMAINING:
 - Write docs/phase46_completion_report_bn.md (Bengali report), commit, push, deliver result message with attachment.
 - Report style: follow docs/phase44_45_completion_report_bn.md format (header with pixline/salauddin mirror/netvai, tables, quality gates section, next steps section).
 - Note: smoke_production.py against https://misty-brain.onrender.com passes normally; run if time.
+
+## Progress 2026-08-20 (after Phase 46 & 47)
+- Phase 46 pushed (b8f5f3b), CI green; report 82e8a74. Regression 989, benchmark 57/57.
+- Phase 47 DONE: apps/web/components/brain-monitor/MemoryHealthPanel.tsx created; types/index.ts BrainState got optional fact_aging/consolidation; page.tsx renders panel between BrainMonitor and CognitiveTrace; tsc + next build pass; pushed f7b2b35; CI green.
+- Next: deliver Bengali report (docs/phase47_completion_report_bn.md) — commit + push + result message.
+- Then likely Phase 48 (ONA reasoning layer) or Phase 49 (autonomous learning scheduler) — ask user next time.
