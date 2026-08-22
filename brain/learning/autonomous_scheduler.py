@@ -142,4 +142,4 @@ class AutonomousScheduler:
         )
         self._events.append(event)
         if len(self._events) > _SCHEDULER_LOG_MAX:
-            self._events = self._events[-_SCHEDULER_LOG_MAX // 2:]
+            self._events = self._events[-_SCHEDULER_LOG_MAX // 2 :]
