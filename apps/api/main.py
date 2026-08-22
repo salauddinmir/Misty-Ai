@@ -102,6 +102,7 @@ async def _restore_persistent_knowledge(brain: Brain, database: Database) -> dic
                     obj=obj,
                     confidence=float(record.get("confidence", 0.5)),
                     source=str(record.get("source", "persistent_storage")),
+                    metadata=record.get("metadata", {}),
                 )
                 restored = brain.semantic_memory.facts.get(fact)
                 if restored is not None:

@@ -666,6 +666,7 @@ class Database:
         """
         timestamp = time_module.time()
         for key, record in facts.items():
+            metadata = record.get("metadata", {})
             values = (
                 str(key),
                 str(record.get("subject", "")),
@@ -676,28 +677,30 @@ class Database:
                 float(record.get("created_at", timestamp)),
                 float(record.get("accessed_at", timestamp)),
                 timestamp,
+                json.dumps(metadata),
             )
             if DRIVER == "postgres":
                 await self.execute(
                     "INSERT INTO misty_facts "
                     "(fact_key, subject, predicate, obj, confidence, source, "
-                    "created_at, accessed_at, updated_at) "
-                    f"VALUES ({_placeholders(9)}) "
+                    "created_at, accessed_at, updated_at, metadata) "
+                    f"VALUES ({_placeholders(10)}) "
                     "ON CONFLICT (fact_key) "
                     "DO UPDATE SET subject = EXCLUDED.subject, "
                     "predicate = EXCLUDED.predicate, obj = EXCLUDED.obj, "
                     "confidence = EXCLUDED.confidence, source = EXCLUDED.source, "
                     "created_at = EXCLUDED.created_at, "
                     "accessed_at = EXCLUDED.accessed_at, "
-                    "updated_at = EXCLUDED.updated_at",
+                    "updated_at = EXCLUDED.updated_at, "
+                    "metadata = EXCLUDED.metadata",
                     values,
                 )
             else:
                 await self.execute(
                     f"{UPSERT_SQLITE} INTO misty_facts "
                     "(fact_key, subject, predicate, obj, confidence, source, "
-                    "created_at, accessed_at, updated_at) "
-                    f"VALUES ({_placeholders(9)})",
+                    "created_at, accessed_at, updated_at, metadata) "
+                    f"VALUES ({_placeholders(10)})",
                     values,
                 )
         if DRIVER != "postgres":
@@ -709,12 +712,12 @@ class Database:
         if DRIVER == "postgres":
             rows = await self.fetchall(
                 f"SELECT fact_key, subject, predicate, obj, confidence, source, "
-                f"created_at, accessed_at FROM misty_facts {limit_clause}",
+                f"created_at, accessed_at, metadata FROM misty_facts {limit_clause}",
             )
         else:
             rows = await self.fetchall(
                 f"SELECT fact_key, subject, predicate, obj, confidence, source, "
-                f"created_at, accessed_at FROM misty_facts {limit_clause}",
+                f"created_at, accessed_at, metadata FROM misty_facts {limit_clause}",
             )
         return [
             {
@@ -726,6 +729,7 @@ class Database:
                 "source": row[5],
                 "created_at": float(row[6]),
                 "accessed_at": float(row[7]),
+                "metadata": json.loads(row[8]) if row[8] else {},
             }
             for row in rows
         ]

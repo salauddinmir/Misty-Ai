@@ -43,6 +43,7 @@ class Evidence:
     content: Any
     confidence: float = 0.5
     polarity: str = "support"
+    metadata: Dict[str, Any] = field(default_factory=dict)
     evidence_id: str = field(default_factory=lambda: _id("ev"))
 
     def to_dict(self) -> Dict[str, Any]:

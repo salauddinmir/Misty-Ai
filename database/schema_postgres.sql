@@ -110,6 +110,7 @@ CREATE TABLE IF NOT EXISTS misty_facts (
     created_at DOUBLE PRECISION NOT NULL,
     accessed_at DOUBLE PRECISION NOT NULL,
     updated_at DOUBLE PRECISION NOT NULL,
+    metadata JSONB NOT NULL DEFAULT '{}',
     PRIMARY KEY (fact_key)
 );
 CREATE INDEX IF NOT EXISTS idx_facts_source ON misty_facts(source);

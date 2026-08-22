@@ -251,6 +251,10 @@ class DialogueContext:
                 return turn
         return None
 
+    def get_recent_entities(self) -> List[str]:
+        """Get entities mentioned in recent conversation turns."""
+        return self.salient_entities
+
     @property
     def last_brain_turn(self) -> TurnRecord | None:
         """The most recent brain turn."""

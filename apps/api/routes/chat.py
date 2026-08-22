@@ -11,7 +11,7 @@ import json
 import logging
 import re
 from collections.abc import AsyncIterator
-from typing import Any, Dict
+from typing import Any, Dict, List
 
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import StreamingResponse
@@ -71,6 +71,7 @@ class ChatResponse(BaseModel):
     # Phase 43: the visitor's remembered facts and episodes that grounded
     # this turn — personalized long-term memory exposed per reply.
     personal_recall: Dict[str, Any] = Field(default_factory=dict)
+    reasoning_explanation: List[str] = Field(default_factory=list)
 
 
 def _resolve_user_id(request: Request) -> str:
@@ -358,6 +359,7 @@ async def _process_chat_turn(request: Request, body: ChatRequest) -> ChatRespons
         phase_timings_ms=result.get("phase_timings_ms", {}),
         grounding=result.get("grounding", {}),
         personal_recall=result.get("personal_recall", {}),
+        reasoning_explanation=result.get("reasoning_explanation", []),
     )
 
 

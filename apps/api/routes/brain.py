@@ -71,6 +71,9 @@ class BrainStateResponse(BaseModel):
     # facts/episodes that grounded its reply.
     current_user_id: str = "anon"
     personal_recall: Dict[str, Any] | None = None
+    # Phase 56: conflict-resolution audit (total_retracted, recent_conflicts,
+    # resolution_summary). Empty until the first conflict is detected.
+    conflict_resolution: Dict[str, Any] | None = None
 
 
 class ConceptResponse(BaseModel):

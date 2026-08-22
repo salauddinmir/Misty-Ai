@@ -591,6 +591,16 @@ class Brain:
         # Phase 10: CONSOLIDATE
         run_phase(self._phase_consolidate)
 
+        # Phase 54: Explainable Reasoning
+        # Extract reasoning traces from all inferred-fact evidence gathered in this cycle.
+        reasoning_explanation = []
+        for ev in self.workspace.evidence:
+            if ev.source == "reasoning_engine" and ev.metadata.get("reasoning_trace"):
+                reasoning_explanation.extend(ev.metadata["reasoning_trace"])
+        # Deduplicate traces while preserving order
+        seen_traces = set()
+        reasoning_explanation = [x for x in reasoning_explanation if not (x in seen_traces or seen_traces.add(x))]
+
         # Update state
         processing_time = time_module.time() - start_time
         response = act_result.data.get("response", "")
@@ -710,6 +720,7 @@ class Brain:
             # Phase 43: the personal facts/episodes that grounded this
             # reply (bound to the visitor id for this cycle).
             "personal_recall": self._last_personal_recall,
+            "reasoning_explanation": reasoning_explanation,
         }
 
     def _phase_observe(self, text_input: str) -> CycleResult:
@@ -1563,10 +1574,13 @@ class Brain:
                         "source": "inferred",
                         "confidence": float(fact.confidence),
                     }
+                    # Phase 54: Explainable Reasoning
+                    # Attach reasoning trace to evidence metadata
                     evidence = Evidence(
                         source="reasoning_engine",
                         content={"kind": "inferred_fact", **record},
                         confidence=float(fact.confidence),
+                        metadata=fact.metadata.copy(),
                     )
                     self.workspace.broadcast_evidence(evidence)
                     record["evidence_id"] = evidence.evidence_id
@@ -1604,6 +1618,20 @@ class Brain:
                 facts = [fact for fact in facts if fact.predicate in relevant_predicates]
 
         if facts:
+            # Phase 55: Contextual Fact Boosting
+            # Rank facts using a temporary score that boosts recently mentioned entities.
+            recent_entities = {e.casefold() for e in self.dialogue_context.get_recent_entities()}
+
+            def fact_rank_score(f):
+                boost = 0.0
+                if f.subject.casefold() in recent_entities:
+                    boost += 0.5
+                if f.obj.casefold() in recent_entities:
+                    boost += 0.5
+                return (f.confidence + boost, f.confidence)
+
+            facts.sort(key=fact_rank_score, reverse=True)
+
             semantic_facts = []
             for fact in facts:
                 record = {
@@ -1617,6 +1645,7 @@ class Brain:
                     source=fact.source or "semantic_memory",
                     content={"kind": "semantic_fact", **record},
                     confidence=float(fact.confidence),
+                    metadata=fact.metadata.copy(),
                 )
                 self.workspace.broadcast_evidence(evidence)
                 record["evidence_id"] = evidence.evidence_id
@@ -3765,13 +3794,15 @@ class Brain:
         query_tokens = {
             token.casefold() for token in re.findall(r"[\w\u0980-\u09ff]+", f"{goal_text} {focus}") if len(token) > 2
         }
+
         scored_facts: list[tuple[int, Any]] = []
         for fact in self.semantic_memory.facts.values():
             haystack = f"{fact.subject} {fact.predicate} {fact.obj}".casefold()
             overlap = sum(1 for token in query_tokens if token in haystack)
             scored_facts.append((overlap, fact))
+
         scored_facts.sort(key=lambda item: (item[0], item[1].confidence), reverse=True)
-        selected_facts = [fact for overlap, fact in scored_facts[:max_evidence_per_tick] if overlap > 0]
+        selected_facts = [fact for score, fact in scored_facts[:max_evidence_per_tick] if score > 0]
 
         evidence_records: list[Evidence] = []
         fact_groups: dict[tuple[str, str], list[Any]] = {}
@@ -3904,6 +3935,10 @@ class Brain:
             # Phase 49: autonomous learning audit — background gap-assessment
             # and web-learning events.
             "autonomous_learning": self.autonomous_scheduler.summary(),
+            # Phase 56: conflict-resolution audit — inferred fact retractions.
+            "conflict_resolution": self.reasoning_engine.conflict_summary()
+            if hasattr(self, "reasoning_engine") and hasattr(self.reasoning_engine, "conflict_summary")
+            else None,
             # Phase 43: the visitor id this cycle is bound to and the
             # personal facts/episodes that grounded the last reply.
             "current_user_id": self.current_user_id,

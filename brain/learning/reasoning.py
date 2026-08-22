@@ -57,6 +57,8 @@ class ReasoningEngine:
         self._total_derived = 0
         self._decisions: List[DerivationDecision] = []
         self._last_derived: List[Dict[str, Any]] = []
+        self._total_conflicts_resolved = 0
+        self._last_conflicts: List[Dict[str, Any]] = []
 
     # ------------------------------------------------------------------
     # Public API
@@ -93,12 +95,51 @@ class ReasoningEngine:
             if pass_derived == 0 or len(total_derived_this_turn) >= _MAX_DERIVED_PER_TURN:
                 break
 
+        # Phase 56: Conflict Resolution & Backtracking
+        conflicts_resolved = self._resolve_conflicts()
+        self._total_conflicts_resolved += conflicts_resolved
+
         self._last_derived = total_derived_this_turn[-5:]
         return {
             "derived_this_pass": len(total_derived_this_turn),
             "rules_fired": rules_fired,
             "recursion_depth": depth + 1,
+            "conflicts_resolved": conflicts_resolved,
         }
+
+    def _resolve_conflicts(self) -> int:
+        """Identify and resolve conflicting inferred facts.
+
+        If two inferred facts have the same subject and predicate but different
+        objects, the one with lower confidence is removed (backtracked).
+        """
+        semantic = self._brain.semantic_memory
+        fact_groups: Dict[Tuple[str, str], List[Any]] = {}
+
+        # Only check inferred facts for conflict resolution
+        for fact in semantic.facts.values():
+            if fact.source == "inferred":
+                fact_groups.setdefault((fact.subject, fact.predicate), []).append(fact)
+
+        resolved_count = 0
+        for facts in fact_groups.values():
+            if len(facts) < 2:
+                continue
+
+            # Check for actual object conflict
+            objs = {f.obj for f in facts}
+            if len(objs) < 2:
+                continue
+
+            # Keep the strongest, remove the rest
+            facts.sort(key=lambda f: f.confidence, reverse=True)
+            for loser in facts[1:]:
+                key = f"{loser.subject}:{loser.predicate}:{loser.obj}"
+                semantic.remove_fact(key)
+                self._log("conflict_resolution", key, loser.confidence, False)
+                resolved_count += 1
+
+        return resolved_count
 
     def summary(self) -> Dict[str, Any]:
         """Bounded snapshot for the brain state API."""

@@ -110,6 +110,7 @@ CREATE TABLE IF NOT EXISTS misty_facts (
     created_at REAL NOT NULL,
     accessed_at REAL NOT NULL,
     updated_at REAL NOT NULL,
+    metadata TEXT DEFAULT '{}',
     PRIMARY KEY (fact_key)
 );
 CREATE INDEX IF NOT EXISTS idx_facts_source ON misty_facts(source);
