@@ -104,7 +104,9 @@ def test_low_confidence_chain_not_stored():
     assert "a:is_a:c" not in sm.facts
     # The attempt is still logged (not stored).
     summary = engine.summary()
-    assert any(not d["stored"] for d in summary["recent"]) or summary["total_derived"] >= 1
+    # In Phase 52, if a fact is too low confidence, it is filtered before logging
+    # in _store_derived.
+    assert summary["total_derived"] == 0
 
 
 def test_per_turn_derivation_budget():

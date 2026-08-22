@@ -6,7 +6,7 @@ Stores facts and concepts linked to the knowledge graph.
 
 import time
 from dataclasses import dataclass, field
-from typing import Dict, List
+from typing import Any, Dict, List
 
 
 def now_ts() -> float:
@@ -25,6 +25,7 @@ class SemanticFact:
     source: str = "user_input"
     created_at: float = field(default_factory=lambda: 0.0)
     accessed_at: float = field(default_factory=lambda: 0.0)
+    metadata: Dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass
@@ -41,6 +42,7 @@ class SemanticMemory:
         obj: str,
         confidence: float = 1.0,
         source: str = "user_input",
+        metadata: Dict[str, Any] | None = None,
     ) -> str:
         """Store a semantic fact (subject-predicate-object triple)."""
         key = f"{subject}:{predicate}:{obj}"
@@ -50,6 +52,8 @@ class SemanticMemory:
             existing.confidence = confidence
             existing.source = source
             existing.accessed_at = now
+            if metadata:
+                existing.metadata.update(metadata)
             return key
         fact = SemanticFact(
             subject=subject,
@@ -59,6 +63,7 @@ class SemanticMemory:
             source=source,
             created_at=now,
             accessed_at=now,
+            metadata=metadata or {},
         )
         self.facts[key] = fact
 

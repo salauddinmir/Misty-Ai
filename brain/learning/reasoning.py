@@ -18,7 +18,8 @@ from dataclasses import dataclass
 from typing import Any, Dict, List, Tuple
 
 _HOP_DECAY = 0.9
-_MAX_DERIVED_PER_TURN = 8
+_MAX_DERIVED_PER_TURN = 12
+_MAX_RECURSION_DEPTH = 3
 _MIN_DERIVED_CONFIDENCE = 0.25
 _MAX_CONFIDENCE = 0.95
 _DECISION_LOG_MAX = 100
@@ -62,30 +63,41 @@ class ReasoningEngine:
     # ------------------------------------------------------------------
 
     def derive(self) -> Dict[str, Any]:
-        """Run one reasoning pass for the current turn.
+        """Run recursive reasoning passes for the current turn.
 
-        Bounded: at most ``_MAX_DERIVED_PER_TURN`` new facts are derived per
-        call, each stored with source ``inferred``. Returns a short summary
-        of this pass.
+        Bounded by ``_MAX_RECURSION_DEPTH`` and ``_MAX_DERIVED_PER_TURN``.
+        Each derived fact includes a ``reasoning_trace`` in its metadata.
         """
-        derived_this_pass: List[Dict[str, Any]] = []
+        total_derived_this_turn: List[Dict[str, Any]] = []
         rules_fired: Dict[str, int] = {}
 
-        for rule_fn in (self._transitive_derive, self._inheritance_derive, self._symmetric_derive):
-            for rule, key, confidence, stored in rule_fn():
-                self._log(rule, key, confidence, stored)
-                rules_fired[rule] = rules_fired.get(rule, 0) + 1
-                if stored:
-                    derived_this_pass.append({"rule": rule, "key": key, "confidence": confidence})
-                if len(derived_this_pass) >= _MAX_DERIVED_PER_TURN:
+        for depth in range(_MAX_RECURSION_DEPTH):
+            pass_derived = 0
+            # We take a snapshot of facts at the start of each pass to include
+            # facts derived in the previous pass for recursion.
+            for rule_fn in (self._transitive_derive, self._inheritance_derive, self._symmetric_derive):
+                for rule, key, confidence, stored, _trace in rule_fn():
+                    if stored:
+                        self._log(rule, key, confidence, stored)
+                        rules_fired[rule] = rules_fired.get(rule, 0) + 1
+                        total_derived_this_turn.append(
+                            {"rule": rule, "key": key, "confidence": confidence, "depth": depth}
+                        )
+                        pass_derived += 1
+
+                    if len(total_derived_this_turn) >= _MAX_DERIVED_PER_TURN:
+                        break
+                if len(total_derived_this_turn) >= _MAX_DERIVED_PER_TURN:
                     break
-            if len(derived_this_pass) >= _MAX_DERIVED_PER_TURN:
+
+            if pass_derived == 0 or len(total_derived_this_turn) >= _MAX_DERIVED_PER_TURN:
                 break
 
-        self._last_derived = derived_this_pass[-5:]
+        self._last_derived = total_derived_this_turn[-5:]
         return {
-            "derived_this_pass": len(derived_this_pass),
+            "derived_this_pass": len(total_derived_this_turn),
             "rules_fired": rules_fired,
+            "recursion_depth": depth + 1,
         }
 
     def summary(self) -> Dict[str, Any]:
@@ -133,6 +145,7 @@ class ReasoningEngine:
         predicate: str,
         obj: str,
         confidence: float,
+        trace: List[str] | None = None,
     ) -> bool:
         semantic = self._brain.semantic_memory
         key = f"{subject}:{predicate}:{obj}"
@@ -140,7 +153,9 @@ class ReasoningEngine:
             return False
         if confidence < _MIN_DERIVED_CONFIDENCE:
             return False
-        semantic.store_fact(subject, predicate, obj, confidence, source="inferred")
+
+        metadata = {"reasoning_trace": trace or []}
+        semantic.store_fact(subject, predicate, obj, confidence, source="inferred", metadata=metadata)
         return True
 
     def _index_by_subject(self) -> Dict[str, List[Tuple[str, str, float]]]:
@@ -153,9 +168,9 @@ class ReasoningEngine:
     # Rule implementations
     # ------------------------------------------------------------------
 
-    def _transitive_derive(self) -> List[Tuple[str, str, float, bool]]:
+    def _transitive_derive(self) -> List[Tuple[str, str, float, bool, List[str]]]:
         """(A p B) and (B p C) => (A p C) for transitive predicates."""
-        results: List[Tuple[str, str, float, bool]] = []
+        results: List[Tuple[str, str, float, bool, List[str]]] = []
         by_subject = self._index_by_subject()
         for subject, pairs in by_subject.items():
             for predicate, mid, c1 in pairs:
@@ -168,14 +183,15 @@ class ReasoningEngine:
                     if key in self._brain.semantic_memory.facts:
                         continue
                     confidence = min(c1, c2) * _HOP_DECAY
-                    stored = self._store_derived(subject, predicate, obj, confidence)
-                    results.append(("transitivity", key, confidence, stored))
+                    trace = [f"{subject} {predicate} {mid}", f"{mid} {predicate} {obj}"]
+                    stored = self._store_derived(subject, predicate, obj, confidence, trace=trace)
+                    results.append(("transitivity", key, confidence, stored, trace))
         return results
 
-    def _inheritance_derive(self) -> List[Tuple[str, str, float, bool]]:
+    def _inheritance_derive(self) -> List[Tuple[str, str, float, bool, List[str]]]:
         """If A -(is_a/type_of)-> B in the graph and B has a fact
         (B p C), then A likely inherits (A p C)."""
-        results: List[Tuple[str, str, float, bool]] = []
+        results: List[Tuple[str, str, float, bool, List[str]]] = []
         graph = self._brain.concept_graph
         by_subject = self._index_by_subject()
         seen: Dict[str, None] = {}
@@ -200,26 +216,20 @@ class ReasoningEngine:
                 child_name = child_concept.name
                 for predicate, obj, c2 in by_subject.get(subject, []):
                     if predicate in _CATEGORY_RELATIONS:
-                        # Category membership chains are already handled by
-                        # the transitivity rule with a per-hop decay; also
-                        # inheriting category labels would produce wrong
-                        # labels (e.g. "Misty is_a Field of computer
-                        # science" from "AI is_a Field of computer
-                        # science"), so only descriptive properties are
-                        # inherited here.
                         continue
                     key = f"{child_name}:{predicate}:{obj}"
                     if key in self._brain.semantic_memory.facts or key in seen:
                         continue
                     seen[key] = None
                     confidence = min(c2, edge_conf) * _HOP_DECAY
-                    stored = self._store_derived(child_name, predicate, obj, confidence)
-                    results.append(("inheritance", key, confidence, stored))
+                    trace = [f"{child_name} is a {subject}", f"{subject} {predicate} {obj}"]
+                    stored = self._store_derived(child_name, predicate, obj, confidence, trace=trace)
+                    results.append(("inheritance", key, confidence, stored, trace))
         return results
 
-    def _symmetric_derive(self) -> List[Tuple[str, str, float, bool]]:
+    def _symmetric_derive(self) -> List[Tuple[str, str, float, bool, List[str]]]:
         """(A p B) => (B p' A) for symmetric predicates."""
-        results: List[Tuple[str, str, float, bool]] = []
+        results: List[Tuple[str, str, float, bool, List[str]]] = []
         for subject, predicate, obj, confidence in self._facts():
             derived_predicate = _SYMMETRIC_PREDICATES.get(predicate)
             if derived_predicate is None:
@@ -227,6 +237,7 @@ class ReasoningEngine:
             key = f"{obj}:{derived_predicate}:{subject}"
             if key in self._brain.semantic_memory.facts:
                 continue
-            stored = self._store_derived(obj, derived_predicate, subject, confidence)
-            results.append(("symmetric", key, confidence, stored))
+            trace = [f"{subject} {predicate} {obj}"]
+            stored = self._store_derived(obj, derived_predicate, subject, confidence, trace=trace)
+            results.append(("symmetric", key, confidence, stored, trace))
         return results
