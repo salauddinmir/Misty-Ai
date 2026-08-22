@@ -48,10 +48,10 @@ from brain.knowledge.training_literature import register_literature_curriculum
 from brain.knowledge.training_mathematics import register_mathematics_curriculum
 from brain.knowledge.training_physics import register_physics_curriculum
 from brain.knowledge.web_learning import WebSearchLearner
+from brain.learning.autonomous_scheduler import AutonomousScheduler
 from brain.learning.consolidation import MemoryConsolidator
 from brain.learning.consolidation_sweep import ConsolidationEngine
 from brain.learning.curiosity import CuriosityExplorer
-from brain.learning.autonomous_scheduler import AutonomousScheduler
 from brain.learning.fact_aging import FactAger
 from brain.learning.induction import EvidenceGatedInducer
 from brain.learning.learning_roadmap import LearningPlanner
@@ -1573,7 +1573,6 @@ class Brain:
                     recalled["evidence_ids"].append(evidence.evidence_id)
                     inferred_records.append(record)
                 recalled["inferred_facts"] = inferred_records
-
 
         self._normalize_what_target_for_recall(parse_result)
         target_name = parse_result.query.get("target", "")

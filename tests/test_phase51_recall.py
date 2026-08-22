@@ -3,7 +3,6 @@ Phase 51 Tests: Inference-Supported Recall.
 """
 
 from brain.core.brain import Brain
-from brain.memory.semantic import SemanticFact
 from brain.nlu.parser import IntentType, ParseResult
 
 
