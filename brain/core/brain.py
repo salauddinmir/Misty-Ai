@@ -51,6 +51,7 @@ from brain.knowledge.web_learning import WebSearchLearner
 from brain.learning.consolidation import MemoryConsolidator
 from brain.learning.consolidation_sweep import ConsolidationEngine
 from brain.learning.curiosity import CuriosityExplorer
+from brain.learning.autonomous_scheduler import AutonomousScheduler
 from brain.learning.fact_aging import FactAger
 from brain.learning.induction import EvidenceGatedInducer
 from brain.learning.learning_roadmap import LearningPlanner
@@ -230,6 +231,9 @@ class Brain:
         # cleanup of quarantine losers and duplicate merge of web-learned
         # claims, all with an inspectable audit log.
         self.consolidation_engine = ConsolidationEngine(self)
+        # Phase 49: autonomous learning scheduler — orchestrates background
+        # gap-assessment and web-learning.
+        self.autonomous_scheduler = AutonomousScheduler(self)
         self._learning_quarantine: List[Dict[str, Any]] = []
 
         # Emotion
@@ -3696,6 +3700,9 @@ class Brain:
         and stores a structured audit snapshot for the next user-facing cycle.
         No unsupported fact is promoted automatically.
         """
+        # Phase 49: run autonomous learning step (assessment, planning, web-learn)
+        await self.autonomous_scheduler.tick()
+
         started_at = time_module.monotonic()
         self._tick_index = getattr(self, "_tick_index", 0) + 1
         # Phase 44: one bounded aging sweep per reflection tick — web-learned
@@ -3867,6 +3874,9 @@ class Brain:
             # Phase 48: connection-based reasoning audit — derived facts
             # (transitivity, inheritance, symmetric) produced per turn.
             "reasoning": self.reasoning_engine.summary(),
+            # Phase 49: autonomous learning audit — background gap-assessment
+            # and web-learning events.
+            "autonomous_learning": self.autonomous_scheduler.summary(),
             # Phase 43: the visitor id this cycle is bound to and the
             # personal facts/episodes that grounded the last reply.
             "current_user_id": self.current_user_id,

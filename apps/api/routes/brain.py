@@ -60,6 +60,9 @@ class BrainStateResponse(BaseModel):
     # derived facts, per-rule firing counts). Empty until the first turn
     # produces a derived conclusion.
     reasoning: Dict[str, Any] | None = None
+    # Phase 49: autonomous learning audit — background gap-assessment
+    # and web-learning events.
+    autonomous_learning: Dict[str, Any] | None = None
     # Phase 41: self-correction audit (challenges_received,
     # corrections_accepted, last_correction event). Empty until the first
     # visitor challenges one of the brain's answers.
