@@ -103,6 +103,17 @@ class GraphResponse(BaseModel):
     num_edges: int
 
 
+class HistoryResponse(BaseModel):
+    """Time-series history of brain cognitive events."""
+
+    audit_kind: str
+    fact_key: str
+    action: str
+    confidence: float
+    detail: str
+    created_at: float
+
+
 @router.get("/state", response_model=BrainStateResponse)
 async def get_brain_state(request: Request) -> BrainStateResponse:
     """Get the current brain state snapshot."""
@@ -169,3 +180,11 @@ async def get_graph(request: Request) -> GraphResponse:
         num_nodes=len(nodes),
         num_edges=len(edges),
     )
+
+
+@router.get("/history", response_model=List[HistoryResponse])
+async def get_brain_history(request: Request, kind: str | None = None, limit: int = 100) -> List[HistoryResponse]:
+    """Get the time-series history of cognitive audit events."""
+    database = request.app.state.database
+    rows = await database.load_audit_rows(kind=kind, limit=limit)
+    return [HistoryResponse(**row) for row in rows]

@@ -1,6 +1,7 @@
 "use client";
 
 import { BrainState } from "@/types";
+import { MemoryHistoryChart } from "./MemoryHistoryChart";
 
 interface FactAgingSummary {
   enabled?: boolean;
@@ -150,6 +151,9 @@ export function MemoryHealthPanel({ brainState }: MemoryHealthPanelProps) {
         </h2>
         <div className="flex-1 h-px bg-neural-border" />
       </div>
+
+      {/* Memory History Chart */}
+      <MemoryHistoryChart />
 
       {/* Fact aging card */}
       <div className="bg-neural-surface border border-neural-border rounded-lg p-3 flex flex-col gap-3">
