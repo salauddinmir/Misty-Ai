@@ -1547,6 +1547,34 @@ class Brain:
         if not parse_result:
             return CycleResult(phase=CognitivePhase.RECALL, data=recalled, success=True)
 
+        # Phase 51: inference-supported recall — if the query target has
+        # inferred facts (derived via ONA reasoning), broadcast them as
+        # evidence so the response can be grounded in logical deductions.
+        target_name = parse_result.query.get("target", "")
+        if target_name:
+            inferred_facts = self.semantic_memory.query(subject=target_name, source="inferred")
+            if inferred_facts:
+                inferred_records = []
+                for fact in inferred_facts:
+                    record = {
+                        "subject": fact.subject,
+                        "predicate": fact.predicate,
+                        "obj": fact.obj,
+                        "source": "inferred",
+                        "confidence": float(fact.confidence),
+                    }
+                    evidence = Evidence(
+                        source="reasoning_engine",
+                        content={"kind": "inferred_fact", **record},
+                        confidence=float(fact.confidence),
+                    )
+                    self.workspace.broadcast_evidence(evidence)
+                    record["evidence_id"] = evidence.evidence_id
+                    recalled["evidence_ids"].append(evidence.evidence_id)
+                    inferred_records.append(record)
+                recalled["inferred_facts"] = inferred_records
+
+
         self._normalize_what_target_for_recall(parse_result)
         target_name = parse_result.query.get("target", "")
         relation = parse_result.query.get("relation", "")

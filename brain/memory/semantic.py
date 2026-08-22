@@ -75,6 +75,7 @@ class SemanticMemory:
         subject: str | None = None,
         predicate: str | None = None,
         obj: str | None = None,
+        source: str | None = None,
     ) -> List[SemanticFact]:
         """Query semantic memory with optional filters."""
         results = []
@@ -84,6 +85,8 @@ class SemanticMemory:
             if predicate is not None and fact.predicate != predicate:
                 continue
             if obj is not None and fact.obj != obj:
+                continue
+            if source is not None and fact.source != source:
                 continue
             results.append(fact)
         return results
