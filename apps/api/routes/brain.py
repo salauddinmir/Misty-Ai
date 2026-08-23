@@ -74,6 +74,8 @@ class BrainStateResponse(BaseModel):
     # Phase 56: conflict-resolution audit (total_retracted, recent_conflicts,
     # resolution_summary). Empty until the first conflict is detected.
     conflict_resolution: Dict[str, Any] | None = None
+    # Phase 57: LLM Integration Status (enabled, model, provider).
+    llm_status: Dict[str, Any] | None = None
 
 
 class ConceptResponse(BaseModel):

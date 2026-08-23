@@ -7,6 +7,7 @@ entry point for the cognitive system.
 """
 
 import copy
+import logging
 import re
 import time as time_module
 from typing import Any, Dict, List, Sequence
@@ -26,6 +27,7 @@ from brain.cognition import (
     SelfModel,
     ThoughtTraceSummary,
 )
+from brain.cognition.llm import LLMResponseGenerator
 from brain.core.cycle import CognitiveCycle, CognitivePhase, CycleResult
 from brain.core.state import BrainState
 from brain.dialogue.context import DialogueContext
@@ -81,6 +83,9 @@ from brain.world import WorldModel
 
 # Phase 38: pronouns excluded from concept activation — activating a
 # generic pronoun would falsely light up unrelated concepts.
+logger = logging.getLogger(__name__)
+
+
 _ACT_PRONOUNS = frozenset(
     {
         "সে",
@@ -252,6 +257,9 @@ class Brain:
 
         # State
         self.state = BrainState()
+
+        # Phase 2: LLM Integration
+        self.llm_generator = LLMResponseGenerator(self)
 
         # Global cognitive workspace: a bounded, inspectable blackboard shared
         # by perception, memory, reasoning, appraisal, and language phases.
@@ -605,6 +613,36 @@ class Brain:
         processing_time = time_module.time() - start_time
         response = act_result.data.get("response", "")
 
+        # Phase 2: LLM-driven response generation (if enabled and applicable)
+        llm_response = None
+        if self.llm_generator.client.is_available and source == "text":
+            # Context data for grounding
+            context_data = {
+                "interpret_result": interpret_result.data,
+                "recall_result": recall_result.data,
+                "associate_result": associate_result.data,
+                "reason_result": reason_result.data,
+                "plan_result": plan_result.data,
+                "act_result": act_result.data,
+                "personal_recall": self._last_personal_recall,
+            }
+
+            # Run LLM generation in a background-like awaitable context
+            # (Note: In a real production sync environment, this would be awaited)
+            import asyncio
+
+            try:
+                # We use a helper to run the async LLM call
+                loop = asyncio.get_event_loop()
+                llm_result = loop.run_until_complete(self.llm_generator.generate_response(text_input, context_data))
+                if llm_result.get("success"):
+                    llm_response = llm_result["response"]
+                    # If LLM generated a response, we use it, but keep the
+                    # deterministic response as fallback or for grounding metadata.
+                    response = llm_response
+            except Exception as e:
+                logger.error(f"LLM Response generation failed: {e}")
+
         # Phase 41: self-correction — if the new input challenges the
         # previous answer, re-check the prior claim against the brain's
         # own stored knowledge before replying, and prepend the auditor's
@@ -721,6 +759,11 @@ class Brain:
             # reply (bound to the visitor id for this cycle).
             "personal_recall": self._last_personal_recall,
             "reasoning_explanation": reasoning_explanation,
+            "llm_grounding": {
+                "enabled": self.llm_generator.client.is_available,
+                "model": self.llm_generator.client.model,
+                "grounding_summary": self.llm_generator._format_grounding_data(context_data) if llm_response else None,
+            },
         }
 
     def _phase_observe(self, text_input: str) -> CycleResult:
@@ -3950,6 +3993,12 @@ class Brain:
                 else None
             ),
             "goal_stats": self.goal_manager.stats(),
+            # Phase 57: LLM Integration Status
+            "llm_status": {
+                "enabled": self.llm_generator.client.is_available,
+                "model": self.llm_generator.client.model,
+                "provider": "NVIDIA NIM",
+            },
         }
         # Add neural simulation state if active
         if self.use_neural_sim and self._neural_sim_engine is not None:

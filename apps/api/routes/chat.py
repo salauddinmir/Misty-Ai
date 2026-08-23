@@ -72,6 +72,7 @@ class ChatResponse(BaseModel):
     # this turn — personalized long-term memory exposed per reply.
     personal_recall: Dict[str, Any] = Field(default_factory=dict)
     reasoning_explanation: List[str] = Field(default_factory=list)
+    llm_grounding: Dict[str, Any] = Field(default_factory=dict)
 
 
 def _resolve_user_id(request: Request) -> str:
@@ -360,6 +361,7 @@ async def _process_chat_turn(request: Request, body: ChatRequest) -> ChatRespons
         grounding=result.get("grounding", {}),
         personal_recall=result.get("personal_recall", {}),
         reasoning_explanation=result.get("reasoning_explanation", []),
+        llm_grounding=result.get("llm_grounding", {}),
     )
 
 

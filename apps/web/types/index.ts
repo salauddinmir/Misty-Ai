@@ -30,6 +30,12 @@ export interface BrainState {
   fact_aging?: Record<string, unknown>;
   // Phase 45: consolidation audit (enabled, total_decisions, counts, config, recent).
   consolidation?: Record<string, unknown>;
+  // Phase 57: LLM status
+  llm_status?: {
+    enabled: boolean;
+    model: string;
+    provider: string;
+  };
 }
 
 export interface Concept {
@@ -100,6 +106,7 @@ export interface ChatResponse {
   self_model?: SelfModel;
   grounding?: Grounding;
   phase_timings_ms?: Record<string, number>;
+  reasoning_trace?: string[];
 }
 
 export type BrainEventType =

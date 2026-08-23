@@ -143,6 +143,34 @@ export function BrainMonitor({ brainState }: BrainMonitorProps) {
         />
       </div>
 
+      {/* LLM Status */}
+      <div className="bg-neural-surface border border-neural-border rounded-lg p-3">
+        <div className="flex items-center justify-between mb-1">
+          <div className="flex items-center gap-2">
+            <span className="text-sm">🤖</span>
+            <span className="text-xs text-neural-muted uppercase tracking-wide">
+              LLM Cognitive Engine
+            </span>
+          </div>
+          <div className="flex items-center gap-1.5">
+            <div className={`w-2 h-2 rounded-full ${state.llm_status?.enabled ? 'bg-neural-success shadow-[0_0_8px_rgba(34,197,94,0.6)]' : 'bg-neural-muted'}`} />
+            <span className={`text-[10px] font-bold uppercase ${state.llm_status?.enabled ? 'text-neural-success' : 'text-neural-muted'}`}>
+              {state.llm_status?.enabled ? 'Connected' : 'Disconnected'}
+            </span>
+          </div>
+        </div>
+        <div className="flex flex-col gap-0.5">
+          <span className="text-sm text-slate-300 font-medium">
+            {state.llm_status?.enabled ? state.llm_status.model : "Hybrid Mode (Graph Only)"}
+          </span>
+          {state.llm_status?.enabled && (
+            <span className="text-[10px] text-neural-muted uppercase tracking-wider">
+              Powered by {state.llm_status.provider}
+            </span>
+          )}
+        </div>
+      </div>
+
       {/* Current Goal */}
       <div className="bg-neural-surface border border-neural-border rounded-lg p-3">
         <div className="flex items-center gap-2 mb-1">
