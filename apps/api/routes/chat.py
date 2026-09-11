@@ -82,7 +82,6 @@ def _resolve_user_id(request: Request) -> str:
     return resolve_user_id(request)
 
 
-
 def _record_user_turn(brain: Any, user_id: str, message: str, result: Dict[str, Any]) -> None:
     """Remember one turn for ``user_id`` — never let memory failures hurt the turn."""
     try:
