@@ -17,6 +17,8 @@ from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field, field_validator
 
+from apps.api.auth import resolve_user_id
+
 router = APIRouter()
 logger = logging.getLogger(__name__)
 
@@ -76,15 +78,9 @@ class ChatResponse(BaseModel):
 
 
 def _resolve_user_id(request: Request) -> str:
-    """Determine the visitor id for Phase 40 personalization.
+    """Determine the trusted visitor id for Phase 40 personalization."""
+    return resolve_user_id(request)
 
-    Clients can set ``X-Misty-User-Id`` (a stable anonymous id the client
-    generates and keeps per device) to make Misty remember them across
-    conversations; otherwise turns are folded into the shared ``anon``
-    bucket so older clients see no behavior change.
-    """
-    header = request.headers.get("x-misty-user-id", "").strip()
-    return header or "anon"
 
 
 def _record_user_turn(brain: Any, user_id: str, message: str, result: Dict[str, Any]) -> None:

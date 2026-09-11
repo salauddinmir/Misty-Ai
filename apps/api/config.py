@@ -42,6 +42,8 @@ class APISettings:
     llm_timeout_seconds: float
     llm_max_retries: int
     autonomy_enabled: bool
+    auth_required: bool
+    session_secret: str
 
     @classmethod
     def from_environment(cls) -> APISettings:
@@ -60,6 +62,8 @@ class APISettings:
             llm_timeout_seconds=_positive_float(os.getenv("MISTY_LLM_TIMEOUT_SECONDS", "30"), 30.0),
             llm_max_retries=_positive_int(os.getenv("MISTY_LLM_MAX_RETRIES", "1"), 1),
             autonomy_enabled=os.getenv("MISTY_AUTONOMY_ENABLED", "true").casefold() == "true",
+            auth_required=os.getenv("MISTY_AUTH_REQUIRED", "false").casefold() == "true",
+            session_secret=os.getenv("MISTY_SESSION_SECRET", "").strip(),
         )
 
 
