@@ -47,3 +47,25 @@ def test_health_response_contains_security_headers():
     assert response.headers["x-frame-options"] == "DENY"
     assert response.headers["referrer-policy"] == "strict-origin-when-cross-origin"
     assert response.headers["permissions-policy"] == "camera=(), microphone=(), geolocation=()"
+
+
+async def _read_schema_migrations(db):
+    rows = await db.fetchall("SELECT version, description FROM misty_schema_migrations ORDER BY version")
+    return [(row[0], row[1]) for row in rows]
+
+
+def test_sqlite_records_baseline_schema_version(tmp_path):
+    import asyncio
+
+    from apps.api.database import Database
+
+    db = Database(db_path=str(tmp_path / "schema-version.db"))
+    asyncio.run(db.initialize())
+    try:
+        rows = asyncio.run(_read_schema_migrations(db))
+        assert rows == [(1, "baseline schema with cognitive memory and audit persistence")]
+        asyncio.run(db.initialize())
+        rows_after_reinitialize = asyncio.run(_read_schema_migrations(db))
+        assert rows_after_reinitialize == rows
+    finally:
+        asyncio.run(db.close())

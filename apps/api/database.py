@@ -44,6 +44,8 @@ UPSERT_SQLITE = "INSERT OR REPLACE"
 UPSERT_POSTGRES = "INSERT"
 # Phase 46: maximum audit log rows kept in misty_audit_log.
 _AUDIT_MAX_ROWS: int = 4000
+_SCHEMA_BASELINE_VERSION = 1
+_SCHEMA_BASELINE_DESCRIPTION = "baseline schema with cognitive memory and audit persistence"
 
 
 def _db_url() -> str:
@@ -86,8 +88,26 @@ class Database:
 
         self._lock = asyncio.Lock()
 
+    async def _record_schema_baseline(self) -> None:
+        """Record the idempotent baseline schema version after initialization."""
+        applied_at = time_module.time()
+        if DRIVER == "postgres":
+            await self._connection.execute(
+                "INSERT INTO misty_schema_migrations (version, applied_at, description) "
+                "VALUES ($1, $2, $3) ON CONFLICT (version) DO NOTHING",
+                _SCHEMA_BASELINE_VERSION,
+                applied_at,
+                _SCHEMA_BASELINE_DESCRIPTION,
+            )
+        else:
+            await self._connection.execute(
+                "INSERT OR IGNORE INTO misty_schema_migrations (version, applied_at, description) VALUES (?, ?, ?)",
+                (_SCHEMA_BASELINE_VERSION, applied_at, _SCHEMA_BASELINE_DESCRIPTION),
+            )
+            await self._connection.commit()
+
     async def initialize(self) -> None:
-        """Connect and apply the appropriate schema."""
+        """Connect, apply the schema, and record its baseline version."""
         if DRIVER == "postgres":
             # statement_cache_size=0 is required when connecting through Supabase's
             # PgBouncer transaction-mode pool (port 6543), which cannot share
@@ -96,6 +116,7 @@ class Database:
             schema_path = Path(SCHEMA_POSTGRES)
             if schema_path.exists():
                 await self._connection.execute(schema_path.read_text(encoding="utf-8"))
+            await self._record_schema_baseline()
         else:
             db_dir = os.path.dirname(self.db_path)
             if db_dir:
@@ -106,6 +127,7 @@ class Database:
             if schema_path.exists():
                 await self._connection.executescript(schema_path.read_text(encoding="utf-8"))
                 await self._connection.commit()
+            await self._record_schema_baseline()
 
     async def close(self) -> None:
         """Close the active connection."""

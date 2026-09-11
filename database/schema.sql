@@ -128,3 +128,10 @@ CREATE TABLE IF NOT EXISTS misty_audit_log (
 );
 CREATE INDEX IF NOT EXISTS idx_audit_kind ON misty_audit_log(audit_kind);
 CREATE INDEX IF NOT EXISTS idx_audit_created ON misty_audit_log(created_at);
+
+-- Schema migration ledger. Version 1 represents the baseline schema above.
+CREATE TABLE IF NOT EXISTS misty_schema_migrations (
+    version INTEGER PRIMARY KEY,
+    applied_at REAL NOT NULL,
+    description TEXT NOT NULL DEFAULT ''
+);
