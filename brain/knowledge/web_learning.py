@@ -325,6 +325,11 @@ class WebSearchLearner:
                     obj=candidate.obj,
                     confidence=candidate.confidence,
                     source="web_learning",
+                    metadata={
+                        "source_ref": candidate.source_ref,
+                        "observations": candidate.observations,
+                        "verification": "corroborated_external_evidence",
+                    },
                 )
                 result.facts_learned.append(candidate)
             else:
