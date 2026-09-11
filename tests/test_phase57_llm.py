@@ -81,3 +81,45 @@ def test_llm_messages_use_bounded_dialogue_snapshot() -> None:
     assert messages[-2]["role"] == "assistant"
     assert messages[-2]["content"] == "স্বাগতম রাহুল"
     assert messages[-1] == {"role": "user", "content": "আজ কেমন আছ?"}
+
+
+@pytest.mark.asyncio
+async def test_nvidia_client_rejects_malformed_success_payload(monkeypatch):
+    class FakeResponse:
+        status_code = 200
+        text = "{}"
+
+        @staticmethod
+        def json():
+            return {"choices": []}
+
+    class FakeClient:
+        def __init__(self, **kwargs):
+            self.calls = 0
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *args):
+            return None
+
+        async def post(self, *args, **kwargs):
+            self.calls += 1
+            return FakeResponse()
+
+    monkeypatch.setenv("NVIDIA_API_KEY", "test_key")
+    monkeypatch.setenv("MISTY_LLM_MAX_RETRIES", "0")
+    monkeypatch.setattr("brain.cognition.llm.httpx.AsyncClient", FakeClient)
+
+    result = await NVIDIAClient().chat_completion([{"role": "user", "content": "hello"}])
+    assert result["success"] is False
+    assert result["error"] == "INVALID_PROVIDER_RESPONSE"
+
+
+def test_nvidia_client_reads_runtime_limits(monkeypatch):
+    monkeypatch.setenv("NVIDIA_API_KEY", "test_key")
+    monkeypatch.setenv("MISTY_LLM_TIMEOUT_SECONDS", "12")
+    monkeypatch.setenv("MISTY_LLM_MAX_RETRIES", "3")
+    client = NVIDIAClient()
+    assert client.timeout == 12.0
+    assert client.max_retries == 3

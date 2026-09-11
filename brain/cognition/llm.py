@@ -1,5 +1,6 @@
 """NVIDIA NIM (Nemotron-3 Ultra) LLM Integration for MISTY."""
 
+import asyncio
 import logging
 import os
 import time
@@ -22,7 +23,8 @@ class NVIDIAClient:
         self.api_key = api_key or os.environ.get("NVIDIA_API_KEY")
         self.base_url = base_url
         self.model = model
-        self.timeout = 60.0
+        self.timeout = max(1.0, float(os.getenv("MISTY_LLM_TIMEOUT_SECONDS", "30")))
+        self.max_retries = max(0, int(os.getenv("MISTY_LLM_MAX_RETRIES", "1")))
 
     @property
     def is_available(self) -> bool:
@@ -54,29 +56,56 @@ class NVIDIAClient:
         }
 
         async with httpx.AsyncClient(timeout=self.timeout) as client:
-            try:
-                start_time = time.monotonic()
-                response = await client.post(
-                    f"{self.base_url}/chat/completions",
-                    headers=headers,
-                    json=payload,
-                )
-                elapsed = time.monotonic() - start_time
+            start_time = time.monotonic()
+            for attempt in range(self.max_retries + 1):
+                try:
+                    response = await client.post(
+                        f"{self.base_url}/chat/completions",
+                        headers=headers,
+                        json=payload,
+                    )
+                    elapsed = time.monotonic() - start_time
 
-                if response.status_code != 200:
-                    logger.error(f"NVIDIA API Error {response.status_code}: {response.text}")
-                    return {"error": f"API Error {response.status_code}", "detail": response.text, "success": False}
+                    if response.status_code == 200:
+                        try:
+                            data = response.json()
+                            content = data["choices"][0]["message"]["content"]
+                        except (KeyError, IndexError, TypeError, ValueError) as exc:
+                            logger.error("NVIDIA API returned an invalid completion payload: %s", exc)
+                            return {
+                                "error": "INVALID_PROVIDER_RESPONSE",
+                                "success": False,
+                                "elapsed_sec": elapsed,
+                            }
+                        return {
+                            "response": str(content),
+                            "usage": data.get("usage", {}),
+                            "elapsed_sec": elapsed,
+                            "success": True,
+                        }
 
-                data = response.json()
-                return {
-                    "response": data["choices"][0]["message"]["content"],
-                    "usage": data.get("usage", {}),
-                    "elapsed_sec": elapsed,
-                    "success": True,
-                }
-            except Exception as e:
-                logger.exception("Failed to call NVIDIA NIM API")
-                return {"error": str(e), "success": False}
+                    transient = response.status_code == 429 or response.status_code >= 500
+                    if transient and attempt < self.max_retries:
+                        await asyncio.sleep(min(2**attempt, 4))
+                        continue
+                    logger.error("NVIDIA API returned status %s", response.status_code)
+                    return {
+                        "error": f"API Error {response.status_code}",
+                        "detail": response.text[:1000],
+                        "success": False,
+                        "elapsed_sec": elapsed,
+                    }
+                except (httpx.TimeoutException, httpx.NetworkError) as exc:
+                    if attempt < self.max_retries:
+                        await asyncio.sleep(min(2**attempt, 4))
+                        continue
+                    logger.warning("NVIDIA API request failed after retries: %s", exc)
+                    return {"error": "LLM_PROVIDER_UNAVAILABLE", "success": False}
+                except Exception:
+                    logger.exception("Failed to call NVIDIA NIM API")
+                    return {"error": "LLM_PROVIDER_ERROR", "success": False}
+
+        return {"error": "LLM_PROVIDER_UNAVAILABLE", "success": False}
 
 
 class LLMResponseGenerator:
