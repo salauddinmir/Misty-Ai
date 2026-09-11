@@ -173,9 +173,16 @@ class LLMResponseGenerator:
 
         messages = [{"role": "system", "content": final_system_prompt}]
 
-        # Add dialogue history if available
-        history = self.brain.dialogue_context.get_history()
-        messages.extend({"role": turn["role"], "content": turn["content"]} for turn in history[-5:])
+        # Add bounded dialogue history if available. The internal context uses
+        # ``brain`` for assistant turns; Nemotron expects ``assistant``.
+        history = self.brain.dialogue_context.get_context_snapshot(max_turns=5)
+        messages.extend(
+            {
+                "role": "assistant" if turn["role"] == "brain" else "user",
+                "content": turn["text"],
+            }
+            for turn in history
+        )
 
         # Add current input
         messages.append({"role": "user", "content": text_input})

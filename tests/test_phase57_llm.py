@@ -66,3 +66,18 @@ def test_should_search_heuristic():
         "act_result": {"confidence": 0.5},
     }
     assert generator._should_search("what is a pulsar?", context_no_facts) is True
+
+
+def test_llm_messages_use_bounded_dialogue_snapshot() -> None:
+    brain = Brain()
+    brain.dialogue_context.add_turn("আমি রাহুল", role="user")
+    brain.dialogue_context.add_turn("স্বাগতম রাহুল", role="brain")
+    generator = LLMResponseGenerator(brain)
+
+    messages = generator._build_messages("আজ কেমন আছ?", {})
+
+    assert messages[-3]["role"] == "user"
+    assert messages[-3]["content"] == "আমি রাহুল"
+    assert messages[-2]["role"] == "assistant"
+    assert messages[-2]["content"] == "স্বাগতম রাহুল"
+    assert messages[-1] == {"role": "user", "content": "আজ কেমন আছ?"}
