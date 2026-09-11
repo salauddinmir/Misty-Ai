@@ -7,31 +7,32 @@ import { sendMessage } from "@/lib/api";
 
 interface ChatInterfaceProps {
   onBrainStateUpdate: (state: BrainState) => void;
-  /** Lifted state so the avatar panel can derive expressions from messages. */
   onMessagesChange?: (messages: ChatMessageType[]) => void;
   onProcessingChange?: (processing: boolean) => void;
 }
 
-export function ChatInterface({
-  onBrainStateUpdate,
-  onMessagesChange,
-  onProcessingChange,
-}: ChatInterfaceProps) {
+const STARTERS = [
+  { title: "Understand a concept", prompt: "Explain a complex idea simply in Bengali and English." },
+  { title: "Explore the web", prompt: "What are the latest important developments in artificial intelligence?" },
+  { title: "Think with MISTY", prompt: "Help me reason through a difficult decision step by step." },
+  { title: "Learn together", prompt: "Teach me an interesting fact and explain why it matters." },
+];
+
+export function ChatInterface({ onBrainStateUpdate, onMessagesChange, onProcessingChange }: ChatInterfaceProps) {
   const [messages, setMessages] = useState<ChatMessageType[]>([]);
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [loadingStartedAt, setLoadingStartedAt] = useState<number | null>(null);
   const [loadingSeconds, setLoadingSeconds] = useState(0);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => {
     if (loadingStartedAt === null) {
       setLoadingSeconds(0);
       return;
     }
-    const timer = window.setInterval(() => {
-      setLoadingSeconds((Date.now() - loadingStartedAt) / 1000);
-    }, 100);
+    const timer = window.setInterval(() => setLoadingSeconds((Date.now() - loadingStartedAt) / 1000), 100);
     return () => window.clearInterval(timer);
   }, [loadingStartedAt]);
 
@@ -39,34 +40,27 @@ export function ChatInterface({
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, []);
 
-  useEffect(() => {
-    scrollToBottom();
-  }, [messages, scrollToBottom]);
+  useEffect(() => scrollToBottom(), [messages, scrollToBottom]);
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!input.trim() || isLoading) return;
+  const updateMessages = (next: ChatMessageType[]) => {
+    setMessages(next);
+    onMessagesChange?.(next);
+  };
 
-    const userMessage: ChatMessageType = {
-      id: `msg-${Date.now()}`,
-      role: "user",
-      content: input.trim(),
-      timestamp: Date.now() / 1000,
-    };
+  const handleSubmit = async (e?: React.FormEvent) => {
+    e?.preventDefault();
+    const content = input.trim();
+    if (!content || isLoading) return;
 
-    setMessages((prev) => {
-      const next = [...prev, userMessage];
-      onMessagesChange?.(next);
-      return next;
-    });
+    const userMessage: ChatMessageType = { id: `msg-${Date.now()}`, role: "user", content, timestamp: Date.now() / 1000 };
+    updateMessages([...messages, userMessage]);
     setInput("");
     setIsLoading(true);
     setLoadingStartedAt(Date.now());
     onProcessingChange?.(true);
 
     try {
-      const response = await sendMessage(userMessage.content);
-
+      const response = await sendMessage(content);
       const assistantMessage: ChatMessageType = {
         id: `msg-${Date.now()}`,
         role: "assistant",
@@ -79,27 +73,12 @@ export function ChatInterface({
         self_model: response.self_model,
         grounding: response.grounding,
         phase_timings_ms: response.phase_timings_ms,
+        reasoning_trace: response.reasoning_trace,
       };
-
-      setMessages((prev) => {
-        const next = [...prev, assistantMessage];
-        onMessagesChange?.(next);
-        return next;
-      });
+      updateMessages([...messages, userMessage, assistantMessage]);
       onBrainStateUpdate(response.brain_state);
     } catch {
-      const errorMessage: ChatMessageType = {
-        id: `msg-${Date.now()}`,
-        role: "assistant",
-        content:
-          "Unable to connect to MISTY brain. Please ensure the backend is running.",
-        timestamp: Date.now() / 1000,
-      };
-      setMessages((prev) => {
-        const next = [...prev, errorMessage];
-        onMessagesChange?.(next);
-        return next;
-      });
+      updateMessages([...messages, userMessage, { id: `msg-${Date.now()}`, role: "assistant", content: "I could not connect to the MISTY brain. Please check the backend connection and try again.", timestamp: Date.now() / 1000 }]);
     } finally {
       setIsLoading(false);
       setLoadingStartedAt(null);
@@ -107,72 +86,74 @@ export function ChatInterface({
     }
   };
 
+  const handleKeyDown = (event: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (event.key === "Enter" && !event.shiftKey) {
+      event.preventDefault();
+      void handleSubmit();
+    }
+  };
+
+  const handleStarter = (prompt: string) => {
+    setInput(prompt);
+    textareaRef.current?.focus();
+  };
+
   return (
-    <div className="flex flex-col h-full">
-      {/* Chat Header */}
-      <div className="flex items-center gap-2 px-4 py-3 border-b border-neural-border">
-        <h2 className="text-sm font-bold uppercase tracking-wider text-neural-accent">
-          Chat Interface
-        </h2>
-        <div className="flex-1 h-px bg-neural-border" />
-      </div>
-
-      {/* Messages */}
-      <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-3">
-        {messages.length === 0 && (
-          <div className="flex-1 flex items-center justify-center">
-            <div className="text-center">
-              <div className="text-4xl mb-4">🧠</div>
-              <p className="text-neural-muted text-sm">
-                Start a conversation with MISTY
-              </p>
-              <p className="text-neural-muted/60 text-xs mt-1">
-                Type a message to begin cognitive processing
-              </p>
-            </div>
+    <section className="flex h-full min-h-0 flex-col bg-[#0b1020]">
+      <header className="flex items-center justify-between border-b border-white/[0.07] px-4 py-3.5 sm:px-8">
+        <div className="flex items-center gap-3">
+          <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-cyan-300 to-violet-400 text-sm font-black text-slate-950 shadow-lg shadow-violet-500/10">M</div>
+          <div>
+            <h1 className="text-sm font-semibold tracking-wide text-slate-100">MISTY</h1>
+            <p className="text-[11px] text-slate-500">Smart Artificial Brain · Bengali / English</p>
           </div>
-        )}
-        {messages.map((message) => (
-          <ChatMessage key={message.id} message={message} />
-        ))}
-        {isLoading && (
-          <div className="flex items-center gap-2 text-neural-muted text-sm pl-3">
-            <div className="flex gap-1">
-              <span className="w-1.5 h-1.5 bg-neural-accent rounded-full animate-bounce [animation-delay:0ms]" />
-              <span className="w-1.5 h-1.5 bg-neural-accent rounded-full animate-bounce [animation-delay:150ms]" />
-              <span className="w-1.5 h-1.5 bg-neural-accent rounded-full animate-bounce [animation-delay:300ms]" />
-            </div>
-            <span className="text-xs">
-              Processing cognitive cycle{loadingSeconds >= 1 ? ` · ${loadingSeconds.toFixed(1)}s` : "..."}
-            </span>
-          </div>
-        )}
-        <div ref={messagesEndRef} />
-      </div>
-
-      {/* Input */}
-      <form
-        onSubmit={handleSubmit}
-        className="p-4 border-t border-neural-border"
-      >
-        <div className="flex gap-2">
-          <input
-            type="text"
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            placeholder="Type a message..."
-            disabled={isLoading}
-            className="flex-1 bg-neural-surface border border-neural-border rounded-lg px-4 py-2.5 text-sm text-slate-200 placeholder:text-neural-muted focus:outline-none focus:border-neural-accent focus:shadow-glow-sm transition-all disabled:opacity-50"
-          />
-          <button
-            type="submit"
-            disabled={!input.trim() || isLoading}
-            className="px-4 py-2.5 bg-neural-accent/10 border border-neural-accent/30 rounded-lg text-neural-accent text-sm font-medium hover:bg-neural-accent/20 hover:border-neural-accent/50 focus:outline-none focus:shadow-glow-sm transition-all disabled:opacity-30 disabled:cursor-not-allowed"
-          >
-            Send
-          </button>
         </div>
-      </form>
-    </div>
+        <div className="flex items-center gap-2 rounded-full border border-emerald-300/10 bg-emerald-300/[0.04] px-3 py-1.5 text-[11px] text-emerald-200/80">
+          <span className="h-1.5 w-1.5 rounded-full bg-emerald-300 shadow-[0_0_10px_rgba(110,231,183,0.8)]" />
+          Cognitive systems online
+        </div>
+      </header>
+
+      <div className="min-h-0 flex-1 overflow-y-auto">
+        {messages.length === 0 ? (
+          <div className="mx-auto flex min-h-full w-full max-w-4xl flex-col justify-center px-5 py-10 sm:px-10">
+            <div className="mb-8 text-center">
+              <div className="mx-auto mb-5 flex h-16 w-16 items-center justify-center rounded-3xl bg-gradient-to-br from-cyan-300/20 to-violet-400/20 text-2xl font-black text-cyan-100 ring-1 ring-white/10">M</div>
+              <h2 className="text-2xl font-semibold text-slate-100 sm:text-3xl">How can MISTY help you today?</h2>
+              <p className="mx-auto mt-3 max-w-xl text-sm leading-6 text-slate-500">Ask in Bengali or English. MISTY combines memory, deterministic reasoning, evidence search, and grounded Nemotron responses.</p>
+            </div>
+            <div className="grid gap-3 sm:grid-cols-2">
+              {STARTERS.map((starter) => (
+                <button key={starter.title} type="button" onClick={() => handleStarter(starter.prompt)} className="rounded-2xl border border-white/[0.08] bg-white/[0.025] p-4 text-left transition hover:border-cyan-300/25 hover:bg-cyan-300/[0.05]">
+                  <div className="text-sm font-medium text-slate-200">{starter.title}</div>
+                  <div className="mt-1 text-xs leading-5 text-slate-500">{starter.prompt}</div>
+                </button>
+              ))}
+            </div>
+          </div>
+        ) : (
+          <div className="mx-auto w-full max-w-4xl pb-8">
+            {messages.map((message) => <ChatMessage key={message.id} message={message} />)}
+            {isLoading && (
+              <div className="flex gap-3 bg-white/[0.025] px-4 py-5 sm:px-8">
+                <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-violet-400/15 text-xs font-bold text-violet-200">M</div>
+                <div className="flex items-center gap-3 text-xs text-slate-500"><span className="flex gap-1"><i className="h-1.5 w-1.5 animate-bounce rounded-full bg-violet-300" /><i className="h-1.5 w-1.5 animate-bounce rounded-full bg-violet-300 [animation-delay:150ms]" /><i className="h-1.5 w-1.5 animate-bounce rounded-full bg-violet-300 [animation-delay:300ms]" /></span>Thinking through your request{loadingSeconds >= 1 ? ` · ${loadingSeconds.toFixed(1)}s` : "..."}</div>
+              </div>
+            )}
+            <div ref={messagesEndRef} />
+          </div>
+        )}
+      </div>
+
+      <div className="border-t border-white/[0.07] bg-[#0b1020]/95 px-4 py-4 backdrop-blur sm:px-8">
+        <form onSubmit={handleSubmit} className="mx-auto max-w-4xl">
+          <div className="flex items-end gap-2 rounded-2xl border border-white/[0.1] bg-white/[0.04] p-2 shadow-2xl shadow-black/20 transition focus-within:border-cyan-300/30 focus-within:ring-1 focus-within:ring-cyan-300/10">
+            <textarea ref={textareaRef} value={input} onChange={(event) => setInput(event.target.value)} onKeyDown={handleKeyDown} disabled={isLoading} rows={1} placeholder="Message MISTY... / মিস্টিকে লিখুন..." className="max-h-40 min-h-11 flex-1 resize-none bg-transparent px-3 py-3 text-sm leading-5 text-slate-200 outline-none placeholder:text-slate-600 disabled:opacity-50" />
+            <button type="submit" disabled={!input.trim() || isLoading} className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-cyan-300 text-sm font-black text-slate-950 transition hover:bg-cyan-200 disabled:cursor-not-allowed disabled:opacity-30" aria-label="Send message">↑</button>
+          </div>
+          <p className="mt-2 text-center text-[10px] text-slate-600">Enter to send · Shift + Enter for a new line · MISTY may make mistakes, verify important information.</p>
+        </form>
+      </div>
+    </section>
   );
 }

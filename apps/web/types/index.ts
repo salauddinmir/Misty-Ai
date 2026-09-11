@@ -93,6 +93,7 @@ export interface ChatMessage {
   self_model?: SelfModel;
   grounding?: Grounding;
   phase_timings_ms?: Record<string, number>;
+  reasoning_trace?: string[];
 }
 
 export interface ChatResponse {
