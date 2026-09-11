@@ -122,7 +122,13 @@ class ReasoningEngine:
                 fact_groups.setdefault((fact.subject, fact.predicate), []).append(fact)
 
         resolved_count = 0
-        for facts in fact_groups.values():
+        for (_subject, predicate), facts in fact_groups.items():
+            # Category membership is hierarchical, not single-valued: an
+            # entity may validly be both a fruit and a plant. Therefore
+            # transitive is_a/type_of conclusions are compatible and must not
+            # be backtracked as object conflicts.
+            if predicate in _CATEGORY_RELATIONS:
+                continue
             if len(facts) < 2:
                 continue
 
@@ -177,8 +183,15 @@ class ReasoningEngine:
             self._decisions = self._decisions[-_DECISION_LOG_MAX // 2 :]
 
     def _facts(self) -> List[Any]:
-        """Snapshot of stored facts as tuples."""
-        return [(f.subject, f.predicate, f.obj, f.confidence) for f in self._brain.semantic_memory.facts.values()]
+        """Return a deterministic snapshot for bounded inference scheduling.
+
+        Sorting keeps recursive chains reproducible when the brain already
+        contains a large curated curriculum. Without a stable order, the
+        per-turn derivation budget can be consumed by unrelated seed facts
+        before a valid multi-hop chain is reached.
+        """
+        facts = [(f.subject, f.predicate, f.obj, f.confidence) for f in self._brain.semantic_memory.facts.values()]
+        return sorted(facts, key=lambda item: (item[0], item[1], item[2]))
 
     def _store_derived(
         self,

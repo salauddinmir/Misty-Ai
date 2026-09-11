@@ -20,6 +20,7 @@ from typing import Any, Dict, List
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from apps.api.config import settings
 from apps.api.database import Database
 from apps.api.routes.actuators import router as actuators_router
 from apps.api.routes.brain import router as brain_router
@@ -427,25 +428,32 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-# Configure CORS for frontends: local dev, production Vercel deployments,
-# and managed Manus browser previews. The regex is deliberately limited to
-# the Expo web-preview host shape rather than allowing arbitrary origins.
+# Configure CORS from the centralized runtime contract. Credentials are
+# enabled, so wildcard origins are intentionally never accepted.
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:3000",
-        "http://127.0.0.1:3000",
-        "https://misty-ai-web.vercel.app",
-        "https://misty-ai.vercel.app",
-        "https://misty-ai-web-tophyint-9993s-projects.vercel.app",
-        "https://misty-ai-4h0xp8q49-tophyint-9993s-projects.vercel.app",
-        "https://misty-ai-59nxmmfsm-tophyint-9993s-projects.vercel.app",
-    ],
-    allow_origin_regex=r"https://8081-[a-z0-9-]+\.sg1\.manus\.computer",
+    allow_origins=list(settings.cors_origins),
+    allow_origin_regex=(
+        r"https://8081-[a-z0-9-]+\.sg1\.manus\.computer" if settings.environment != "production" else None
+    ),
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    allow_headers=["Authorization", "Content-Type", "X-Misty-Training-Key"],
 )
+
+
+@app.middleware("http")
+async def add_security_headers(request, call_next):
+    """Attach baseline browser security headers to every HTTP response."""
+    response = await call_next(request)
+    response.headers.setdefault("X-Content-Type-Options", "nosniff")
+    response.headers.setdefault("X-Frame-Options", "DENY")
+    response.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
+    response.headers.setdefault("Permissions-Policy", "camera=(), microphone=(), geolocation=()")
+    if settings.environment == "production":
+        response.headers.setdefault("Strict-Transport-Security", "max-age=31536000; includeSubDomains")
+    return response
+
 
 # Include routers
 app.include_router(chat_router, prefix="/api")

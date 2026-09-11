@@ -6,9 +6,11 @@ processes input through the cognitive cycle. This is the primary
 entry point for the cognitive system.
 """
 
+import asyncio
 import copy
 import logging
 import re
+import threading
 import time as time_module
 from typing import Any, Dict, List, Sequence
 
@@ -135,6 +137,30 @@ class Brain:
     Supports an optional neural simulation mode that uses vectorized
     populations and brain regions for concept activation and association.
     """
+
+    @staticmethod
+    def _run_async_in_sync(awaitable):
+        """Run an awaitable safely from sync code and running event loops."""
+        try:
+            asyncio.get_running_loop()
+        except RuntimeError:
+            return asyncio.run(awaitable)
+
+        result = []
+        errors = []
+
+        def runner():
+            try:
+                result.append(asyncio.run(awaitable))
+            except BaseException as exc:  # propagate the original failure
+                errors.append(exc)
+
+        thread = threading.Thread(target=runner, daemon=True)
+        thread.start()
+        thread.join()
+        if errors:
+            raise errors[0]
+        return result[0] if result else None
 
     def __init__(self, use_neural_sim: bool = False) -> None:
         """Initialize all cognitive subsystems.
@@ -627,14 +653,8 @@ class Brain:
                 "personal_recall": self._last_personal_recall,
             }
 
-            # Run LLM generation in a background-like awaitable context
-            # (Note: In a real production sync environment, this would be awaited)
-            import asyncio
-
             try:
-                # We use a helper to run the async LLM call
-                loop = asyncio.get_event_loop()
-                llm_result = loop.run_until_complete(self.llm_generator.generate_response(text_input, context_data))
+                llm_result = self._run_async_in_sync(self.llm_generator.generate_response(text_input, context_data))
                 if llm_result.get("success"):
                     llm_response = llm_result["response"]
                     # If LLM generated a response, we use it, but keep the

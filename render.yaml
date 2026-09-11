@@ -9,6 +9,20 @@ services:
     envVars:
       - key: MISTY_DB_URL
         sync: false
+      - key: NVIDIA_API_KEY
+        sync: false
+      - key: MISTY_ENV
+        value: production
+      - key: MISTY_CORS_ORIGINS
+        sync: false
+      - key: MISTY_ALLOWED_HOSTS
+        sync: false
+      - key: MISTY_LLM_TIMEOUT_SECONDS
+        value: "30"
+      - key: MISTY_LLM_MAX_RETRIES
+        value: "1"
+      - key: MISTY_MAX_REQUEST_BYTES
+        value: "1048576"
       - key: PYTHONUNBUFFERED
         value: "1"
       - key: PYTHONPATH
