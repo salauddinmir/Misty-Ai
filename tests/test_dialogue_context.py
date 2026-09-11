@@ -69,3 +69,32 @@ def test_to_dict_and_reset() -> None:
     ctx.reset()
     assert not ctx.salient_entities
     assert not ctx.history
+
+
+def test_context_limits_and_snapshot_are_bounded() -> None:
+    ctx = DialogueContext(max_history=999, max_salience=999)
+    ctx.add_turn(text="x" * 9000, role="user", entities=["entity"] * 30, intent="chat")
+    assert ctx.max_history == 50
+    assert ctx.max_salience == 20
+    assert len(ctx.history[0].text) == 8000
+    snapshot = ctx.get_context_snapshot()
+    assert snapshot[0]["text"] == "x" * 8000
+    assert snapshot[0]["entities"] == ["entity"] * 20
+    assert snapshot[0]["intent"] == "chat"
+
+
+def test_recent_entities_returns_a_copy() -> None:
+    ctx = DialogueContext()
+    ctx.add_turn(text="রাহুল", role="user")
+    entities = ctx.get_recent_entities()
+    entities.clear()
+    assert ctx.salient_entities == ["রাহুল"]
+
+
+def test_negative_context_limits_are_safe() -> None:
+    ctx = DialogueContext(max_history=0, max_salience=-4)
+    assert ctx.max_history == 1
+    assert ctx.max_salience == 1
+    ctx.add_turn(text="রাহুল", role="user")
+    assert len(ctx.history) == 1
+    assert len(ctx.salient_entities) == 1

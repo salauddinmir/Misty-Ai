@@ -15,6 +15,10 @@ import re
 from dataclasses import dataclass, field
 from typing import Any, Dict, List
 
+MAX_CONTEXT_HISTORY = 50
+MAX_CONTEXT_SALIENCE = 20
+MAX_TURN_CHARACTERS = 8_000
+
 
 def extract_entity_candidates(text: str) -> List[str]:
     """Extract likely entity mentions from a turn of text.
@@ -190,8 +194,8 @@ class DialogueContext:
     """
 
     def __init__(self, max_history: int = 10, max_salience: int = 5) -> None:
-        self.max_history = max_history
-        self.max_salience = max_salience
+        self.max_history = max(1, min(int(max_history), MAX_CONTEXT_HISTORY))
+        self.max_salience = max(1, min(int(max_salience), MAX_CONTEXT_SALIENCE))
         self.history: List[TurnRecord] = []
         self.salient_entities: List[str] = []
         self.topic: str = ""
@@ -210,8 +214,9 @@ class DialogueContext:
         outputs mention many common words that would otherwise pollute
         the pronoun-resolution ranking.
         """
+        text = str(text or "")[:MAX_TURN_CHARACTERS]
         if entities is not None:
-            discovered = list(entities)
+            discovered = [str(entity)[:256] for entity in entities[: self.max_salience]]
         elif role == "user":
             discovered = extract_entity_candidates(text)
         else:
@@ -253,7 +258,20 @@ class DialogueContext:
 
     def get_recent_entities(self) -> List[str]:
         """Get entities mentioned in recent conversation turns."""
-        return self.salient_entities
+        return list(self.salient_entities)
+
+    def get_context_snapshot(self, max_turns: int | None = None) -> List[Dict[str, Any]]:
+        """Return a bounded, serializable view for orchestration and inspection."""
+        count = self.max_history if max_turns is None else max(1, min(int(max_turns), self.max_history))
+        return [
+            {
+                "role": turn.role,
+                "text": turn.text[:MAX_TURN_CHARACTERS],
+                "entities": list(turn.entities[: self.max_salience]),
+                "intent": turn.intent,
+            }
+            for turn in self.history[-count:]
+        ]
 
     @property
     def last_brain_turn(self) -> TurnRecord | None:
