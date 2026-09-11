@@ -13,12 +13,14 @@ import asyncio
 import json
 import logging
 import os
+import uuid
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 from typing import Any, Dict, List
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from starlette.responses import JSONResponse
 
 from apps.api.config import settings
 from apps.api.database import Database
@@ -438,14 +440,31 @@ app.add_middleware(
     ),
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-    allow_headers=["Authorization", "Content-Type", "X-Misty-Training-Key"],
+    allow_headers=["Authorization", "Content-Type", "X-Misty-Training-Key", "X-Request-ID"],
+    expose_headers=["X-Request-ID"],
 )
 
 
 @app.middleware("http")
 async def add_security_headers(request, call_next):
-    """Attach baseline browser security headers to every HTTP response."""
+    """Apply request bounds, correlation, and browser security headers."""
+    request_id = uuid.uuid4().hex
+    content_length = request.headers.get("content-length")
+    if content_length:
+        try:
+            request_size = int(content_length)
+        except ValueError:
+            request_size = settings.max_request_bytes + 1
+        if request_size > settings.max_request_bytes:
+            response = JSONResponse(
+                status_code=413,
+                content={"detail": "request body exceeds the configured size limit"},
+            )
+            response.headers["X-Request-ID"] = request_id
+            return response
+
     response = await call_next(request)
+    response.headers["X-Request-ID"] = request_id
     response.headers.setdefault("X-Content-Type-Options", "nosniff")
     response.headers.setdefault("X-Frame-Options", "DENY")
     response.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")

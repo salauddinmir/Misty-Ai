@@ -54,6 +54,25 @@ async def _read_schema_migrations(db):
     return [(row[0], row[1]) for row in rows]
 
 
+def test_api_returns_request_id_and_rejects_oversized_body(monkeypatch):
+    from dataclasses import replace
+
+    from fastapi.testclient import TestClient
+
+    from apps.api.config import settings
+    from apps.api.main import app
+
+    monkeypatch.setattr("apps.api.main.settings", replace(settings, max_request_bytes=8))
+    with TestClient(app) as client:
+        response = client.post("/api/chat", content="123456789")
+        assert response.status_code == 413
+        assert response.headers["X-Request-ID"]
+        assert "request body exceeds" in response.json()["detail"]
+
+        health = client.get("/health")
+        assert health.headers["X-Request-ID"]
+
+
 def test_sqlite_records_baseline_schema_version(tmp_path):
     import asyncio
 
